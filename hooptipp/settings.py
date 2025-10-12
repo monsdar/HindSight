@@ -1,13 +1,29 @@
 import os
 from pathlib import Path
-from typing import Any, Dict, Mapping, Optional
+from typing import Any, Dict, Iterable, Mapping, Optional
 from urllib.parse import parse_qs, urlparse
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 SECRET_KEY = 'django-insecure-hooptipp-prototype-key'
 DEBUG = True
-ALLOWED_HOSTS = []
+
+
+def _build_allowed_hosts(
+    environ: Mapping[str, str], base_hosts: Iterable[str] | None = None
+) -> list[str]:
+    """Return the allowed hosts extended by environment configuration."""
+
+    hosts = list(base_hosts or [])
+    configured_hosts = environ.get('DJANGO_ALLOWED_HOSTS')
+    if configured_hosts:
+        for host in (entry.strip() for entry in configured_hosts.split(',')):
+            if host and host not in hosts:
+                hosts.append(host)
+    return hosts
+
+
+ALLOWED_HOSTS = _build_allowed_hosts(os.environ)
 
 INSTALLED_APPS = [
     'hooptipp.apps.HooptippConfig',
