@@ -1,2 +1,2 @@
-# HoopTipp
+# TipOff
 Private NBA tip game
