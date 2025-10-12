@@ -1,5 +1,7 @@
 import os
 from pathlib import Path
+from typing import Any, Dict, Mapping, Optional
+from urllib.parse import parse_qs, urlparse
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -49,11 +51,103 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'hooptipp.wsgi.application'
 
-DATABASES = {
-    'default': {
+
+def _get_conn_max_age(environ: Mapping[str, str]) -> Optional[int]:
+    """Return the configured connection max age, if any."""
+
+    candidates = (
+        environ.get('DATABASE_CONN_MAX_AGE'),
+        environ.get('POSTGRES_CONN_MAX_AGE'),
+    )
+    for value in candidates:
+        if value:
+            return int(value)
+    return None
+
+
+def _build_sqlite_database(base_dir: Path) -> Dict[str, Any]:
+    return {
         'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'NAME': base_dir / 'db.sqlite3',
     }
+
+
+def _build_postgres_from_url(url: str, environ: Mapping[str, str]) -> Dict[str, Any]:
+    parsed = urlparse(url)
+    engine_map = {
+        'postgres': 'django.db.backends.postgresql',
+        'postgresql': 'django.db.backends.postgresql',
+        'postgresql_psycopg2': 'django.db.backends.postgresql',
+    }
+    engine = engine_map.get(parsed.scheme)
+    if engine is None:
+        raise ValueError(f"Unsupported database scheme '{parsed.scheme}' in DATABASE_URL")
+
+    database_name = parsed.path.lstrip('/')
+    options: Dict[str, str] = {}
+    if parsed.query:
+        options = {key: values[-1] for key, values in parse_qs(parsed.query).items() if values}
+
+    config: Dict[str, Any] = {
+        'ENGINE': engine,
+        'NAME': database_name,
+        'USER': parsed.username or '',
+        'PASSWORD': parsed.password or '',
+        'HOST': parsed.hostname or '',
+        'PORT': str(parsed.port) if parsed.port else '',
+    }
+
+    conn_max_age = _get_conn_max_age(environ)
+    if conn_max_age is not None:
+        config['CONN_MAX_AGE'] = conn_max_age
+    if options:
+        config['OPTIONS'] = options
+
+    return config
+
+
+def _build_postgres_from_env(environ: Mapping[str, str]) -> Optional[Dict[str, Any]]:
+    database_name = environ.get('POSTGRES_DB')
+    if not database_name:
+        return None
+
+    options: Dict[str, str] = {}
+    ssl_mode = environ.get('POSTGRES_SSL_MODE')
+    if ssl_mode:
+        options['sslmode'] = ssl_mode
+
+    config: Dict[str, Any] = {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': database_name,
+        'USER': environ.get('POSTGRES_USER', ''),
+        'PASSWORD': environ.get('POSTGRES_PASSWORD', ''),
+        'HOST': environ.get('POSTGRES_HOST', 'localhost'),
+        'PORT': environ.get('POSTGRES_PORT', '5432'),
+    }
+
+    conn_max_age = _get_conn_max_age(environ)
+    if conn_max_age is not None:
+        config['CONN_MAX_AGE'] = conn_max_age
+    if options:
+        config['OPTIONS'] = options
+
+    return config
+
+
+def _build_default_database(base_dir: Path, environ: Mapping[str, str]) -> Dict[str, Any]:
+    database_url = environ.get('DATABASE_URL')
+    if database_url:
+        return _build_postgres_from_url(database_url, environ)
+
+    postgres_config = _build_postgres_from_env(environ)
+    if postgres_config:
+        return postgres_config
+
+    return _build_sqlite_database(base_dir)
+
+
+DATABASES = {
+    'default': _build_default_database(BASE_DIR, os.environ),
 }
 
 AUTH_PASSWORD_VALIDATORS = [
