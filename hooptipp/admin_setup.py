@@ -7,8 +7,8 @@ from django.contrib.auth import get_user_model
 from django.core.exceptions import ImproperlyConfigured
 
 
-HOOPTIPP_ADMIN_USER_ENV = "hooptipp_admin_user"
-HOOPTIPP_ADMIN_PASSWORD_ENV = "hooptipp_admin_password"
+HOOPTIPP_ADMIN_USER_ENV = "HOOPTIPP_ADMIN_USER"
+HOOPTIPP_ADMIN_PASSWORD_ENV = "HOOPTIPP_ADMIN_PASSWORD"
 
 
 def _get_trimmed_env(name: str) -> Optional[str]:
@@ -22,8 +22,8 @@ def _get_trimmed_env(name: str) -> Optional[str]:
 def ensure_default_superuser(sender: Any, **kwargs: Any) -> None:
     """Create the default superuser when the auth app finishes migrating.
 
-    The username and password are read from ``hooptipp_admin_user`` and
-    ``hooptipp_admin_password`` environment variables respectively. When either
+    The username and password are read from ``HOOPTIPP_ADMIN_USER`` and
+    ``HOOPTIPP_ADMIN_PASSWORD`` environment variables respectively. When either
     value is missing or empty the function simply returns. If the specified user
     already exists no changes are made.
     """
