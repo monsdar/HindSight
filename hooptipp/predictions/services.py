@@ -52,8 +52,8 @@ def sync_weekly_games(limit: int = 5) -> Tuple[TipType, List[ScheduledGame]]:
     tip_type, _ = TipType.objects.update_or_create(
         slug='weekly-games',
         defaults={
-            'name': 'Wochenspiele',
-            'description': 'Ausgewählte Partien der kommenden Woche',
+            'name': 'Weekly games',
+            'description': 'Featured matchups for the upcoming week',
             'category': TipType.TipCategory.GAME,
             'deadline': earliest_game_time,
             'is_active': True,

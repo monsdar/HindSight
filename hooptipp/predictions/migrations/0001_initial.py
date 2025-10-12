@@ -22,17 +22,17 @@ class Migration(migrations.Migration):
                 (
                     'category',
                     models.CharField(
-                        choices=[('game', 'Spiel'), ('player', 'Spieler'), ('team', 'Team'), ('season', 'Saison')],
+                        choices=[('game', 'Game'), ('player', 'Player'), ('team', 'Team'), ('season', 'Season')],
                         default='game',
                         max_length=20,
                     ),
                 ),
-                ('deadline', models.DateTimeField(help_text='Nach Ablauf dieser Zeit sind keine Tipps mehr möglich.')),
+                ('deadline', models.DateTimeField(help_text='No picks can be submitted after this deadline.')),
                 ('is_active', models.BooleanField(default=True)),
             ],
             options={
-                'verbose_name': 'Tipp-Art',
-                'verbose_name_plural': 'Tipp-Arten',
+                'verbose_name': 'Tip category',
+                'verbose_name_plural': 'Tip categories',
                 'ordering': ['deadline'],
             },
         ),
@@ -57,8 +57,8 @@ class Migration(migrations.Migration):
                 ),
             ],
             options={
-                'verbose_name': 'Anstehendes Spiel',
-                'verbose_name_plural': 'Anstehende Spiele',
+                'verbose_name': 'Scheduled game',
+                'verbose_name_plural': 'Scheduled games',
                 'ordering': ['game_date'],
             },
         ),
@@ -89,8 +89,8 @@ class Migration(migrations.Migration):
                 ),
             ],
             options={
-                'verbose_name': 'Tipp',
-                'verbose_name_plural': 'Tipps',
+                'verbose_name': 'User tip',
+                'verbose_name_plural': 'User tips',
             },
         ),
         migrations.AlterUniqueTogether(

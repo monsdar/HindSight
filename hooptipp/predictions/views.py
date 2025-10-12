@@ -30,19 +30,19 @@ def home(request):
             user_id = request.POST.get('user_id')
             if user_id:
                 request.session['active_user_id'] = int(user_id)
-                messages.success(request, 'Aktiver Benutzer wurde gesetzt.')
+                messages.success(request, 'Active user selected successfully.')
             else:
                 request.session.pop('active_user_id', None)
-                messages.info(request, 'Kein aktiver Benutzer ausgewählt.')
+                messages.info(request, 'No active user selected.')
             return redirect('predictions:home')
 
         if 'save_tips' in request.POST:
             if not active_user:
-                messages.error(request, 'Bitte zuerst einen Benutzer aktivieren.')
+                messages.error(request, 'Please activate a user before saving picks.')
                 return redirect('predictions:home')
 
             if tip_type is None:
-                messages.error(request, 'Es konnten keine Spiele geladen werden.')
+                messages.error(request, 'No games are available right now.')
                 return redirect('predictions:home')
 
             saved = 0
@@ -60,9 +60,9 @@ def home(request):
                 saved += 1
 
             if saved:
-                messages.success(request, 'Deine Tipps wurden gespeichert!')
+                messages.success(request, 'Your picks have been saved!')
             else:
-                messages.info(request, 'Keine Tipps zum Speichern gefunden.')
+                messages.info(request, 'No picks were provided, nothing to save.')
             return redirect('predictions:home')
 
     all_users = get_user_model().objects.order_by('username')

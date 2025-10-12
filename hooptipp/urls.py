@@ -3,5 +3,5 @@ from django.urls import path, include
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('', include('predictions.urls', namespace='predictions')),
+    path('', include('hooptipp.predictions.urls', namespace='predictions')),
 ]

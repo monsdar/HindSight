@@ -4,10 +4,10 @@ from django.db import models
 
 class TipType(models.Model):
     class TipCategory(models.TextChoices):
-        GAME = 'game', 'Spiel'
-        PLAYER = 'player', 'Spieler'
+        GAME = 'game', 'Game'
+        PLAYER = 'player', 'Player'
         TEAM = 'team', 'Team'
-        SEASON = 'season', 'Saison'
+        SEASON = 'season', 'Season'
 
     name = models.CharField(max_length=100)
     slug = models.SlugField(unique=True)
@@ -18,14 +18,14 @@ class TipType(models.Model):
         default=TipCategory.GAME,
     )
     deadline = models.DateTimeField(
-        help_text='Nach Ablauf dieser Zeit sind keine Tipps mehr möglich.'
+        help_text='No picks can be submitted after this deadline.'
     )
     is_active = models.BooleanField(default=True)
 
     class Meta:
         ordering = ['deadline']
-        verbose_name = 'Tipp-Art'
-        verbose_name_plural = 'Tipp-Arten'
+        verbose_name = 'Tip category'
+        verbose_name_plural = 'Tip categories'
 
     def __str__(self) -> str:
         return self.name
@@ -47,8 +47,8 @@ class ScheduledGame(models.Model):
 
     class Meta:
         ordering = ['game_date']
-        verbose_name = 'Anstehendes Spiel'
-        verbose_name_plural = 'Anstehende Spiele'
+        verbose_name = 'Scheduled game'
+        verbose_name_plural = 'Scheduled games'
 
     def __str__(self) -> str:
         return f"{self.away_team} @ {self.home_team}"
@@ -70,8 +70,8 @@ class UserTip(models.Model):
 
     class Meta:
         unique_together = ('user', 'tip_type', 'scheduled_game')
-        verbose_name = 'Tipp'
-        verbose_name_plural = 'Tipps'
+        verbose_name = 'User tip'
+        verbose_name_plural = 'User tips'
 
     def __str__(self) -> str:
         if self.scheduled_game:

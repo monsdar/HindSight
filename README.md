@@ -83,12 +83,18 @@ The current prototype is built with **Django** and uses **Tailwind via CDN** for
    python manage.py createsuperuser
    ```
 
-3. Start the development server:
+3. Run the Django unit tests (always add or update tests alongside your changes):
+
+   ```bash
+   python manage.py test
+   ```
+
+4. Start the development server:
 
    ```bash
    python manage.py runserver
    ```
 
-4. Use `/admin` to create or manage users. On the homepage you can choose an active user whose picks are stored for the weekly games.
+5. Use `/admin` to create or manage users. On the homepage you can choose an active user whose picks are stored for the weekly games.
 
 > Note: The `nba_api` package is required to fetch NBA data. Without internet access the synchronization step cannot retrieve games; the page will remain empty and display a warning message instead.
