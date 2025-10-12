@@ -9,21 +9,40 @@ SECRET_KEY = 'django-insecure-hooptipp-prototype-key'
 DEBUG = True
 
 
+def _extend_from_env(
+    environ: Mapping[str, str], key: str, base_values: Iterable[str] | None = None
+) -> list[str]:
+    """Return a list of configuration values extended by environment settings."""
+
+    values = list(base_values or [])
+    configured_values = environ.get(key)
+    if configured_values:
+        for value in (entry.strip() for entry in configured_values.split(',')):
+            if value and value not in values:
+                values.append(value)
+    return values
+
+
 def _build_allowed_hosts(
     environ: Mapping[str, str], base_hosts: Iterable[str] | None = None
 ) -> list[str]:
     """Return the allowed hosts extended by environment configuration."""
 
-    hosts = list(base_hosts or [])
-    configured_hosts = environ.get('DJANGO_ALLOWED_HOSTS')
-    if configured_hosts:
-        for host in (entry.strip() for entry in configured_hosts.split(',')):
-            if host and host not in hosts:
-                hosts.append(host)
-    return hosts
+    return _extend_from_env(environ, 'DJANGO_ALLOWED_HOSTS', base_hosts)
+
+
+def _build_csrf_trusted_origins(
+    environ: Mapping[str, str], base_origins: Iterable[str] | None = None
+) -> list[str]:
+    """Return the CSRF trusted origins extended by environment configuration."""
+
+    return _extend_from_env(environ, 'DJANGO_CSRF_TRUSTED_ORIGINS', base_origins)
 
 
 ALLOWED_HOSTS = _build_allowed_hosts(os.environ)
+CSRF_TRUSTED_ORIGINS = _build_csrf_trusted_origins(
+    os.environ, ['https://hooptipp-production.up.railway.app']
+)
 
 INSTALLED_APPS = [
     'hooptipp.apps.HooptippConfig',
