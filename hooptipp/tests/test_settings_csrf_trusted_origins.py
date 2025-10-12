@@ -24,7 +24,8 @@ class CsrfTrustedOriginsSettingsTests(SimpleTestCase):
         module = importlib.import_module(self.settings_module)
         return importlib.reload(module)
 
-    def test_csrf_trusted_origins_include_railway_production_origin(self) -> None:
+    def test_csrf_trusted_origins_include_allowed_host_origin(self) -> None:
+        os.environ['DJANGO_ALLOWED_HOSTS'] = 'hooptipp-production.up.railway.app'
         os.environ.pop('DJANGO_CSRF_TRUSTED_ORIGINS', None)
 
         settings = self._reload_settings()
@@ -35,6 +36,7 @@ class CsrfTrustedOriginsSettingsTests(SimpleTestCase):
         )
 
     def test_csrf_trusted_origins_extend_from_environment(self) -> None:
+        os.environ['DJANGO_ALLOWED_HOSTS'] = 'hooptipp-production.up.railway.app'
         os.environ['DJANGO_CSRF_TRUSTED_ORIGINS'] = (
             'https://example.com, https://api.example.com '
         )

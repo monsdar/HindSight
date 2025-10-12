@@ -31,18 +31,41 @@ def _build_allowed_hosts(
     return _extend_from_env(environ, 'DJANGO_ALLOWED_HOSTS', base_hosts)
 
 
-def _build_csrf_trusted_origins(
-    environ: Mapping[str, str], base_origins: Iterable[str] | None = None
-) -> list[str]:
-    """Return the CSRF trusted origins extended by environment configuration."""
+def _host_to_origin(host: str) -> Optional[str]:
+    """Convert an allowed host entry into an origin string."""
 
+    cleaned_host = host.strip().lstrip('.')
+    if not cleaned_host:
+        return None
+    if '://' in cleaned_host:
+        return cleaned_host.rstrip('/')
+
+    lower_host = cleaned_host.lower()
+    http_hosts = (
+        'localhost',
+        '127.0.0.1',
+        '0.0.0.0',
+    )
+    scheme = 'http' if any(lower_host.startswith(candidate) for candidate in http_hosts) else 'https'
+    return f"{scheme}://{cleaned_host}"
+
+
+def _build_csrf_trusted_origins(
+    environ: Mapping[str, str], allowed_hosts: Iterable[str]
+) -> list[str]:
+    """Return the CSRF trusted origins derived from allowed hosts and env settings."""
+
+    base_origins = [
+        origin
+        for host in allowed_hosts
+        for origin in [_host_to_origin(host)]
+        if origin is not None
+    ]
     return _extend_from_env(environ, 'DJANGO_CSRF_TRUSTED_ORIGINS', base_origins)
 
 
 ALLOWED_HOSTS = _build_allowed_hosts(os.environ)
-CSRF_TRUSTED_ORIGINS = _build_csrf_trusted_origins(
-    os.environ, ['https://hooptipp-production.up.railway.app']
-)
+CSRF_TRUSTED_ORIGINS = _build_csrf_trusted_origins(os.environ, ALLOWED_HOSTS)
 
 INSTALLED_APPS = [
     'hooptipp.apps.HooptippConfig',
