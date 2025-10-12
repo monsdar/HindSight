@@ -2,8 +2,6 @@
 
 **HoopTipp** is a simple, private and self-hosted, family-friendly NBA prediction app. It was created to have a way for predicting the upcoming NBA season with my son — without spreadsheets, complicated fantasy rules, or cluttered interfaces.
 
-> ⚠️ **Language policy:** The entire project (code, documentation, commits, and conversations) must remain in English.
-
 ---
 
 ## 🎯 Vision
@@ -62,10 +60,17 @@ HoopTipp is designed for families and fans who want a **lightweight, engaging wa
 
 ---
 
-## 🚀 Prototype (Django + Tailwind)
+## 🚀 Predicting
 
-The current prototype is built with **Django** and uses **Tailwind via CDN** for rapid styling. The weekly homepage loads up to five games for the upcoming week through the `nba_api` package and lets you store predictions for an active user. By default no user is selected, so no picks are visible until an account is activated via the dropdown or the admin backend.
+To support multiple users the game works with a simplified user-activation: 
 
+* All users are created via the admin panel
+* By default no user is selected in the UI. Upcoming predictions are visible, along with users that already predicted an outcome.
+* A user can be activated within the UI. There's is no complex authentication needed.
+* When activated a user can predict the outcome of the available tipps.
+* After predictions the user simply deactivates himself, the UI then returns to a neutral state
+
+## Development
 ### Local Setup
 
 1. Create a virtual environment and install dependencies:
@@ -83,7 +88,7 @@ The current prototype is built with **Django** and uses **Tailwind via CDN** for
    python manage.py createsuperuser
    ```
 
-3. Run the Django unit tests (always add or update tests alongside your changes):
+3. Run the Django unit tests:
 
    ```bash
    python manage.py test
@@ -97,4 +102,4 @@ The current prototype is built with **Django** and uses **Tailwind via CDN** for
 
 5. Use `/admin` to create or manage users. On the homepage you can choose an active user whose picks are stored for the weekly games.
 
-> Note: The `nba_api` package is required to fetch NBA data. Without internet access the synchronization step cannot retrieve games; the page will remain empty and display a warning message instead.
+> Note: The `nba_api` package is required to fetch NBA data. This package does not work when running from within one of the hyperscalers.
