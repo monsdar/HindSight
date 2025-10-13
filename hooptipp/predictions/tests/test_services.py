@@ -7,9 +7,25 @@ from balldontlie import exceptions
 from hooptipp.predictions import services
 
 
+class GetBdlApiKeyTests(TestCase):
+    def setUp(self) -> None:
+        os.environ.pop('BALLDONTLIE_API_TOKEN', None)
+        os.environ.pop('BALLDONTLIE_API_KEY', None)
+        return super().setUp()
+
+    def test_returns_bearer_prefix_for_token(self) -> None:
+        os.environ['BALLDONTLIE_API_TOKEN'] = 'secret-token'
+        self.assertEqual(services._get_bdl_api_key(), 'Bearer secret-token')
+
+    def test_supports_api_key_environment_variable(self) -> None:
+        os.environ['BALLDONTLIE_API_KEY'] = 'another-token'
+        self.assertEqual(services._get_bdl_api_key(), 'Bearer another-token')
+
+
 class FetchUpcomingWeekGamesTests(TestCase):
     def setUp(self) -> None:
         os.environ.pop('BALLDONTLIE_API_TOKEN', None)
+        os.environ.pop('BALLDONTLIE_API_KEY', None)
         return super().setUp()
 
     def test_fetch_upcoming_week_games_parses_payload(self) -> None:
@@ -71,6 +87,15 @@ class FetchUpcomingWeekGamesTests(TestCase):
             mock_client.nba.games = mock_games_api
             mock_api.return_value = mock_client
 
+            with self.assertLogs('hooptipp.predictions.services', level='ERROR') as captured:
+                games = services.fetch_upcoming_week_games(limit=2)
+
+        self.assertEqual(games, [])
+        self.assertTrue(any('Unable to fetch games from BallDontLie API.' in entry for entry in captured.output))
+
+    def test_logs_when_token_missing(self) -> None:
+        with self.assertLogs('hooptipp.predictions.services', level='WARNING') as captured:
             games = services.fetch_upcoming_week_games(limit=2)
 
         self.assertEqual(games, [])
+        self.assertTrue(any('BALLDONTLIE_API_TOKEN environment variable is not configured' in entry for entry in captured.output))
