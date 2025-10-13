@@ -102,4 +102,4 @@ To support multiple users the game works with a simplified user-activation:
 
 5. Use `/admin` to create or manage users. On the homepage you can choose an active user whose picks are stored for the weekly games.
 
-> Note: The `nba_api` package is required to fetch NBA data. This package does not work when running from within one of the hyperscalers.
+> Note: HoopTipp fetches NBA data from the BallDontLie API. Set the `BALLDONTLIE_API_TOKEN` environment variable with your API token before syncing games.

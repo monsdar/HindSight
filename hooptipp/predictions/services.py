@@ -1,39 +1,76 @@
+import os
 import random
 from datetime import datetime, timedelta
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
+from balldontlie import BalldontlieAPI
+from balldontlie.exceptions import BallDontLieException
 from django.utils import timezone
-
-from nba_api.live.nba.endpoints import scoreboard
 
 from .models import ScheduledGame, TipType
 
 
+def _get_bdl_api_key() -> str:
+    token = os.environ.get('BALLDONTLIE_API_TOKEN', '').strip()
+    if not token:
+        return ''
+    if token.lower().startswith('bearer '):
+        return token
+    return f'Bearer {token}'
+
+
+def _build_bdl_client() -> Optional[BalldontlieAPI]:
+    api_key = _get_bdl_api_key()
+    if not api_key:
+        return None
+    return BalldontlieAPI(api_key=api_key)
+
+
 def fetch_upcoming_week_games(limit: int = 5) -> List[dict]:
     today = timezone.now().date()
-    collected = []
+    start_date = today + timedelta(days=1)
+    end_date = today + timedelta(days=7)
 
-    for day_offset in range(1, 8):
-        game_date = today + timedelta(days=day_offset)
-        try:
-            board = scoreboard.ScoreBoard(game_date=game_date.strftime('%Y-%m-%d'))
-        except Exception:
+    client = _build_bdl_client()
+    if client is None:
+        return []
+
+    try:
+        response = client.nba.games.list(
+            start_date=start_date.isoformat(),
+            end_date=end_date.isoformat(),
+            per_page=100,
+            postseason=False,
+        )
+    except BallDontLieException:
+        return []
+
+    collected = []
+    for game in response.data:
+        status = (getattr(game, 'status', '') or '').lower()
+        if 'final' in status:
             continue
 
-        games_payload = board.games.get_dict().get('games', [])
-        for game in games_payload:
-            game_time = datetime.fromisoformat(game['gameTimeUTC'].replace('Z', '+00:00'))
-            collected.append(
-                {
-                    'game_id': game['gameId'],
-                    'game_time': timezone.make_aware(game_time) if timezone.is_naive(game_time) else game_time,
-                    'home_team_name': f"{game['homeTeam']['teamCity']} {game['homeTeam']['teamName']}",
-                    'home_team_tricode': game['homeTeam']['teamTricode'],
-                    'away_team_name': f"{game['awayTeam']['teamCity']} {game['awayTeam']['teamName']}",
-                    'away_team_tricode': game['awayTeam']['teamTricode'],
-                    'arena': game.get('arenaName', ''),
-                }
-            )
+        date_str = getattr(game, 'date', '')
+        if not date_str:
+            continue
+
+        try:
+            game_time = datetime.fromisoformat(date_str.replace('Z', '+00:00'))
+        except ValueError:
+            continue
+
+        collected.append(
+            {
+                'game_id': str(getattr(game, 'id', '')),
+                'game_time': timezone.make_aware(game_time) if timezone.is_naive(game_time) else game_time,
+                'home_team_name': getattr(getattr(game, 'home_team', None), 'full_name', ''),
+                'home_team_tricode': getattr(getattr(game, 'home_team', None), 'abbreviation', ''),
+                'away_team_name': getattr(getattr(game, 'visitor_team', None), 'full_name', ''),
+                'away_team_tricode': getattr(getattr(game, 'visitor_team', None), 'abbreviation', ''),
+                'arena': getattr(game, 'arena', '') or '',
+            }
+        )
 
     if not collected:
         return []
