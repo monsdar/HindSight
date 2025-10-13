@@ -4,10 +4,10 @@ import random
 from datetime import datetime, timedelta
 from typing import Iterable, List, Optional, Tuple
 
-from balldontlie import BalldontlieAPI
 from balldontlie.exceptions import BallDontLieException
 from django.utils import timezone
 
+from .balldontlie_client import CachedBallDontLieAPI, build_cached_bdl_client
 from .models import ScheduledGame, TipType
 
 
@@ -31,13 +31,13 @@ def _get_bdl_api_key() -> str:
     return ''
 
 
-def _build_bdl_client() -> Optional[BalldontlieAPI]:
+def _build_bdl_client() -> Optional[CachedBallDontLieAPI]:
     api_key = _get_bdl_api_key()
     if not api_key:
         logger.warning('BALLDONTLIE_API_TOKEN environment variable is not configured; '
                        'skipping BallDontLie sync.')
         return None
-    return BalldontlieAPI(api_key=api_key)
+    return build_cached_bdl_client(api_key=api_key)
 
 
 def fetch_upcoming_week_games(limit: int = 5) -> List[dict]:
