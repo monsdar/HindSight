@@ -54,7 +54,7 @@ def fetch_upcoming_week_games(limit: int = 5) -> List[dict]:
             start_date=start_date.isoformat(),
             end_date=end_date.isoformat(),
             per_page=100,
-            postseason=False,
+            postseason='false',
         )
     except BallDontLieException:
         logger.exception('Unable to fetch games from BallDontLie API.')
