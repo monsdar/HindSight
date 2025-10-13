@@ -25,6 +25,49 @@ class GetBdlApiKeyTests(TestCase):
         self.assertEqual(services._get_bdl_api_key(), 'Bearer another-token')
 
 
+class GetTeamChoicesTests(TestCase):
+    def setUp(self) -> None:
+        services.get_team_choices.cache_clear()
+        return super().setUp()
+
+    def tearDown(self) -> None:
+        services.get_team_choices.cache_clear()
+        return super().tearDown()
+
+    def test_fetches_and_sorts_teams(self) -> None:
+        lakers = mock.Mock(id=14, full_name='Los Angeles Lakers')
+        celtics = mock.Mock(id=2, full_name='Boston Celtics')
+
+        response = mock.Mock(data=[lakers, celtics])
+        mock_client = mock.Mock()
+        mock_client.nba.teams.list.return_value = response
+
+        with mock.patch.object(services, '_build_bdl_client', return_value=mock_client):
+            choices = services.get_team_choices()
+
+        self.assertEqual(choices, [('2', 'Boston Celtics'), ('14', 'Los Angeles Lakers')])
+        mock_client.nba.teams.list.assert_called_once_with(per_page=100)
+
+    def test_retries_without_per_page_when_unsupported(self) -> None:
+        lakers = mock.Mock(id=14, full_name='Los Angeles Lakers')
+        fallback_response = mock.Mock(data=[lakers])
+
+        mock_client = mock.Mock()
+        mock_client.nba.teams.list.side_effect = [
+            TypeError("NBATeamsAPI.list() got an unexpected keyword argument 'per_page'"),
+            fallback_response,
+        ]
+
+        with mock.patch.object(services, '_build_bdl_client', return_value=mock_client):
+            choices = services.get_team_choices()
+
+        self.assertEqual(choices, [('14', 'Los Angeles Lakers')])
+        self.assertEqual(mock_client.nba.teams.list.call_count, 2)
+        first_call, second_call = mock_client.nba.teams.list.call_args_list
+        self.assertEqual(first_call.kwargs, {'per_page': 100})
+        self.assertEqual(second_call.kwargs, {})
+
+
 class FetchUpcomingWeekGamesTests(TestCase):
     def setUp(self) -> None:
         os.environ.pop('BALLDONTLIE_API_TOKEN', None)
