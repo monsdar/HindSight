@@ -3,7 +3,7 @@ import os
 import random
 import threading
 from datetime import datetime, timedelta
-from typing import Dict, Iterable, List, Optional, Tuple
+from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 from balldontlie.exceptions import BallDontLieException
 from django.utils import timezone
@@ -50,6 +50,99 @@ def _build_bdl_client() -> Optional[CachedBallDontLieAPI]:
         client = build_cached_bdl_client(api_key=api_key)
         _BDL_CLIENT_CACHE[api_key] = client
         return client
+
+
+class GameWeightCalculator:
+    """Compute weights for candidate NBA games.
+
+    The default implementation assigns the same weight to every game. The
+    abstraction makes it easy to introduce richer weighting logic (e.g. NBA cup
+    matchups, rivalries, favourite teams) without changing the selection code.
+    """
+
+    def get_weight(self, game: dict) -> float:
+        """Return the selection weight for ``game``."""
+
+        return 1.0
+
+
+def _normalise_team_identifier(team_name: str, team_tricode: str) -> Optional[str]:
+    """Return a canonical identifier used to ensure unique team selection."""
+
+    candidate = (team_tricode or '').strip().upper()
+    if candidate:
+        return candidate
+    candidate = (team_name or '').strip().upper()
+    return candidate or None
+
+
+def _select_weighted_unique_games(
+    games: Sequence[dict],
+    *,
+    limit: int,
+    weight_calculator: Optional[GameWeightCalculator] = None,
+    rng: Optional[random.Random] = None,
+) -> List[dict]:
+    """Select games using weighted randomness while avoiding duplicate teams."""
+
+    if weight_calculator is None:
+        weight_calculator = GameWeightCalculator()
+    if rng is None:
+        rng = random
+
+    available = list(games)
+    selected: List[dict] = []
+    used_teams: set[str] = set()
+
+    while available and len(selected) < limit:
+        candidates: List[dict] = []
+        weights: List[float] = []
+
+        for game in available:
+            home_identifier = _normalise_team_identifier(
+                game.get('home_team_name', ''),
+                game.get('home_team_tricode', ''),
+            )
+            away_identifier = _normalise_team_identifier(
+                game.get('away_team_name', ''),
+                game.get('away_team_tricode', ''),
+            )
+
+            if home_identifier and home_identifier in used_teams:
+                continue
+            if away_identifier and away_identifier in used_teams:
+                continue
+
+            weight = weight_calculator.get_weight(game)
+            if weight <= 0:
+                continue
+
+            candidates.append(game)
+            weights.append(weight)
+
+        if not candidates:
+            break
+
+        chosen = rng.choices(candidates, weights=weights, k=1)[0]
+        selected.append(chosen)
+
+        home_identifier = _normalise_team_identifier(
+            chosen.get('home_team_name', ''),
+            chosen.get('home_team_tricode', ''),
+        )
+        away_identifier = _normalise_team_identifier(
+            chosen.get('away_team_name', ''),
+            chosen.get('away_team_tricode', ''),
+        )
+
+        if home_identifier:
+            used_teams.add(home_identifier)
+        if away_identifier:
+            used_teams.add(away_identifier)
+
+        available.remove(chosen)
+
+    return selected
 
 
 def fetch_upcoming_week_games(limit: int = 5) -> List[dict]:
@@ -113,8 +206,12 @@ def fetch_upcoming_week_games(limit: int = 5) -> List[dict]:
         if earliest_game['game_time'] <= game['game_time'] < first_week_end
     ]
 
-    random.shuffle(first_week_games)
-    return first_week_games[:limit]
+    return _select_weighted_unique_games(
+        first_week_games,
+        limit=limit,
+        weight_calculator=GameWeightCalculator(),
+        rng=random,
+    )
 
 
 def sync_weekly_games(limit: int = 5) -> Tuple[TipType, List[ScheduledGame]]:
