@@ -1,13 +1,21 @@
+from collections import defaultdict
+from datetime import timedelta
+
 from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.shortcuts import redirect, render
-from datetime import timedelta
-
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
 from .forms import UserPreferencesForm
-from .models import ScheduledGame, TipType, UserPreferences, UserTip
+from .models import (
+    NbaPlayer,
+    NbaTeam,
+    PredictionEvent,
+    TipType,
+    UserPreferences,
+    UserTip,
+)
 from .services import sync_weekly_games
 
 
@@ -25,13 +33,82 @@ def _get_active_user(request):
 
 @require_http_methods(["GET", "POST"])
 def home(request):
-    tip_type, games, week_start = sync_weekly_games()
+    weekly_tip_type, weekly_events, week_start = sync_weekly_games()
     active_user = _get_active_user(request)
     preferences = None
     preferences_form = None
 
     if active_user:
         preferences, _ = UserPreferences.objects.get_or_create(user=active_user)
+
+    now = timezone.now()
+
+    tip_types = list(TipType.objects.filter(is_active=True).order_by('deadline'))
+    sections: list[dict] = []
+
+    for tip_type in tip_types:
+        events = list(
+            PredictionEvent.objects.filter(
+                tip_type=tip_type,
+                is_active=True,
+                opens_at__lte=now,
+            )
+            .exclude(deadline__lt=now)
+            .select_related('scheduled_game')
+            .prefetch_related('options__team', 'options__player')
+            .order_by('deadline', 'sort_order', 'name')
+        )
+        if not events:
+            continue
+
+        sections.append({'tip_type': tip_type, 'events': events})
+
+    visible_events: list[PredictionEvent] = []
+    seen_event_ids: set[int] = set()
+    for section in sections:
+        for event in section['events']:
+            if event.id in seen_event_ids:
+                continue
+            seen_event_ids.add(event.id)
+            visible_events.append(event)
+
+    weekly_visible_events: list[PredictionEvent] = []
+    if weekly_tip_type:
+        for section in sections:
+            if section['tip_type'].pk == weekly_tip_type.pk:
+                weekly_visible_events = section['events']
+                break
+        if not weekly_visible_events:
+            weekly_visible_events = [
+                event
+                for event in weekly_events
+                if event.is_active
+                and event.opens_at <= now
+                and event.deadline >= now
+            ]
+            if weekly_visible_events:
+                sections.insert(0, {
+                    'tip_type': weekly_tip_type,
+                    'events': weekly_visible_events,
+                })
+                for event in weekly_visible_events:
+                    if event.id not in seen_event_ids:
+                        visible_events.append(event)
+                        seen_event_ids.add(event.id)
+
+    requires_team_choices = any(
+        event.selection_mode == PredictionEvent.SelectionMode.ANY
+        and event.target_kind == PredictionEvent.TargetKind.TEAM
+        for event in visible_events
+    )
+    requires_player_choices = any(
+        event.selection_mode == PredictionEvent.SelectionMode.ANY
+        and event.target_kind == PredictionEvent.TargetKind.PLAYER
+        for event in visible_events
+    )
+
+    team_choices = list(NbaTeam.objects.order_by('name')) if requires_team_choices else []
+    player_choices = list(NbaPlayer.objects.order_by('display_name')) if requires_player_choices else []
 
     if request.method == 'POST':
         if 'set_active_user' in request.POST:
@@ -65,21 +142,78 @@ def home(request):
                 messages.error(request, 'Please activate a user before saving picks.')
                 return redirect('predictions:home')
 
-            if tip_type is None:
-                messages.error(request, 'No games are available right now.')
+            if not visible_events:
+                messages.error(request, 'No prediction events are available right now.')
                 return redirect('predictions:home')
 
             saved = 0
-            for game in games:
-                key = f'prediction_{game.id}'
-                prediction = request.POST.get(key)
-                if not prediction:
+            for event in visible_events:
+                key = f'prediction_{event.id}'
+                submitted_value = request.POST.get(key)
+                if not submitted_value:
                     continue
+                option = None
+                selected_team = None
+                selected_player = None
+                prediction_label = ''
+
+                if event.selection_mode == PredictionEvent.SelectionMode.CURATED:
+                    try:
+                        option_id = int(submitted_value)
+                    except (TypeError, ValueError):
+                        continue
+                    option = next(
+                        (
+                            item
+                            for item in event.options.all()
+                            if item.id == option_id
+                        ),
+                        None,
+                    )
+                    if not option:
+                        continue
+                    selected_team = option.team
+                    selected_player = option.player
+                    prediction_label = option.label
+                else:
+                    if event.target_kind == PredictionEvent.TargetKind.TEAM:
+                        try:
+                            team_id = int(submitted_value)
+                        except (TypeError, ValueError):
+                            continue
+                        selected_team = next(
+                            (team for team in team_choices if team.id == team_id),
+                            None,
+                        )
+                        if not selected_team:
+                            continue
+                        prediction_label = selected_team.name
+                    else:
+                        try:
+                            player_id = int(submitted_value)
+                        except (TypeError, ValueError):
+                            continue
+                        selected_player = next(
+                            (player for player in player_choices if player.id == player_id),
+                            None,
+                        )
+                        if not selected_player:
+                            continue
+                        prediction_label = selected_player.display_name
+
+                defaults = {
+                    'tip_type': event.tip_type,
+                    'scheduled_game': event.scheduled_game,
+                    'prediction': prediction_label,
+                    'prediction_option': option,
+                    'selected_team': selected_team,
+                    'selected_player': selected_player,
+                }
+
                 UserTip.objects.update_or_create(
                     user=active_user,
-                    tip_type=tip_type,
-                    scheduled_game=game,
-                    defaults={'prediction': prediction},
+                    prediction_event=event,
+                    defaults=defaults,
                 )
                 saved += 1
 
@@ -91,39 +225,42 @@ def home(request):
 
     all_users = get_user_model().objects.order_by('username')
     user_tips = {}
-    if active_user and tip_type:
+    if active_user and visible_events:
         user_tips = {
-            tip.scheduled_game_id: tip
+            tip.prediction_event_id: tip
             for tip in UserTip.objects.filter(
                 user=active_user,
-                tip_type=tip_type,
-                scheduled_game__in=games,
+                prediction_event__in=visible_events,
             )
         }
 
-    game_tip_users = {}
-    if tip_type:
+    event_tip_users: dict[int, list] = defaultdict(list)
+    if visible_events:
         for tip in (
             UserTip.objects.filter(
-                tip_type=tip_type,
-                scheduled_game__in=games,
+                prediction_event__in=visible_events,
             )
             .select_related('user')
             .order_by('user__username')
         ):
-            game_tip_users.setdefault(tip.scheduled_game_id, []).append(tip.user)
+            event_tip_users[tip.prediction_event_id].append(tip.user)
 
-    if week_start is None and games:
-        week_start = min(timezone.localdate(game.game_date) for game in games)
+    if week_start is None and weekly_visible_events:
+        week_start = min(
+            timezone.localdate(event.scheduled_game.game_date)
+            for event in weekly_visible_events
+            if event.scheduled_game
+        )
 
     weekday_slots = []
     if week_start:
         for offset in range(7):
             slot_date = week_start + timedelta(days=offset)
             day_games = [
-                game
-                for game in games
-                if timezone.localdate(game.game_date) == slot_date
+                event
+                for event in weekly_visible_events
+                if event.scheduled_game
+                and timezone.localdate(event.scheduled_game.game_date) == slot_date
             ]
             weekday_slots.append({'date': slot_date, 'games': day_games})
 
@@ -131,16 +268,19 @@ def home(request):
         preferences_form = UserPreferencesForm(instance=preferences)
 
     context = {
-        'tip_type': tip_type,
-        'games': games,
+        'weekly_tip_type': weekly_tip_type,
+        'weekly_events': weekly_visible_events,
         'active_user': active_user,
         'users': all_users,
         'user_tips': user_tips,
-        'game_tip_users': game_tip_users,
-        'now': timezone.now(),
+        'event_tip_users': event_tip_users,
+        'now': now,
         'weekday_slots': weekday_slots,
         'week_start': week_start,
         'user_preferences': preferences,
         'preferences_form': preferences_form,
+        'event_sections': sections,
+        'team_choices': team_choices,
+        'player_choices': player_choices,
     }
     return render(request, 'predictions/home.html', context)
