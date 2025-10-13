@@ -73,7 +73,7 @@ class FetchUpcomingWeekGamesTests(TestCase):
             start_date='2024-01-11',
             end_date='2024-01-17',
             per_page=100,
-            postseason=False,
+            postseason='false',
         )
 
     def test_fetch_upcoming_week_games_handles_request_errors(self) -> None:
