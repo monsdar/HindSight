@@ -73,6 +73,20 @@ class HomeViewTests(TestCase):
         self.assertContains(response, 'title="alice"')
         self.assertContains(response, 'title="bob"')
 
+    def test_active_user_tip_renders_last_updated_timestamp(self) -> None:
+        session = self.client.session
+        session['active_user_id'] = self.alice.id
+        session.save()
+
+        with mock.patch(
+            'hooptipp.predictions.views.sync_weekly_games',
+            return_value=(self.tip_type, [self.game], self.game.game_date.date()),
+        ):
+            response = self.client.get(reverse('predictions:home'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Last updated:')
+
     def test_weekday_slots_group_games_by_date(self) -> None:
         additional = ScheduledGame.objects.create(
             tip_type=self.tip_type,
