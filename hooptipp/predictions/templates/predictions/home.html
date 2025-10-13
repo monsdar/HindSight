@@ -67,6 +67,25 @@
               </p>
             </div>
 
+            {% with pick_users=game_tip_users|get_item:game.id %}
+              {% if pick_users %}
+                <div class="mt-4 flex flex-wrap items-center gap-2 text-xs">
+                  <span class="font-semibold uppercase tracking-wide text-slate-500">Picked by</span>
+                  <div class="flex flex-wrap gap-1">
+                    {% for pick_user in pick_users %}
+                      <span
+                        class="inline-flex h-6 w-6 items-center justify-center rounded-full border border-amber-500/40 bg-amber-500/10 font-semibold text-amber-200"
+                        title="{{ pick_user.username }}"
+                        aria-label="{{ pick_user.username }}"
+                      >
+                        {{ pick_user.username|slice:':1'|upper }}
+                      </span>
+                    {% endfor %}
+                  </div>
+                </div>
+              {% endif %}
+            {% endwith %}
+
             {% if active_user %}
               <div class="mt-4">
                 <fieldset class="space-y-2">
