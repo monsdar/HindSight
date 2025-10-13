@@ -71,10 +71,59 @@ class FetchUpcomingWeekGamesTests(TestCase):
         mock_api.assert_called_once_with(api_key='Bearer secret-token')
         mock_games_api.list.assert_called_once_with(
             start_date='2024-01-11',
-            end_date='2024-01-17',
+            end_date='2024-02-09',
             per_page=100,
             postseason='false',
         )
+
+    def test_fetch_upcoming_week_games_uses_first_available_week(self) -> None:
+        os.environ['BALLDONTLIE_API_TOKEN'] = 'secret-token'
+        fake_now = datetime(2024, 7, 1, 12, 0, tzinfo=dt_timezone.utc)
+
+        opener = mock.Mock(
+            id=100,
+            status='Scheduled',
+            date='2024-10-20T23:00:00.000Z',
+            home_team=mock.Mock(full_name='Boston Celtics', abbreviation='BOS'),
+            visitor_team=mock.Mock(full_name='Los Angeles Lakers', abbreviation='LAL'),
+            arena='TD Garden',
+        )
+
+        same_week = mock.Mock(
+            id=101,
+            status='Scheduled',
+            date='2024-10-22T23:30:00.000Z',
+            home_team=mock.Mock(full_name='Denver Nuggets', abbreviation='DEN'),
+            visitor_team=mock.Mock(full_name='Phoenix Suns', abbreviation='PHX'),
+            arena='Ball Arena',
+        )
+
+        later_game = mock.Mock(
+            id=102,
+            status='Scheduled',
+            date='2024-10-30T00:30:00.000Z',
+            home_team=mock.Mock(full_name='Miami Heat', abbreviation='MIA'),
+            visitor_team=mock.Mock(full_name='New York Knicks', abbreviation='NYK'),
+            arena='Kaseya Center',
+        )
+
+        response = mock.Mock(data=[opener, same_week, later_game])
+
+        with mock.patch.object(services.timezone, 'now', return_value=fake_now):
+            with mock.patch.object(services, 'BalldontlieAPI') as mock_api:
+                mock_client = mock.Mock()
+                mock_games_api = mock.Mock()
+                mock_client.nba = mock.Mock()
+                mock_client.nba.games = mock_games_api
+                mock_games_api.list.return_value = response
+                mock_api.return_value = mock_client
+
+                with mock.patch.object(services.random, 'shuffle', side_effect=lambda seq: None):
+                    games = services.fetch_upcoming_week_games(limit=5)
+
+        self.assertEqual(len(games), 2)
+        returned_ids = {game['game_id'] for game in games}
+        self.assertEqual(returned_ids, {'100', '101'})
 
     def test_fetch_upcoming_week_games_handles_request_errors(self) -> None:
         os.environ['BALLDONTLIE_API_TOKEN'] = 'secret-token'

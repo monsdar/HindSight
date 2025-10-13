@@ -43,7 +43,11 @@ def _build_bdl_client() -> Optional[BalldontlieAPI]:
 def fetch_upcoming_week_games(limit: int = 5) -> List[dict]:
     today = timezone.now().date()
     start_date = today + timedelta(days=1)
-    end_date = today + timedelta(days=7)
+    # The NBA regular season can begin several weeks in the future. When the
+    # current week has no games scheduled (e.g. in the offseason), expand the
+    # search window so that we can surface the first available week of games in
+    # the upcoming season.
+    end_date = today + timedelta(days=30)
 
     client = _build_bdl_client()
     if client is None:
@@ -90,8 +94,15 @@ def fetch_upcoming_week_games(limit: int = 5) -> List[dict]:
     if not collected:
         return []
 
-    random.shuffle(collected)
-    return collected[:limit]
+    earliest_game = min(collected, key=lambda item: item['game_time'])
+    first_week_end = earliest_game['game_time'] + timedelta(days=7)
+    first_week_games = [
+        game for game in collected
+        if earliest_game['game_time'] <= game['game_time'] < first_week_end
+    ]
+
+    random.shuffle(first_week_games)
+    return first_week_games[:limit]
 
 
 def sync_weekly_games(limit: int = 5) -> Tuple[TipType, List[ScheduledGame]]:
