@@ -1,8 +1,9 @@
 import logging
 import os
 import random
+import threading
 from datetime import datetime, timedelta
-from typing import Iterable, List, Optional, Tuple
+from typing import Dict, Iterable, List, Optional, Tuple
 
 from balldontlie.exceptions import BallDontLieException
 from django.utils import timezone
@@ -31,13 +32,24 @@ def _get_bdl_api_key() -> str:
     return ''
 
 
+_BDL_CLIENT_CACHE: Dict[str, CachedBallDontLieAPI] = {}
+_BDL_CLIENT_LOCK = threading.Lock()
+
+
 def _build_bdl_client() -> Optional[CachedBallDontLieAPI]:
     api_key = _get_bdl_api_key()
     if not api_key:
         logger.warning('BALLDONTLIE_API_TOKEN environment variable is not configured; '
                        'skipping BallDontLie sync.')
         return None
-    return build_cached_bdl_client(api_key=api_key)
+    with _BDL_CLIENT_LOCK:
+        cached_client = _BDL_CLIENT_CACHE.get(api_key)
+        if cached_client is not None:
+            return cached_client
+
+        client = build_cached_bdl_client(api_key=api_key)
+        _BDL_CLIENT_CACHE[api_key] = client
+        return client
 
 
 def fetch_upcoming_week_games(limit: int = 5) -> List[dict]:

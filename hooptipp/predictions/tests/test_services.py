@@ -26,6 +26,7 @@ class FetchUpcomingWeekGamesTests(TestCase):
     def setUp(self) -> None:
         os.environ.pop('BALLDONTLIE_API_TOKEN', None)
         os.environ.pop('BALLDONTLIE_API_KEY', None)
+        services._BDL_CLIENT_CACHE.clear()
         return super().setUp()
 
     def test_fetch_upcoming_week_games_parses_payload(self) -> None:
@@ -148,3 +149,50 @@ class FetchUpcomingWeekGamesTests(TestCase):
 
         self.assertEqual(games, [])
         self.assertTrue(any('BALLDONTLIE_API_TOKEN environment variable is not configured' in entry for entry in captured.output))
+
+
+class BuildBdlClientCachingTests(TestCase):
+    def setUp(self) -> None:
+        os.environ.pop('BALLDONTLIE_API_TOKEN', None)
+        os.environ.pop('BALLDONTLIE_API_KEY', None)
+        services._BDL_CLIENT_CACHE.clear()
+        return super().setUp()
+
+    def tearDown(self) -> None:
+        services._BDL_CLIENT_CACHE.clear()
+        return super().tearDown()
+
+    def test_reuses_cached_client_for_same_api_key(self) -> None:
+        os.environ['BALLDONTLIE_API_TOKEN'] = 'secret-token'
+
+        with mock.patch.object(services, 'build_cached_bdl_client') as mock_builder:
+            first_client = mock.Mock()
+            second_client = mock.Mock()
+            mock_builder.side_effect = [first_client, second_client]
+
+            client_a = services._build_bdl_client()
+            client_b = services._build_bdl_client()
+
+        self.assertIs(client_a, first_client)
+        self.assertIs(client_b, first_client)
+        self.assertEqual(mock_builder.call_count, 1)
+
+    def test_caches_per_distinct_api_key(self) -> None:
+        os.environ['BALLDONTLIE_API_TOKEN'] = 'first-token'
+
+        with mock.patch.object(services, 'build_cached_bdl_client') as mock_builder:
+            first_client = mock.Mock()
+            second_client = mock.Mock()
+            mock_builder.side_effect = [first_client, second_client]
+
+            client_first = services._build_bdl_client()
+            os.environ['BALLDONTLIE_API_TOKEN'] = 'second-token'
+
+            client_second = services._build_bdl_client()
+
+        self.assertIs(client_first, first_client)
+        self.assertIs(client_second, second_client)
+        self.assertEqual(mock_builder.call_count, 2)
+        self.assertEqual(len(services._BDL_CLIENT_CACHE), 2)
+        self.assertIn('Bearer first-token', services._BDL_CLIENT_CACHE)
+        self.assertIn('Bearer second-token', services._BDL_CLIENT_CACHE)
