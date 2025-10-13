@@ -48,13 +48,13 @@ class FetchUpcomingWeekGamesTests(TestCase):
         response.data = [scheduled_game, completed_game]
 
         with mock.patch.object(services.timezone, 'now', return_value=fake_now):
-            with mock.patch.object(services, 'BalldontlieAPI') as mock_api:
+            with mock.patch.object(services, 'build_cached_bdl_client') as mock_builder:
                 mock_client = mock.Mock()
                 mock_games_api = mock.Mock()
                 mock_client.nba = mock.Mock()
                 mock_client.nba.games = mock_games_api
                 mock_games_api.list.return_value = response
-                mock_api.return_value = mock_client
+                mock_builder.return_value = mock_client
 
                 games = services.fetch_upcoming_week_games(limit=3)
 
@@ -68,7 +68,7 @@ class FetchUpcomingWeekGamesTests(TestCase):
         self.assertEqual(game['arena'], 'Crypto.com Arena')
         self.assertIsNotNone(game['game_time'].tzinfo)
 
-        mock_api.assert_called_once_with(api_key='Bearer secret-token')
+        mock_builder.assert_called_once_with(api_key='Bearer secret-token')
         mock_games_api.list.assert_called_once_with(
             start_date='2024-01-11',
             end_date='2024-02-09',
@@ -110,13 +110,13 @@ class FetchUpcomingWeekGamesTests(TestCase):
         response = mock.Mock(data=[opener, same_week, later_game])
 
         with mock.patch.object(services.timezone, 'now', return_value=fake_now):
-            with mock.patch.object(services, 'BalldontlieAPI') as mock_api:
+            with mock.patch.object(services, 'build_cached_bdl_client') as mock_builder:
                 mock_client = mock.Mock()
                 mock_games_api = mock.Mock()
                 mock_client.nba = mock.Mock()
                 mock_client.nba.games = mock_games_api
                 mock_games_api.list.return_value = response
-                mock_api.return_value = mock_client
+                mock_builder.return_value = mock_client
 
                 with mock.patch.object(services.random, 'shuffle', side_effect=lambda seq: None):
                     games = services.fetch_upcoming_week_games(limit=5)
@@ -128,13 +128,13 @@ class FetchUpcomingWeekGamesTests(TestCase):
     def test_fetch_upcoming_week_games_handles_request_errors(self) -> None:
         os.environ['BALLDONTLIE_API_TOKEN'] = 'secret-token'
 
-        with mock.patch.object(services, 'BalldontlieAPI') as mock_api:
+        with mock.patch.object(services, 'build_cached_bdl_client') as mock_builder:
             mock_client = mock.Mock()
             mock_games_api = mock.Mock()
             mock_games_api.list.side_effect = exceptions.BallDontLieException('boom')
             mock_client.nba = mock.Mock()
             mock_client.nba.games = mock_games_api
-            mock_api.return_value = mock_client
+            mock_builder.return_value = mock_client
 
             with self.assertLogs('hooptipp.predictions.services', level='ERROR') as captured:
                 games = services.fetch_upcoming_week_games(limit=2)
