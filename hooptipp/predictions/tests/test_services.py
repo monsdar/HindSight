@@ -1,5 +1,6 @@
 import os
 from datetime import datetime, timedelta, timezone as dt_timezone
+from types import SimpleNamespace
 from unittest import TestCase, mock
 
 from balldontlie import exceptions
@@ -7,7 +8,13 @@ from django.test import TestCase as DjangoTestCase
 from django.utils import timezone
 
 from hooptipp.predictions import services
-from hooptipp.predictions.models import PredictionEvent, ScheduledGame, TipType
+from hooptipp.predictions.models import (
+    NbaPlayer,
+    NbaTeam,
+    PredictionEvent,
+    ScheduledGame,
+    TipType,
+)
 
 
 class GetBdlApiKeyTests(TestCase):
@@ -463,3 +470,128 @@ class SyncWeeklyGamesTests(DjangoTestCase):
         self.assertEqual([event.scheduled_game.nba_game_id for event in events], ['MANUAL-ONLY'])
         manual_game.refresh_from_db()
         self.assertTrue(manual_game.is_manual)
+
+
+class SyncActivePlayersTests(DjangoTestCase):
+    def setUp(self) -> None:
+        services._BDL_CLIENT_CACHE.clear()
+        return super().setUp()
+
+    def test_sync_active_players_creates_updates_and_removes(self) -> None:
+        existing_team = NbaTeam.objects.create(
+            balldontlie_id=14,
+            name='Old Lakers',
+            abbreviation='OLD',
+            city='Old City',
+        )
+        existing_player = NbaPlayer.objects.create(
+            balldontlie_id=23,
+            first_name='Old',
+            last_name='Name',
+            display_name='Old Name',
+            position='G',
+            team=existing_team,
+        )
+        stale_player = NbaPlayer.objects.create(
+            balldontlie_id=77,
+            first_name='Stale',
+            last_name='Player',
+            display_name='Stale Player',
+            position='C',
+        )
+
+        lakers_team = SimpleNamespace(
+            id=14,
+            full_name='Los Angeles Lakers',
+            name='Lakers',
+            abbreviation='LAL',
+            city='Los Angeles',
+            conference='West',
+            division='Pacific',
+        )
+        bulls_team = SimpleNamespace(
+            id=4,
+            full_name='Chicago Bulls',
+            name='Bulls',
+            abbreviation='CHI',
+            city='Chicago',
+            conference='East',
+            division='Central',
+        )
+
+        lebron = SimpleNamespace(
+            id=23,
+            first_name='LeBron',
+            last_name='James',
+            position='F',
+            team=lakers_team,
+        )
+        davis = SimpleNamespace(
+            id=3,
+            first_name='Anthony',
+            last_name='Davis',
+            position='C',
+            team=lakers_team,
+        )
+        caruso = SimpleNamespace(
+            id=6,
+            first_name='Alex',
+            last_name='Caruso',
+            position='G',
+            team=bulls_team,
+        )
+
+        first_page = SimpleNamespace(
+            data=[lebron, davis],
+            meta=SimpleNamespace(next_cursor=50),
+        )
+        second_page = SimpleNamespace(
+            data=[caruso],
+            meta=SimpleNamespace(next_cursor=None),
+        )
+
+        mock_client = mock.Mock()
+        mock_client.nba.players.list_active.side_effect = [first_page, second_page]
+
+        with mock.patch.object(services, '_build_bdl_client', return_value=mock_client):
+            result = services.sync_active_players(throttle_seconds=0)
+
+        self.assertEqual(result.created, 2)
+        self.assertEqual(result.updated, 1)
+        self.assertEqual(result.removed, 1)
+
+        mock_client.nba.players.list_active.assert_has_calls(
+            [
+                mock.call(per_page=100),
+                mock.call(per_page=100, cursor=50),
+            ]
+        )
+
+        existing_player.refresh_from_db()
+        self.assertEqual(existing_player.display_name, 'LeBron James')
+        self.assertEqual(existing_player.position, 'F')
+        self.assertIsNotNone(existing_player.team)
+        self.assertEqual(existing_player.team.abbreviation, 'LAL')
+
+        self.assertFalse(NbaPlayer.objects.filter(pk=stale_player.pk).exists())
+        self.assertEqual(NbaPlayer.objects.count(), 3)
+
+        lakers_team_obj = NbaTeam.objects.get(balldontlie_id=14)
+        self.assertEqual(lakers_team_obj.name, 'Los Angeles Lakers')
+        self.assertEqual(lakers_team_obj.abbreviation, 'LAL')
+
+        bulls_team_obj = NbaTeam.objects.get(balldontlie_id=4)
+        self.assertEqual(bulls_team_obj.name, 'Chicago Bulls')
+        self.assertEqual(bulls_team_obj.abbreviation, 'CHI')
+
+    def test_sync_active_players_handles_api_errors(self) -> None:
+        mock_client = mock.Mock()
+        mock_client.nba.players.list_active.side_effect = exceptions.BallDontLieException('boom')
+
+        with mock.patch.object(services, '_build_bdl_client', return_value=mock_client):
+            result = services.sync_active_players(throttle_seconds=0)
+
+        self.assertFalse(result.changed)
+        self.assertEqual(result.created, 0)
+        self.assertEqual(result.updated, 0)
+        self.assertEqual(result.removed, 0)

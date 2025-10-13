@@ -1,5 +1,10 @@
-from django.contrib import admin
+from django.contrib import admin, messages
+from django.core.exceptions import PermissionDenied
+from django.http import HttpRequest, HttpResponseRedirect, HttpResponseNotAllowed
+from django.urls import path, reverse
+from django.utils.translation import gettext_lazy as _
 
+from . import services
 from .models import (
     NbaPlayer,
     NbaTeam,
@@ -56,6 +61,44 @@ class NbaPlayerAdmin(admin.ModelAdmin):
         'first_name',
         'last_name',
     )
+    change_list_template = 'admin/predictions/nbaplayer/change_list.html'
+
+    def get_urls(self):
+        urls = super().get_urls()
+        custom_urls = [
+            path(
+                'sync/',
+                self.admin_site.admin_view(self.sync_players_view),
+                name='predictions_nbaplayer_sync',
+            ),
+        ]
+        return custom_urls + urls
+
+    def sync_players_view(self, request: HttpRequest):
+        if request.method != 'POST':
+            return HttpResponseNotAllowed(['POST'])
+
+        if not self.has_change_permission(request):
+            raise PermissionDenied
+
+        result = services.sync_active_players()
+
+        if result.changed:
+            message = _(
+                'Player data updated. %(created)d created, %(updated)d updated, %(removed)d removed.'
+            ) % {
+                'created': result.created,
+                'updated': result.updated,
+                'removed': result.removed,
+            }
+            level = messages.SUCCESS
+        else:
+            message = _('Player sync completed with no changes.')
+            level = messages.INFO
+
+        self.message_user(request, message, level=level)
+        changelist_url = reverse('admin:predictions_nbaplayer_changelist')
+        return HttpResponseRedirect(changelist_url)
 
 
 class PredictionOptionInline(admin.TabularInline):

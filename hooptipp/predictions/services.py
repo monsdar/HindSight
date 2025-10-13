@@ -1,6 +1,8 @@
 import logging
 import os
 import threading
+import time
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from functools import lru_cache
 from typing import Any, Dict, Iterable, List, Optional, Tuple
@@ -10,6 +12,7 @@ from django.utils import timezone
 
 from .balldontlie_client import CachedBallDontLieAPI, build_cached_bdl_client
 from .models import (
+    NbaPlayer,
     NbaTeam,
     PredictionEvent,
     PredictionOption,
@@ -19,6 +22,26 @@ from .models import (
 
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class PlayerSyncResult:
+    """Summary of a BallDontLie active player synchronisation run."""
+
+    created: int = 0
+    updated: int = 0
+    removed: int = 0
+
+    @property
+    def changed(self) -> bool:
+        """Return ``True`` when the sync modified the database."""
+
+        return any((self.created, self.updated, self.removed))
+
+
+# The BallDontLie free tier allows 5 requests per minute. A throttle of 12.5
+# seconds leaves a small safety margin between requests.
+PLAYER_SYNC_THROTTLE_SECONDS = 12.5
 
 
 def _get_bdl_api_key() -> str:
@@ -157,6 +180,112 @@ def get_player_choices() -> List[Tuple[str, str]]:
 
     choices.sort(key=lambda item: item[1])
     return choices
+
+
+def _serialise_team(team_obj: Any) -> Optional[dict]:
+    if team_obj is None:
+        return None
+
+    return {
+        'id': getattr(team_obj, 'id', None),
+        'full_name': getattr(team_obj, 'full_name', ''),
+        'name': getattr(team_obj, 'name', ''),
+        'abbreviation': getattr(team_obj, 'abbreviation', ''),
+        'city': getattr(team_obj, 'city', ''),
+        'conference': getattr(team_obj, 'conference', ''),
+        'division': getattr(team_obj, 'division', ''),
+    }
+
+
+def sync_active_players(throttle_seconds: float = PLAYER_SYNC_THROTTLE_SECONDS) -> PlayerSyncResult:
+    """Fetch all active NBA players from BallDontLie and persist them.
+
+    The API is rate limited to five requests per minute. ``throttle_seconds``
+    governs the sleep interval between subsequent requests to stay within that
+    budget. The function returns a :class:`PlayerSyncResult` with the outcome of
+    the sync operation.
+    """
+
+    client = _build_bdl_client()
+    if client is None:
+        return PlayerSyncResult()
+
+    seen_ids: set[int] = set()
+    created = 0
+    updated = 0
+    processed = 0
+
+    cursor: Optional[int] = None
+    seen_cursors: set[Optional[int]] = set()
+
+    while True:
+        params: Dict[str, Any] = {'per_page': 100}
+        if cursor is not None:
+            params['cursor'] = cursor
+
+        try:
+            response = client.nba.players.list_active(**params)
+        except BallDontLieException:
+            logger.exception('Unable to fetch player list from BallDontLie API.')
+            break
+
+        for player in getattr(response, 'data', []) or []:
+            player_id = getattr(player, 'id', None)
+            if player_id is None:
+                continue
+
+            first_name = getattr(player, 'first_name', '') or ''
+            last_name = getattr(player, 'last_name', '') or ''
+            if not (first_name or last_name):
+                continue
+
+            display_name = f"{first_name} {last_name}".strip()
+            position = getattr(player, 'position', '') or ''
+
+            team_data = _serialise_team(getattr(player, 'team', None))
+            team: Optional[NbaTeam] = None
+            if team_data:
+                team = _upsert_team(team_data)
+
+            defaults = {
+                'first_name': first_name,
+                'last_name': last_name,
+                'display_name': display_name,
+                'position': position,
+                'team': team,
+            }
+
+            _, created_flag = NbaPlayer.objects.update_or_create(
+                balldontlie_id=int(player_id),
+                defaults=defaults,
+            )
+            if created_flag:
+                created += 1
+            else:
+                updated += 1
+
+            seen_ids.add(int(player_id))
+            processed += 1
+
+        meta = getattr(response, 'meta', None)
+        next_cursor = getattr(meta, 'next_cursor', None)
+        if next_cursor is None or next_cursor in seen_cursors:
+            break
+
+        seen_cursors.add(next_cursor)
+        cursor = next_cursor
+
+        if throttle_seconds > 0:
+            time.sleep(throttle_seconds)
+
+    removed = 0
+    if processed:
+        query = NbaPlayer.objects.filter(balldontlie_id__isnull=False)
+        if seen_ids:
+            query = query.exclude(balldontlie_id__in=seen_ids)
+        removed, _ = query.delete()
+
+    return PlayerSyncResult(created=created, updated=updated, removed=removed)
 
 
 def fetch_upcoming_week_games(limit: int = 7) -> Tuple[Optional[date], List[dict]]:
