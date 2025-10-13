@@ -77,12 +77,25 @@ def home(request):
             )
         }
 
+    game_tip_users = {}
+    if tip_type:
+        for tip in (
+            UserTip.objects.filter(
+                tip_type=tip_type,
+                scheduled_game__in=games,
+            )
+            .select_related('user')
+            .order_by('user__username')
+        ):
+            game_tip_users.setdefault(tip.scheduled_game_id, []).append(tip.user)
+
     context = {
         'tip_type': tip_type,
         'games': games,
         'active_user': active_user,
         'users': all_users,
         'user_tips': user_tips,
+        'game_tip_users': game_tip_users,
         'now': timezone.now(),
     }
     return render(request, 'predictions/home.html', context)
