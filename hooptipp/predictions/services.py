@@ -1,7 +1,8 @@
+import logging
 import os
 import random
 from datetime import datetime, timedelta
-from typing import List, Optional, Tuple
+from typing import Iterable, List, Optional, Tuple
 
 from balldontlie import BalldontlieAPI
 from balldontlie.exceptions import BallDontLieException
@@ -10,18 +11,31 @@ from django.utils import timezone
 from .models import ScheduledGame, TipType
 
 
+logger = logging.getLogger(__name__)
+
+
 def _get_bdl_api_key() -> str:
-    token = os.environ.get('BALLDONTLIE_API_TOKEN', '').strip()
-    if not token:
-        return ''
-    if token.lower().startswith('bearer '):
-        return token
-    return f'Bearer {token}'
+    """Return the configured BallDontLie API token formatted for requests."""
+
+    def _candidates() -> Iterable[str]:
+        yield os.environ.get('BALLDONTLIE_API_TOKEN', '')
+        yield os.environ.get('BALLDONTLIE_API_KEY', '')
+
+    for raw_value in _candidates():
+        token = raw_value.strip()
+        if not token:
+            continue
+        if token.lower().startswith('bearer '):
+            return token
+        return f'Bearer {token}'
+    return ''
 
 
 def _build_bdl_client() -> Optional[BalldontlieAPI]:
     api_key = _get_bdl_api_key()
     if not api_key:
+        logger.warning('BALLDONTLIE_API_TOKEN environment variable is not configured; '
+                       'skipping BallDontLie sync.')
         return None
     return BalldontlieAPI(api_key=api_key)
 
@@ -43,6 +57,7 @@ def fetch_upcoming_week_games(limit: int = 5) -> List[dict]:
             postseason=False,
         )
     except BallDontLieException:
+        logger.exception('Unable to fetch games from BallDontLie API.')
         return []
 
     collected = []
