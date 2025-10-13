@@ -2,6 +2,7 @@ import logging
 import os
 import threading
 from datetime import date, datetime, timedelta
+from functools import lru_cache
 from typing import Dict, Iterable, List, Optional, Tuple
 
 from balldontlie.exceptions import BallDontLieException
@@ -58,6 +59,67 @@ class GameWeightCalculator:
         """Return the selection weight for ``game``."""
 
         return 1.0
+
+
+@lru_cache
+def get_team_choices() -> List[Tuple[str, str]]:
+    """Return cached BallDontLie NBA team choices for dropdowns."""
+
+    client = _build_bdl_client()
+    if client is None:
+        return []
+
+    try:
+        response = client.nba.teams.list(per_page=100)
+    except BallDontLieException:
+        logger.exception('Unable to fetch team list from BallDontLie API.')
+        return []
+
+    choices: List[Tuple[str, str]] = []
+    for team in getattr(response, 'data', []):
+        team_id = getattr(team, 'id', None)
+        if not team_id:
+            continue
+        name = getattr(team, 'full_name', '') or getattr(team, 'name', '')
+        if not name:
+            continue
+        choices.append((str(team_id), name))
+
+    choices.sort(key=lambda item: item[1])
+    return choices
+
+
+@lru_cache
+def get_player_choices() -> List[Tuple[str, str]]:
+    """Return cached BallDontLie NBA player choices for dropdowns."""
+
+    client = _build_bdl_client()
+    if client is None:
+        return []
+
+    try:
+        response = client.nba.players.list(per_page=100, active='true')
+    except BallDontLieException:
+        logger.exception('Unable to fetch player list from BallDontLie API.')
+        return []
+
+    choices: List[Tuple[str, str]] = []
+    for player in getattr(response, 'data', []):
+        player_id = getattr(player, 'id', None)
+        if not player_id:
+            continue
+        first_name = getattr(player, 'first_name', '')
+        last_name = getattr(player, 'last_name', '')
+        if not (first_name or last_name):
+            continue
+        name = f"{first_name} {last_name}".strip()
+        team = getattr(getattr(player, 'team', None), 'abbreviation', '')
+        if team:
+            name = f"{name} ({team})"
+        choices.append((str(player_id), name))
+
+    choices.sort(key=lambda item: item[1])
+    return choices
 
 
 def fetch_upcoming_week_games(limit: int = 7) -> Tuple[Optional[date], List[dict]]:

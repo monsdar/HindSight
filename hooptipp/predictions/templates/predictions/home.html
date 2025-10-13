@@ -4,143 +4,258 @@
 {% block title %}HoopTipp &ndash; Weekly overview{% endblock %}
 
 {% block content %}
-  <section class="mb-8">
-    <h1 class="text-3xl font-bold text-amber-300 mb-3">Weekly picks</h1>
-    <p class="text-slate-300 max-w-2xl">
-      Select a user to submit picks for the upcoming games. When no user is active you will not see any saved predictions.
-    </p>
-  </section>
+  {% with primary=user_preferences.theme_primary_color|default:'#f59e0b' secondary=user_preferences.theme_secondary_color|default:'#0f172a' %}
+    <div class="space-y-8" style="--accent-color: {{ primary }}; --accent-contrast: {{ secondary }};">
+      <style>
+        .theme-accent-text { color: var(--accent-color); }
+        .theme-accent-bg { background-color: var(--accent-color); color: var(--accent-contrast); }
+        .theme-accent-outline:focus { outline: 2px solid var(--accent-color); outline-offset: 2px; }
+        .theme-accent-border { border-color: color-mix(in srgb, var(--accent-color) 35%, transparent); }
+        .theme-accent-surface { background-color: color-mix(in srgb, var(--accent-color) 12%, transparent); }
+        .theme-accent-hover:hover { border-color: var(--accent-color); }
+        .theme-accent-shadow { box-shadow: 0 10px 25px color-mix(in srgb, var(--accent-color) 35%, transparent); }
+        .theme-accent-pill { background-color: color-mix(in srgb, var(--accent-color) 12%, transparent); border-color: color-mix(in srgb, var(--accent-color) 30%, transparent); color: color-mix(in srgb, var(--accent-color) 80%, white); }
+        .theme-accent-radio input[type="radio"] { accent-color: var(--accent-color); }
+        .theme-accent-muted { color: color-mix(in srgb, var(--accent-color) 45%, white); }
+      </style>
 
-  <section class="mb-10">
-    <form method="post" class="flex flex-wrap items-end gap-3 bg-slate-900 border border-slate-800 rounded-xl p-4">
-      {% csrf_token %}
-      <input type="hidden" name="set_active_user" value="1" />
-      <div>
-        <label for="user_id" class="block text-sm font-semibold text-slate-400 uppercase tracking-wide">Active user</label>
-        <select id="user_id" name="user_id" class="mt-2 w-64 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100 focus:border-amber-400 focus:outline-none">
-          <option value="">No active user</option>
-          {% for user in users %}
-            <option value="{{ user.id }}" {% if active_user and user.id == active_user.id %}selected{% endif %}>{{ user.username }}</option>
-          {% endfor %}
-        </select>
-      </div>
-      <button type="submit" class="inline-flex items-center gap-2 rounded-lg bg-amber-400 px-4 py-2 font-semibold text-slate-900 shadow-lg shadow-amber-500/30 transition hover:bg-amber-300">
-        Activate user
-      </button>
-    </form>
-  </section>
+      <section class="space-y-3">
+        <h1 class="text-3xl font-bold theme-accent-text">Weekly picks</h1>
+        <p class="text-slate-300 max-w-2xl">
+          Select a user to submit picks for the upcoming games. When no user is active you will not see any saved predictions.
+        </p>
+      </section>
 
-  {% if not tip_type %}
-    <div class="rounded-2xl border border-slate-800 bg-slate-900 p-6 text-slate-300">
-      <h2 class="text-xl font-semibold text-amber-300">No games found</h2>
-      <p class="mt-2">The BallDontLie API could not provide any games for the upcoming week. Please try again later.</p>
-    </div>
-  {% else %}
-    <section class="space-y-6">
-      <header class="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h2 class="text-2xl font-semibold text-amber-300">Featured games</h2>
-          <p class="text-sm text-slate-400">
-            {% if week_start %}
-              Week of {{ week_start|date:"M d, Y" }} &bull;
-            {% endif %}
-            Picks are open until {{ tip_type.deadline|date:"M d, Y H:i" }}.
-          </p>
-        </div>
-        {% if not active_user %}
-          <p class="text-sm text-slate-400">Activate a user to display or submit picks.</p>
-        {% endif %}
-      </header>
-
-      <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {% for slot in weekday_slots %}
-          <section class="rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-lg shadow-slate-900/40">
-            <header class="flex items-baseline justify-between gap-2 text-sm text-slate-400">
-              <h3 class="text-lg font-semibold text-slate-200">{{ slot.date|date:"l" }}</h3>
-              <p>{{ slot.date|date:"M d, Y" }}</p>
-            </header>
-
-            {% if slot.games %}
-              <div class="mt-4 space-y-4">
-                {% for game in slot.games %}
-                  <article class="rounded-xl border border-slate-800 bg-slate-950 p-4">
-                    <div class="flex items-center justify-between text-xs text-slate-500">
-                      <span>{{ game.game_date|date:"H:i" }}</span>
-                      {% if game.venue %}
-                        <span>{{ game.venue }}</span>
-                      {% endif %}
-                    </div>
-                    <div class="mt-3 space-y-2">
-                      <div class="flex items-center justify-between">
-                        <span class="text-lg font-semibold text-slate-200">{{ game.away_team_tricode }}</span>
-                        <span class="text-xs uppercase tracking-wide text-slate-500">@</span>
-                        <span class="text-lg font-semibold text-slate-200">{{ game.home_team_tricode }}</span>
-                      </div>
-                      <p class="text-sm text-slate-400">
-                        {{ game.away_team }} <span class="text-amber-400">@</span> {{ game.home_team }}
-                      </p>
-                    </div>
-
-                    {% with pick_users=game_tip_users|get_item:game.id %}
-                      {% if pick_users %}
-                        <div class="mt-3 flex flex-wrap items-center gap-2 text-xs">
-                          <span class="font-semibold uppercase tracking-wide text-slate-500">Picked by</span>
-                          <div class="flex flex-wrap gap-1">
-                            {% for pick_user in pick_users %}
-                              <span
-                                class="inline-flex h-6 w-6 items-center justify-center rounded-full border border-amber-500/40 bg-amber-500/10 font-semibold text-amber-200"
-                                title="{{ pick_user.username }}"
-                                aria-label="{{ pick_user.username }}"
-                              >
-                                {{ pick_user.username|slice:':1'|upper }}
-                              </span>
-                            {% endfor %}
-                          </div>
-                        </div>
-                      {% endif %}
-                    {% endwith %}
-
-                    {% if active_user %}
-                      <div class="mt-4">
-                        <fieldset class="space-y-2">
-                          <legend class="text-xs uppercase tracking-wide text-slate-500">Your pick</legend>
-                          <label class="flex items-center gap-2 rounded-lg border border-slate-800 bg-slate-900 px-3 py-2 text-sm hover:border-amber-400">
-                            <input type="radio" name="prediction_{{ game.id }}" value="{{ game.away_team_tricode }}" form="tips-form" class="text-amber-400 focus:ring-amber-400"
-                              {% if user_tips|get_item:game.id and user_tips|get_item:game.id.prediction == game.away_team_tricode %}checked{% endif %} />
-                            <span class="flex-1">{{ game.away_team }} wins</span>
-                          </label>
-                          <label class="flex items-center gap-2 rounded-lg border border-slate-800 bg-slate-900 px-3 py-2 text-sm hover:border-amber-400">
-                            <input type="radio" name="prediction_{{ game.id }}" value="{{ game.home_team_tricode }}" form="tips-form" class="text-amber-400 focus:ring-amber-400"
-                              {% if user_tips|get_item:game.id and user_tips|get_item:game.id.prediction == game.home_team_tricode %}checked{% endif %} />
-                            <span class="flex-1">{{ game.home_team }} wins</span>
-                          </label>
-                        </fieldset>
-                      </div>
-                    {% endif %}
-
-                    {% if active_user and user_tips|get_item:game.id %}
-                      <p class="mt-3 text-xs text-slate-500">Last updated: {{ user_tips|get_item:game.id.updated_at|date:"M d, Y H:i" }}</p>
-                    {% endif %}
-                  </article>
-                {% endfor %}
-              </div>
-            {% else %}
-              <p class="mt-4 text-sm text-slate-500">No featured game scheduled.</p>
-            {% endif %}
-          </section>
-        {% endfor %}
-      </div>
-
-      {% if active_user %}
-        <form id="tips-form" method="post" class="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-5 backdrop-blur">
+      <section class="space-y-6">
+        <form method="post" class="flex flex-wrap items-end gap-3 rounded-xl border border-slate-800 bg-slate-900 p-4 shadow-lg shadow-slate-900/30">
           {% csrf_token %}
-          <input type="hidden" name="save_tips" value="1" />
-          <p class="text-sm text-amber-200 mb-4">Picks are automatically stored for <span class="font-semibold">{{ active_user.username }}</span>.</p>
-          <button type="submit" class="inline-flex items-center gap-2 rounded-lg bg-amber-400 px-5 py-2 font-semibold text-slate-900 shadow-lg shadow-amber-500/30 transition hover:bg-amber-300">
-            Save picks
+          <input type="hidden" name="set_active_user" value="1" />
+          <div>
+            <label for="user_id" class="block text-sm font-semibold uppercase tracking-wide text-slate-400">Active user</label>
+            <select id="user_id" name="user_id" class="theme-accent-outline mt-2 w-64 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100 focus:outline-none">
+              <option value="">No active user</option>
+              {% for user in users %}
+                <option value="{{ user.id }}" {% if active_user and user.id == active_user.id %}selected{% endif %}>{{ user.username }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <button type="submit" class="theme-accent-bg theme-accent-shadow inline-flex items-center gap-2 rounded-lg px-4 py-2 font-semibold transition">
+            Activate user
           </button>
         </form>
+
+        {% if active_user and preferences_form %}
+          <section class="rounded-2xl border border-slate-800 bg-slate-900 p-4 shadow-lg shadow-slate-900/30">
+            <details class="group" {% if preferences_form.errors %}open{% endif %}>
+              <summary class="flex w-full cursor-pointer items-center justify-between gap-3 rounded-xl border border-slate-800 bg-slate-950 px-4 py-3 text-left transition hover:border-slate-700">
+                <div>
+                  <h2 class="text-lg font-semibold theme-accent-text">Customize experience</h2>
+                  <p class="text-sm text-slate-400">
+                    {% if user_preferences.nickname %}
+                      "{{ user_preferences.nickname }}"
+                    {% else %}
+                      No nickname set
+                    {% endif %}
+                    {% if user_preferences.favorite_team_display %}
+                      &bull; {{ user_preferences.favorite_team_display }}
+                    {% endif %}
+                    {% if user_preferences.favorite_player_display %}
+                      &bull; {{ user_preferences.favorite_player_display }}
+                    {% endif %}
+                  </p>
+                </div>
+                <span class="text-sm text-slate-500 transition group-open:rotate-180">&#9660;</span>
+              </summary>
+              <div class="mt-4 space-y-5 rounded-xl border border-slate-800 bg-slate-950 p-5">
+                <form method="post" class="space-y-5" novalidate>
+                  {% csrf_token %}
+                  <input type="hidden" name="update_preferences" value="1" />
+
+                  {% if preferences_form.non_field_errors %}
+                    <div class="rounded-lg border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-200">
+                      {{ preferences_form.non_field_errors|join:' ' }}
+                    </div>
+                  {% endif %}
+
+                  <div class="grid gap-5 md:grid-cols-2">
+                    <div>
+                      <label for="{{ preferences_form.nickname.id_for_label }}" class="block text-sm font-semibold uppercase tracking-wide text-slate-400">Display nickname</label>
+                      {{ preferences_form.nickname }}
+                      <p class="mt-2 text-xs text-slate-500">Shown alongside your picks and leaderboard entries.</p>
+                      {% if preferences_form.nickname.errors %}
+                        <p class="mt-2 text-sm text-red-300">{{ preferences_form.nickname.errors|join:', ' }}</p>
+                      {% endif %}
+                    </div>
+                    <div class="grid gap-4 sm:grid-cols-2">
+                      <div>
+                        <label for="{{ preferences_form.theme_primary_color.id_for_label }}" class="block text-sm font-semibold uppercase tracking-wide text-slate-400">Primary accent color</label>
+                        <div class="mt-2 flex items-center gap-3">
+                          {{ preferences_form.theme_primary_color }}
+                          <span class="text-xs text-slate-500">Used for buttons and highlights.</span>
+                        </div>
+                        {% if preferences_form.theme_primary_color.errors %}
+                          <p class="mt-2 text-sm text-red-300">{{ preferences_form.theme_primary_color.errors|join:', ' }}</p>
+                        {% endif %}
+                      </div>
+                      <div>
+                        <label for="{{ preferences_form.theme_secondary_color.id_for_label }}" class="block text-sm font-semibold uppercase tracking-wide text-slate-400">Accent text color</label>
+                        <div class="mt-2 flex items-center gap-3">
+                          {{ preferences_form.theme_secondary_color }}
+                          <span class="text-xs text-slate-500">Displayed on accent surfaces.</span>
+                        </div>
+                        {% if preferences_form.theme_secondary_color.errors %}
+                          <p class="mt-2 text-sm text-red-300">{{ preferences_form.theme_secondary_color.errors|join:', ' }}</p>
+                        {% endif %}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="grid gap-5 md:grid-cols-2">
+                    <div>
+                      <label for="{{ preferences_form.favorite_team_id.id_for_label }}" class="block text-sm font-semibold uppercase tracking-wide text-slate-400">Favorite team</label>
+                      {{ preferences_form.favorite_team_id }}
+                      <p class="mt-2 text-xs text-slate-500">The team that appears in highlights around your profile.</p>
+                      {% if preferences_form.favorite_team_id.errors %}
+                        <p class="mt-2 text-sm text-red-300">{{ preferences_form.favorite_team_id.errors|join:', ' }}</p>
+                      {% endif %}
+                    </div>
+                    <div>
+                      <label for="{{ preferences_form.favorite_player_id.id_for_label }}" class="block text-sm font-semibold uppercase tracking-wide text-slate-400">Favorite player</label>
+                      {{ preferences_form.favorite_player_id }}
+                      <p class="mt-2 text-xs text-slate-500">Featured when we surface player-specific props.</p>
+                      {% if preferences_form.favorite_player_id.errors %}
+                        <p class="mt-2 text-sm text-red-300">{{ preferences_form.favorite_player_id.errors|join:', ' }}</p>
+                      {% endif %}
+                    </div>
+                  </div>
+
+                  <div class="flex items-center justify-end">
+                    <button type="submit" class="theme-accent-bg theme-accent-shadow inline-flex items-center gap-2 rounded-lg px-4 py-2 font-semibold transition">
+                      Save customization
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </details>
+          </section>
+        {% endif %}
+      </section>
+
+      {% if not tip_type %}
+        <div class="rounded-2xl border border-slate-800 bg-slate-900 p-6 text-slate-300">
+          <h2 class="text-xl font-semibold theme-accent-text">No games found</h2>
+          <p class="mt-2">The BallDontLie API could not provide any games for the upcoming week. Please try again later.</p>
+        </div>
+      {% else %}
+        <section class="space-y-6">
+          <header class="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <h2 class="text-2xl font-semibold theme-accent-text">Featured games</h2>
+              <p class="text-sm text-slate-400">
+                {% if week_start %}
+                  Week of {{ week_start|date:"M d, Y" }} &bull;
+                {% endif %}
+                Picks are open until {{ tip_type.deadline|date:"M d, Y H:i" }}.
+              </p>
+            </div>
+            {% if not active_user %}
+              <p class="text-sm text-slate-400">Activate a user to display or submit picks.</p>
+            {% endif %}
+          </header>
+
+          <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {% for slot in weekday_slots %}
+              <section class="rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-lg shadow-slate-900/40">
+                <header class="flex items-baseline justify-between gap-2 text-sm text-slate-400">
+                  <h3 class="text-lg font-semibold text-slate-200">{{ slot.date|date:"l" }}</h3>
+                  <p>{{ slot.date|date:"M d, Y" }}</p>
+                </header>
+
+                {% if slot.games %}
+                  <div class="mt-4 space-y-4">
+                    {% for game in slot.games %}
+                      <article class="rounded-xl border border-slate-800 bg-slate-950 p-4">
+                        <div class="flex items-center justify-between text-xs text-slate-500">
+                          <span>{{ game.game_date|date:"H:i" }}</span>
+                          {% if game.venue %}
+                            <span>{{ game.venue }}</span>
+                          {% endif %}
+                        </div>
+                        <div class="mt-3 space-y-2">
+                          <div class="flex items-center justify-between">
+                            <span class="text-lg font-semibold text-slate-200">{{ game.away_team_tricode }}</span>
+                            <span class="text-xs uppercase tracking-wide text-slate-500">@</span>
+                            <span class="text-lg font-semibold text-slate-200">{{ game.home_team_tricode }}</span>
+                          </div>
+                          <p class="text-sm text-slate-400">
+                            {{ game.away_team }} <span class="theme-accent-text">@</span> {{ game.home_team }}
+                          </p>
+                        </div>
+
+                        {% with pick_users=game_tip_users|get_item:game.id %}
+                          {% if pick_users %}
+                            <div class="mt-3 flex flex-wrap items-center gap-2 text-xs">
+                              <span class="font-semibold uppercase tracking-wide text-slate-500">Picked by</span>
+                              <div class="flex flex-wrap gap-1">
+                                {% for pick_user in pick_users %}
+                                  <span
+                                    class="theme-accent-pill inline-flex h-6 w-6 items-center justify-center rounded-full border font-semibold"
+                                    title="{{ pick_user.username }}"
+                                    aria-label="{{ pick_user.username }}"
+                                  >
+                                    {{ pick_user.username|slice:':1'|upper }}
+                                  </span>
+                                {% endfor %}
+                              </div>
+                            </div>
+                          {% endif %}
+                        {% endwith %}
+
+                        {% with user_tip=user_tips|get_item:game.id %}
+                          {% if active_user %}
+                            <div class="mt-4 theme-accent-radio">
+                              <fieldset class="space-y-2">
+                                <legend class="text-xs uppercase tracking-wide text-slate-500">Your pick</legend>
+                                <label class="theme-accent-hover flex items-center gap-2 rounded-lg border border-slate-800 bg-slate-900 px-3 py-2 text-sm">
+                                  <input type="radio" name="prediction_{{ game.id }}" value="{{ game.away_team_tricode }}" form="tips-form" class="h-4 w-4 theme-accent-outline"
+                                    {% if user_tip and user_tip.prediction == game.away_team_tricode %}checked{% endif %} />
+                                  <span class="flex-1">{{ game.away_team }} wins</span>
+                                </label>
+                                <label class="theme-accent-hover flex items-center gap-2 rounded-lg border border-slate-800 bg-slate-900 px-3 py-2 text-sm">
+                                  <input type="radio" name="prediction_{{ game.id }}" value="{{ game.home_team_tricode }}" form="tips-form" class="h-4 w-4 theme-accent-outline"
+                                    {% if user_tip and user_tip.prediction == game.home_team_tricode %}checked{% endif %} />
+                                  <span class="flex-1">{{ game.home_team }} wins</span>
+                                </label>
+                              </fieldset>
+                            </div>
+                          {% endif %}
+
+                          {% if active_user and user_tip %}
+                            <p class="mt-3 text-xs text-slate-500">Last updated: {{ user_tip.updated_at|date:"M d, Y H:i" }}</p>
+                          {% endif %}
+                        {% endwith %}
+                      </article>
+                    {% endfor %}
+                  </div>
+                {% else %}
+                  <p class="mt-4 text-sm text-slate-500">No featured game scheduled.</p>
+                {% endif %}
+              </section>
+            {% endfor %}
+          </div>
+
+          {% if active_user %}
+            <form id="tips-form" method="post" class="theme-accent-border theme-accent-surface rounded-2xl border p-5 backdrop-blur">
+              {% csrf_token %}
+              <input type="hidden" name="save_tips" value="1" />
+              <p class="mb-4 text-sm theme-accent-muted">Picks are automatically stored for <span class="font-semibold text-slate-100">{{ active_user.username }}</span>.</p>
+              <button type="submit" class="theme-accent-bg theme-accent-shadow inline-flex items-center gap-2 rounded-lg px-5 py-2 font-semibold transition">
+                Save picks
+              </button>
+            </form>
+          {% endif %}
+        </section>
       {% endif %}
-    </section>
-  {% endif %}
+    </div>
+  {% endwith %}
 {% endblock %}

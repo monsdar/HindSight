@@ -6,7 +6,12 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from hooptipp.predictions.models import ScheduledGame, TipType, UserTip
+from hooptipp.predictions.models import (
+    ScheduledGame,
+    TipType,
+    UserPreferences,
+    UserTip,
+)
 
 
 class HomeViewTests(TestCase):
@@ -94,3 +99,84 @@ class HomeViewTests(TestCase):
         second_day_games = weekday_slots[1]['games']
         self.assertEqual([game.id for game in first_day_games], [self.game.id])
         self.assertEqual([game.id for game in second_day_games], [additional.id])
+
+    def test_update_preferences_updates_record(self) -> None:
+        session = self.client.session
+        session['active_user_id'] = self.alice.id
+        session.save()
+
+        with mock.patch(
+            'hooptipp.predictions.views.sync_weekly_games',
+            return_value=(self.tip_type, [self.game], self.game.game_date.date()),
+        ), mock.patch(
+            'hooptipp.predictions.forms.get_team_choices',
+            return_value=[('42', 'Golden State Warriors')],
+        ), mock.patch(
+            'hooptipp.predictions.forms.get_player_choices',
+            return_value=[('8', 'Stephen Curry')],
+        ), mock.patch(
+            'hooptipp.predictions.services.get_team_choices',
+            return_value=[('42', 'Golden State Warriors')],
+        ), mock.patch(
+            'hooptipp.predictions.services.get_player_choices',
+            return_value=[('8', 'Stephen Curry')],
+        ):
+            response = self.client.post(
+                reverse('predictions:home'),
+                {
+                    'update_preferences': '1',
+                    'nickname': 'Splash',
+                    'favorite_team_id': '42',
+                    'favorite_player_id': '8',
+                    'theme_primary_color': '#0a7abf',
+                    'theme_secondary_color': '#ffffff',
+                },
+            )
+
+        self.assertEqual(response.status_code, 302)
+        preferences = UserPreferences.objects.get(user=self.alice)
+        self.assertEqual(preferences.nickname, 'Splash')
+        self.assertEqual(preferences.favorite_team_id, 42)
+        self.assertEqual(preferences.favorite_player_id, 8)
+        self.assertEqual(preferences.theme_primary_color, '#0a7abf')
+        self.assertEqual(preferences.theme_secondary_color, '#ffffff')
+
+    def test_update_preferences_validation_errors_return_to_page(self) -> None:
+        session = self.client.session
+        session['active_user_id'] = self.alice.id
+        session.save()
+
+        with mock.patch(
+            'hooptipp.predictions.views.sync_weekly_games',
+            return_value=(self.tip_type, [self.game], self.game.game_date.date()),
+        ), mock.patch(
+            'hooptipp.predictions.forms.get_team_choices',
+            return_value=[('42', 'Golden State Warriors')],
+        ), mock.patch(
+            'hooptipp.predictions.forms.get_player_choices',
+            return_value=[('8', 'Stephen Curry')],
+        ), mock.patch(
+            'hooptipp.predictions.services.get_team_choices',
+            return_value=[('42', 'Golden State Warriors')],
+        ), mock.patch(
+            'hooptipp.predictions.services.get_player_choices',
+            return_value=[('8', 'Stephen Curry')],
+        ):
+            response = self.client.post(
+                reverse('predictions:home'),
+                {
+                    'update_preferences': '1',
+                    'nickname': 'Splash',
+                    'favorite_team_id': '42',
+                    'favorite_player_id': '8',
+                    'theme_primary_color': '0a7abf',
+                    'theme_secondary_color': '#fffff',
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('preferences_form', response.context)
+        form = response.context['preferences_form']
+        self.assertTrue(form.errors)
+        self.assertIn('theme_primary_color', form.errors)
+        self.assertIn('theme_secondary_color', form.errors)
