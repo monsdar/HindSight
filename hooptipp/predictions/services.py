@@ -3,7 +3,7 @@ import os
 import threading
 from datetime import date, datetime, timedelta
 from functools import lru_cache
-from typing import Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from balldontlie.exceptions import BallDontLieException
 from django.utils import timezone
@@ -69,8 +69,23 @@ def get_team_choices() -> List[Tuple[str, str]]:
     if client is None:
         return []
 
+    def _list_teams(per_page_value: Optional[int]) -> Any:
+        kwargs = {}
+        if per_page_value is not None:
+            kwargs['per_page'] = per_page_value
+        return client.nba.teams.list(**kwargs)
+
     try:
-        response = client.nba.teams.list(per_page=100)
+        response = _list_teams(100)
+    except TypeError as exc:
+        if "per_page" not in str(exc):
+            raise
+        logger.debug('NBATeamsAPI.list does not accept per_page parameter; retrying without pagination. %s', exc)
+        try:
+            response = _list_teams(None)
+        except BallDontLieException:
+            logger.exception('Unable to fetch team list from BallDontLie API.')
+            return []
     except BallDontLieException:
         logger.exception('Unable to fetch team list from BallDontLie API.')
         return []
