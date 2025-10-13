@@ -6,7 +6,8 @@ from datetime import timedelta
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
-from .models import ScheduledGame, TipType, UserTip
+from .forms import UserPreferencesForm
+from .models import ScheduledGame, TipType, UserPreferences, UserTip
 from .services import sync_weekly_games
 
 
@@ -26,6 +27,11 @@ def _get_active_user(request):
 def home(request):
     tip_type, games, week_start = sync_weekly_games()
     active_user = _get_active_user(request)
+    preferences = None
+    preferences_form = None
+
+    if active_user:
+        preferences, _ = UserPreferences.objects.get_or_create(user=active_user)
 
     if request.method == 'POST':
         if 'set_active_user' in request.POST:
@@ -37,6 +43,22 @@ def home(request):
                 request.session.pop('active_user_id', None)
                 messages.info(request, 'No active user selected.')
             return redirect('predictions:home')
+
+        if 'update_preferences' in request.POST:
+            if not active_user or preferences is None:
+                messages.error(request, 'Please activate a user before updating preferences.')
+                return redirect('predictions:home')
+
+            preferences_form = UserPreferencesForm(
+                data=request.POST,
+                instance=preferences,
+            )
+            if preferences_form.is_valid():
+                preferences_form.save()
+                messages.success(request, 'Your preferences have been updated!')
+                return redirect('predictions:home')
+
+            messages.error(request, 'Please correct the errors below to update preferences.')
 
         if 'save_tips' in request.POST:
             if not active_user:
@@ -105,6 +127,9 @@ def home(request):
             ]
             weekday_slots.append({'date': slot_date, 'games': day_games})
 
+    if preferences_form is None and preferences is not None:
+        preferences_form = UserPreferencesForm(instance=preferences)
+
     context = {
         'tip_type': tip_type,
         'games': games,
@@ -115,5 +140,7 @@ def home(request):
         'now': timezone.now(),
         'weekday_slots': weekday_slots,
         'week_start': week_start,
+        'user_preferences': preferences,
+        'preferences_form': preferences_form,
     }
     return render(request, 'predictions/home.html', context)

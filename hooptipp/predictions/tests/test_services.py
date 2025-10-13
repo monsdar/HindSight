@@ -212,6 +212,69 @@ class FetchUpcomingWeekGamesTests(TestCase):
         self.assertTrue(any('BALLDONTLIE_API_TOKEN environment variable is not configured' in entry for entry in captured.output))
 
 
+class GetPlayerChoicesTests(TestCase):
+    def setUp(self) -> None:
+        services.get_player_choices.cache_clear()
+        return super().setUp()
+
+    def tearDown(self) -> None:
+        services.get_player_choices.cache_clear()
+        return super().tearDown()
+
+    def test_fetches_active_players_across_pages(self) -> None:
+        first_player = mock.Mock(
+            id=23,
+            first_name='LeBron',
+            last_name='James',
+            team=mock.Mock(abbreviation='LAL'),
+        )
+        second_player = mock.Mock(
+            id=30,
+            first_name='Stephen',
+            last_name='Curry',
+            team=mock.Mock(abbreviation='GSW'),
+        )
+
+        first_response = mock.Mock(
+            data=[first_player],
+            meta=mock.Mock(next_cursor=101),
+        )
+        second_response = mock.Mock(
+            data=[second_player],
+            meta=mock.Mock(next_cursor=None),
+        )
+
+        mock_client = mock.Mock()
+        mock_client.nba.players.list_active.side_effect = [first_response, second_response]
+
+        with mock.patch.object(services, '_build_bdl_client', return_value=mock_client):
+            choices = services.get_player_choices()
+
+        self.assertEqual(
+            choices,
+            [
+                ('23', 'LeBron James (LAL)'),
+                ('30', 'Stephen Curry (GSW)'),
+            ],
+        )
+
+        self.assertEqual(mock_client.nba.players.list_active.call_count, 2)
+        first_call, second_call = mock_client.nba.players.list_active.call_args_list
+        self.assertEqual(first_call.kwargs, {'per_page': 100})
+        self.assertEqual(second_call.kwargs, {'per_page': 100, 'cursor': 101})
+
+    def test_handles_api_errors(self) -> None:
+        mock_client = mock.Mock()
+        mock_client.nba.players.list_active.side_effect = exceptions.BallDontLieException('boom')
+
+        with mock.patch.object(services, '_build_bdl_client', return_value=mock_client):
+            with self.assertLogs('hooptipp.predictions.services', level='ERROR') as captured:
+                choices = services.get_player_choices()
+
+        self.assertEqual(choices, [])
+        self.assertTrue(any('Unable to fetch player list from BallDontLie API.' in entry for entry in captured.output))
+
+
 class BuildBdlClientCachingTests(TestCase):
     def setUp(self) -> None:
         os.environ.pop('BALLDONTLIE_API_TOKEN', None)
