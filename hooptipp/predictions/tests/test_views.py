@@ -1,3 +1,4 @@
+from datetime import timedelta
 from unittest import mock
 
 from django.contrib.auth import get_user_model
@@ -52,7 +53,7 @@ class HomeViewTests(TestCase):
     def test_home_view_exposes_game_tip_users(self) -> None:
         with mock.patch(
             'hooptipp.predictions.views.sync_weekly_games',
-            return_value=(self.tip_type, [self.game]),
+            return_value=(self.tip_type, [self.game], self.game.game_date.date()),
         ):
             response = self.client.get(reverse('predictions:home'))
 
@@ -66,3 +67,30 @@ class HomeViewTests(TestCase):
 
         self.assertContains(response, 'title="alice"')
         self.assertContains(response, 'title="bob"')
+
+    def test_weekday_slots_group_games_by_date(self) -> None:
+        additional = ScheduledGame.objects.create(
+            tip_type=self.tip_type,
+            nba_game_id='GAME456',
+            game_date=self.game.game_date + timedelta(days=1),
+            home_team='Chicago Bulls',
+            home_team_tricode='CHI',
+            away_team='Miami Heat',
+            away_team_tricode='MIA',
+            venue='United Center',
+            is_manual=True,
+        )
+
+        with mock.patch(
+            'hooptipp.predictions.views.sync_weekly_games',
+            return_value=(self.tip_type, [self.game, additional], self.game.game_date.date()),
+        ):
+            response = self.client.get(reverse('predictions:home'))
+
+        self.assertEqual(response.status_code, 200)
+        weekday_slots = response.context['weekday_slots']
+        self.assertEqual(len(weekday_slots), 7)
+        first_day_games = weekday_slots[0]['games']
+        second_day_games = weekday_slots[1]['games']
+        self.assertEqual([game.id for game in first_day_games], [self.game.id])
+        self.assertEqual([game.id for game in second_day_games], [additional.id])

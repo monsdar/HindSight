@@ -44,6 +44,10 @@ class ScheduledGame(models.Model):
     away_team = models.CharField(max_length=100)
     away_team_tricode = models.CharField(max_length=5)
     venue = models.CharField(max_length=150, blank=True)
+    is_manual = models.BooleanField(
+        default=False,
+        help_text='Indicates that the game was added manually rather than via the BallDontLie sync.',
+    )
 
     class Meta:
         ordering = ['game_date']
