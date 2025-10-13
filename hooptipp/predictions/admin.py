@@ -18,8 +18,9 @@ class ScheduledGameAdmin(admin.ModelAdmin):
         'away_team_tricode',
         'home_team_tricode',
         'tip_type',
+        'is_manual',
     )
-    list_filter = ('tip_type',)
+    list_filter = ('tip_type', 'is_manual')
     search_fields = ('nba_game_id', 'home_team', 'away_team')
 
 

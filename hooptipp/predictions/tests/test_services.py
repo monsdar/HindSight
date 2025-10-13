@@ -1,11 +1,13 @@
 import os
-import random
-from datetime import datetime, timezone as dt_timezone
+from datetime import datetime, timedelta, timezone as dt_timezone
 from unittest import TestCase, mock
 
 from balldontlie import exceptions
+from django.test import TestCase as DjangoTestCase
+from django.utils import timezone
 
 from hooptipp.predictions import services
+from hooptipp.predictions.models import ScheduledGame, TipType
 
 
 class GetBdlApiKeyTests(TestCase):
@@ -58,8 +60,9 @@ class FetchUpcomingWeekGamesTests(TestCase):
                 mock_games_api.list.return_value = response
                 mock_builder.return_value = mock_client
 
-                games = services.fetch_upcoming_week_games(limit=3)
+                week_start, games = services.fetch_upcoming_week_games(limit=3)
 
+        self.assertEqual(week_start, datetime(2024, 1, 11, tzinfo=dt_timezone.utc).date())
         self.assertEqual(len(games), 1)
         game = games[0]
         self.assertEqual(game['game_id'], '42')
@@ -77,6 +80,61 @@ class FetchUpcomingWeekGamesTests(TestCase):
             per_page=100,
             postseason='false',
         )
+
+    def test_fetch_upcoming_week_games_picks_one_game_per_day(self) -> None:
+        os.environ['BALLDONTLIE_API_TOKEN'] = 'secret-token'
+        fake_now = datetime(2024, 1, 1, 9, 0, tzinfo=dt_timezone.utc)
+
+        day_one_late = mock.Mock(
+            id=200,
+            status='Scheduled',
+            date='2024-01-02T05:00:00.000Z',
+            home_team=mock.Mock(full_name='Denver Nuggets', abbreviation='DEN'),
+            visitor_team=mock.Mock(full_name='Milwaukee Bucks', abbreviation='MIL'),
+            arena='Ball Arena',
+        )
+        day_one_early = mock.Mock(
+            id=201,
+            status='Scheduled',
+            date='2024-01-02T01:00:00.000Z',
+            home_team=mock.Mock(full_name='Los Angeles Lakers', abbreviation='LAL'),
+            visitor_team=mock.Mock(full_name='Boston Celtics', abbreviation='BOS'),
+            arena='Crypto.com Arena',
+        )
+        day_two_first = mock.Mock(
+            id=202,
+            status='Scheduled',
+            date='2024-01-03T03:30:00.000Z',
+            home_team=mock.Mock(full_name='Miami Heat', abbreviation='MIA'),
+            visitor_team=mock.Mock(full_name='New York Knicks', abbreviation='NYK'),
+            arena='Kaseya Center',
+        )
+        day_two_second = mock.Mock(
+            id=203,
+            status='Scheduled',
+            date='2024-01-03T04:30:00.000Z',
+            home_team=mock.Mock(full_name='Phoenix Suns', abbreviation='PHX'),
+            visitor_team=mock.Mock(full_name='Golden State Warriors', abbreviation='GSW'),
+            arena='Footprint Center',
+        )
+
+        response = mock.Mock(data=[day_one_late, day_one_early, day_two_first, day_two_second])
+
+        with mock.patch.object(services.timezone, 'now', return_value=fake_now):
+            with mock.patch.object(services, 'build_cached_bdl_client') as mock_builder:
+                mock_client = mock.Mock()
+                mock_games_api = mock.Mock()
+                mock_client.nba = mock.Mock()
+                mock_client.nba.games = mock_games_api
+                mock_games_api.list.return_value = response
+                mock_builder.return_value = mock_client
+
+                week_start, games = services.fetch_upcoming_week_games(limit=7)
+
+        self.assertEqual(week_start, datetime(2024, 1, 2, tzinfo=dt_timezone.utc).date())
+        self.assertEqual(len(games), 2)
+        returned_ids = [game['game_id'] for game in games]
+        self.assertEqual(returned_ids, ['201', '202'])
 
     def test_fetch_upcoming_week_games_uses_first_available_week(self) -> None:
         os.environ['BALLDONTLIE_API_TOKEN'] = 'secret-token'
@@ -120,8 +178,9 @@ class FetchUpcomingWeekGamesTests(TestCase):
                 mock_games_api.list.return_value = response
                 mock_builder.return_value = mock_client
 
-                games = services.fetch_upcoming_week_games(limit=5)
+                week_start, games = services.fetch_upcoming_week_games(limit=5)
 
+        self.assertEqual(week_start, datetime(2024, 10, 20, 23, 0, tzinfo=dt_timezone.utc).date())
         self.assertEqual(len(games), 2)
         returned_ids = {game['game_id'] for game in games}
         self.assertEqual(returned_ids, {'100', '101'})
@@ -138,15 +197,17 @@ class FetchUpcomingWeekGamesTests(TestCase):
             mock_builder.return_value = mock_client
 
             with self.assertLogs('hooptipp.predictions.services', level='ERROR') as captured:
-                games = services.fetch_upcoming_week_games(limit=2)
+                week_start, games = services.fetch_upcoming_week_games(limit=2)
 
+        self.assertIsNone(week_start)
         self.assertEqual(games, [])
         self.assertTrue(any('Unable to fetch games from BallDontLie API.' in entry for entry in captured.output))
 
     def test_logs_when_token_missing(self) -> None:
         with self.assertLogs('hooptipp.predictions.services', level='WARNING') as captured:
-            games = services.fetch_upcoming_week_games(limit=2)
+            week_start, games = services.fetch_upcoming_week_games(limit=2)
 
+        self.assertIsNone(week_start)
         self.assertEqual(games, [])
         self.assertTrue(any('BALLDONTLIE_API_TOKEN environment variable is not configured' in entry for entry in captured.output))
 
@@ -198,76 +259,81 @@ class BuildBdlClientCachingTests(TestCase):
         self.assertIn('Bearer second-token', services._BDL_CLIENT_CACHE)
 
 
-class SelectWeightedUniqueGamesTests(TestCase):
-    def test_limits_selection_to_unique_teams(self) -> None:
-        games = [
-            {
-                'game_id': '1',
-                'home_team_name': 'Los Angeles Lakers',
-                'home_team_tricode': 'LAL',
-                'away_team_name': 'Boston Celtics',
-                'away_team_tricode': 'BOS',
-            },
-            {
-                'game_id': '2',
-                'home_team_name': 'Los Angeles Lakers',
-                'home_team_tricode': 'LAL',
-                'away_team_name': 'Miami Heat',
-                'away_team_tricode': 'MIA',
-            },
-            {
-                'game_id': '3',
-                'home_team_name': 'Golden State Warriors',
-                'home_team_tricode': 'GSW',
-                'away_team_name': 'Phoenix Suns',
-                'away_team_tricode': 'PHX',
-            },
-        ]
+class SyncWeeklyGamesTests(DjangoTestCase):
+    def test_sync_weekly_games_preserves_manual_entries(self) -> None:
+        base_time = timezone.now()
 
-        rng = random.Random(0)
-        selected = services._select_weighted_unique_games(
-            games,
-            limit=3,
-            weight_calculator=services.GameWeightCalculator(),
-            rng=rng,
+        tip_type = TipType.objects.create(
+            name='Weekly games',
+            slug='weekly-games',
+            description='Featured matchups for the upcoming week',
+            deadline=base_time,
+        )
+        manual_game = ScheduledGame.objects.create(
+            tip_type=tip_type,
+            nba_game_id='MANUAL-1',
+            game_date=base_time + timedelta(days=2),
+            home_team='Dallas Mavericks',
+            home_team_tricode='DAL',
+            away_team='Los Angeles Clippers',
+            away_team_tricode='LAC',
+            venue='American Airlines Center',
+            is_manual=True,
         )
 
-        self.assertEqual(len(selected), 2)
-        selected_ids = {game['game_id'] for game in selected}
-        self.assertIn('3', selected_ids)
-        self.assertEqual(len(selected_ids.intersection({'1', '2'})), 1)
+        auto_game_payload = {
+            'game_id': 'AUTO-1',
+            'game_time': base_time + timedelta(days=1),
+            'home_team_name': 'Denver Nuggets',
+            'home_team_tricode': 'DEN',
+            'away_team_name': 'Phoenix Suns',
+            'away_team_tricode': 'PHX',
+            'arena': 'Ball Arena',
+        }
 
-        seen_teams = set()
-        for game in selected:
-            seen_teams.add(game['home_team_tricode'])
-            seen_teams.add(game['away_team_tricode'])
+        with mock.patch(
+            'hooptipp.predictions.services.fetch_upcoming_week_games',
+            return_value=(timezone.localdate(auto_game_payload['game_time']), [auto_game_payload]),
+        ):
+            tip_type, games, week_start = services.sync_weekly_games()
 
-        self.assertEqual(len(seen_teams), 4)
+        self.assertIsNotNone(tip_type)
+        self.assertEqual(week_start, timezone.localdate(auto_game_payload['game_time']))
+        returned_ids = {game.nba_game_id for game in games}
+        self.assertSetEqual(returned_ids, {'AUTO-1', 'MANUAL-1'})
+        manual_game.refresh_from_db()
+        self.assertTrue(manual_game.is_manual)
+        tip_type.refresh_from_db()
+        self.assertEqual(tip_type.deadline, min(game.game_date for game in games))
 
-    def test_respects_selection_limit(self) -> None:
-        games = [
-            {
-                'game_id': str(idx),
-                'home_team_name': f'Team {idx}',
-                'home_team_tricode': f'T{idx}',
-                'away_team_name': f'Team {idx + 1}',
-                'away_team_tricode': f'T{idx + 1}',
-            }
-            for idx in range(0, 6, 2)
-        ]
-
-        rng = random.Random(1)
-        selected = services._select_weighted_unique_games(
-            games,
-            limit=2,
-            weight_calculator=services.GameWeightCalculator(),
-            rng=rng,
+    def test_sync_weekly_games_returns_manual_when_no_automatic_games(self) -> None:
+        base_time = timezone.now()
+        tip_type = TipType.objects.create(
+            name='Weekly games',
+            slug='weekly-games',
+            description='Featured matchups for the upcoming week',
+            deadline=base_time,
+        )
+        manual_game = ScheduledGame.objects.create(
+            tip_type=tip_type,
+            nba_game_id='MANUAL-ONLY',
+            game_date=base_time + timedelta(days=3),
+            home_team='Memphis Grizzlies',
+            home_team_tricode='MEM',
+            away_team='San Antonio Spurs',
+            away_team_tricode='SAS',
+            venue='FedExForum',
+            is_manual=True,
         )
 
-        self.assertEqual(len(selected), 2)
-        seen_teams = set()
-        for game in selected:
-            self.assertNotIn(game['home_team_tricode'], seen_teams)
-            self.assertNotIn(game['away_team_tricode'], seen_teams)
-            seen_teams.add(game['home_team_tricode'])
-            seen_teams.add(game['away_team_tricode'])
+        with mock.patch(
+            'hooptipp.predictions.services.fetch_upcoming_week_games',
+            return_value=(timezone.localdate(base_time), []),
+        ):
+            tip_type, games, week_start = services.sync_weekly_games()
+
+        self.assertIsNotNone(tip_type)
+        self.assertEqual(week_start, timezone.localdate(base_time))
+        self.assertEqual([game.nba_game_id for game in games], ['MANUAL-ONLY'])
+        manual_game.refresh_from_db()
+        self.assertTrue(manual_game.is_manual)

@@ -1,6 +1,8 @@
 from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.shortcuts import redirect, render
+from datetime import timedelta
+
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
@@ -22,7 +24,7 @@ def _get_active_user(request):
 
 @require_http_methods(["GET", "POST"])
 def home(request):
-    tip_type, games = sync_weekly_games()
+    tip_type, games, week_start = sync_weekly_games()
     active_user = _get_active_user(request)
 
     if request.method == 'POST':
@@ -89,6 +91,20 @@ def home(request):
         ):
             game_tip_users.setdefault(tip.scheduled_game_id, []).append(tip.user)
 
+    if week_start is None and games:
+        week_start = min(timezone.localdate(game.game_date) for game in games)
+
+    weekday_slots = []
+    if week_start:
+        for offset in range(7):
+            slot_date = week_start + timedelta(days=offset)
+            day_games = [
+                game
+                for game in games
+                if timezone.localdate(game.game_date) == slot_date
+            ]
+            weekday_slots.append({'date': slot_date, 'games': day_games})
+
     context = {
         'tip_type': tip_type,
         'games': games,
@@ -97,5 +113,7 @@ def home(request):
         'user_tips': user_tips,
         'game_tip_users': game_tip_users,
         'now': timezone.now(),
+        'weekday_slots': weekday_slots,
+        'week_start': week_start,
     }
     return render(request, 'predictions/home.html', context)
