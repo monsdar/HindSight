@@ -97,26 +97,42 @@ def get_player_choices() -> List[Tuple[str, str]]:
     if client is None:
         return []
 
+    choices: List[Tuple[str, str]] = []
+    cursor: Optional[int] = None
+    seen_cursors: set[Optional[int]] = set()
+
     try:
-        response = client.nba.players.list(per_page=100, active='true')
+        while True:
+            params = {'per_page': 100}
+            if cursor is not None:
+                params['cursor'] = cursor
+
+            response = client.nba.players.list_active(**params)
+
+            for player in getattr(response, 'data', []):
+                player_id = getattr(player, 'id', None)
+                if not player_id:
+                    continue
+                first_name = getattr(player, 'first_name', '')
+                last_name = getattr(player, 'last_name', '')
+                if not (first_name or last_name):
+                    continue
+                name = f"{first_name} {last_name}".strip()
+                team = getattr(getattr(player, 'team', None), 'abbreviation', '')
+                if team:
+                    name = f"{name} ({team})"
+                choices.append((str(player_id), name))
+
+            meta = getattr(response, 'meta', None)
+            next_cursor = getattr(meta, 'next_cursor', None)
+            if next_cursor is None or next_cursor in seen_cursors:
+                break
+
+            seen_cursors.add(next_cursor)
+            cursor = next_cursor
     except BallDontLieException:
         logger.exception('Unable to fetch player list from BallDontLie API.')
         return []
-
-    choices: List[Tuple[str, str]] = []
-    for player in getattr(response, 'data', []):
-        player_id = getattr(player, 'id', None)
-        if not player_id:
-            continue
-        first_name = getattr(player, 'first_name', '')
-        last_name = getattr(player, 'last_name', '')
-        if not (first_name or last_name):
-            continue
-        name = f"{first_name} {last_name}".strip()
-        team = getattr(getattr(player, 'team', None), 'abbreviation', '')
-        if team:
-            name = f"{name} ({team})"
-        choices.append((str(player_id), name))
 
     choices.sort(key=lambda item: item[1])
     return choices
