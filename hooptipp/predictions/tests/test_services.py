@@ -1,4 +1,5 @@
 import os
+import random
 from datetime import datetime, timezone as dt_timezone
 from unittest import TestCase, mock
 
@@ -119,8 +120,7 @@ class FetchUpcomingWeekGamesTests(TestCase):
                 mock_games_api.list.return_value = response
                 mock_builder.return_value = mock_client
 
-                with mock.patch.object(services.random, 'shuffle', side_effect=lambda seq: None):
-                    games = services.fetch_upcoming_week_games(limit=5)
+                games = services.fetch_upcoming_week_games(limit=5)
 
         self.assertEqual(len(games), 2)
         returned_ids = {game['game_id'] for game in games}
@@ -196,3 +196,78 @@ class BuildBdlClientCachingTests(TestCase):
         self.assertEqual(len(services._BDL_CLIENT_CACHE), 2)
         self.assertIn('Bearer first-token', services._BDL_CLIENT_CACHE)
         self.assertIn('Bearer second-token', services._BDL_CLIENT_CACHE)
+
+
+class SelectWeightedUniqueGamesTests(TestCase):
+    def test_limits_selection_to_unique_teams(self) -> None:
+        games = [
+            {
+                'game_id': '1',
+                'home_team_name': 'Los Angeles Lakers',
+                'home_team_tricode': 'LAL',
+                'away_team_name': 'Boston Celtics',
+                'away_team_tricode': 'BOS',
+            },
+            {
+                'game_id': '2',
+                'home_team_name': 'Los Angeles Lakers',
+                'home_team_tricode': 'LAL',
+                'away_team_name': 'Miami Heat',
+                'away_team_tricode': 'MIA',
+            },
+            {
+                'game_id': '3',
+                'home_team_name': 'Golden State Warriors',
+                'home_team_tricode': 'GSW',
+                'away_team_name': 'Phoenix Suns',
+                'away_team_tricode': 'PHX',
+            },
+        ]
+
+        rng = random.Random(0)
+        selected = services._select_weighted_unique_games(
+            games,
+            limit=3,
+            weight_calculator=services.GameWeightCalculator(),
+            rng=rng,
+        )
+
+        self.assertEqual(len(selected), 2)
+        selected_ids = {game['game_id'] for game in selected}
+        self.assertIn('3', selected_ids)
+        self.assertEqual(len(selected_ids.intersection({'1', '2'})), 1)
+
+        seen_teams = set()
+        for game in selected:
+            seen_teams.add(game['home_team_tricode'])
+            seen_teams.add(game['away_team_tricode'])
+
+        self.assertEqual(len(seen_teams), 4)
+
+    def test_respects_selection_limit(self) -> None:
+        games = [
+            {
+                'game_id': str(idx),
+                'home_team_name': f'Team {idx}',
+                'home_team_tricode': f'T{idx}',
+                'away_team_name': f'Team {idx + 1}',
+                'away_team_tricode': f'T{idx + 1}',
+            }
+            for idx in range(0, 6, 2)
+        ]
+
+        rng = random.Random(1)
+        selected = services._select_weighted_unique_games(
+            games,
+            limit=2,
+            weight_calculator=services.GameWeightCalculator(),
+            rng=rng,
+        )
+
+        self.assertEqual(len(selected), 2)
+        seen_teams = set()
+        for game in selected:
+            self.assertNotIn(game['home_team_tricode'], seen_teams)
+            self.assertNotIn(game['away_team_tricode'], seen_teams)
+            seen_teams.add(game['home_team_tricode'])
+            seen_teams.add(game['away_team_tricode'])
