@@ -9,7 +9,13 @@ from balldontlie.exceptions import BallDontLieException
 from django.utils import timezone
 
 from .balldontlie_client import CachedBallDontLieAPI, build_cached_bdl_client
-from .models import ScheduledGame, TipType
+from .models import (
+    NbaTeam,
+    PredictionEvent,
+    PredictionOption,
+    ScheduledGame,
+    TipType,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -192,14 +198,31 @@ def fetch_upcoming_week_games(limit: int = 7) -> Tuple[Optional[date], List[dict
         except ValueError:
             continue
 
+        home_team = getattr(game, 'home_team', None)
+        away_team = getattr(game, 'visitor_team', None)
+
         collected.append(
             {
                 'game_id': str(getattr(game, 'id', '')),
                 'game_time': timezone.make_aware(game_time) if timezone.is_naive(game_time) else game_time,
-                'home_team_name': getattr(getattr(game, 'home_team', None), 'full_name', ''),
-                'home_team_tricode': getattr(getattr(game, 'home_team', None), 'abbreviation', ''),
-                'away_team_name': getattr(getattr(game, 'visitor_team', None), 'full_name', ''),
-                'away_team_tricode': getattr(getattr(game, 'visitor_team', None), 'abbreviation', ''),
+                'home_team': {
+                    'id': getattr(home_team, 'id', None),
+                    'full_name': getattr(home_team, 'full_name', ''),
+                    'name': getattr(home_team, 'name', ''),
+                    'abbreviation': getattr(home_team, 'abbreviation', ''),
+                    'city': getattr(home_team, 'city', ''),
+                    'conference': getattr(home_team, 'conference', ''),
+                    'division': getattr(home_team, 'division', ''),
+                },
+                'away_team': {
+                    'id': getattr(away_team, 'id', None),
+                    'full_name': getattr(away_team, 'full_name', ''),
+                    'name': getattr(away_team, 'name', ''),
+                    'abbreviation': getattr(away_team, 'abbreviation', ''),
+                    'city': getattr(away_team, 'city', ''),
+                    'conference': getattr(away_team, 'conference', ''),
+                    'division': getattr(away_team, 'division', ''),
+                },
                 'arena': getattr(game, 'arena', '') or '',
             }
         )
@@ -254,25 +277,163 @@ def fetch_upcoming_week_games(limit: int = 7) -> Tuple[Optional[date], List[dict
     return week_start, selected
 
 
-def sync_weekly_games(limit: int = 7) -> Tuple[Optional[TipType], List[ScheduledGame], Optional[date]]:
+def _upsert_team(team_data: dict) -> Optional[NbaTeam]:
+    team_id = team_data.get('id')
+
+    defaults = {
+        'name': team_data.get('full_name') or team_data.get('name') or '',
+        'abbreviation': team_data.get('abbreviation') or '',
+        'city': team_data.get('city') or '',
+        'conference': team_data.get('conference') or '',
+        'division': team_data.get('division') or '',
+    }
+
+    name = defaults['name'] or defaults['city'] or defaults['abbreviation']
+    if not name:
+        return None
+    defaults['name'] = name
+
+    if team_id:
+        team, _ = NbaTeam.objects.update_or_create(
+            balldontlie_id=int(team_id),
+            defaults=defaults,
+        )
+        return team
+
+    abbreviation = defaults['abbreviation']
+    candidates = NbaTeam.objects.all()
+    if abbreviation:
+        team = candidates.filter(abbreviation__iexact=abbreviation).first()
+        if team:
+            for field, value in defaults.items():
+                setattr(team, field, value)
+            team.save()
+            return team
+
+    team = candidates.filter(name__iexact=name).first()
+    if team:
+        for field, value in defaults.items():
+            setattr(team, field, value)
+        team.save()
+        return team
+
+    team = NbaTeam.objects.create(**defaults)
+    return team
+
+
+def _update_event_options(
+    event: PredictionEvent,
+    home_team: Optional[NbaTeam],
+    away_team: Optional[NbaTeam],
+) -> None:
+    if home_team:
+        PredictionOption.objects.update_or_create(
+            event=event,
+            team=home_team,
+            defaults={
+                'label': home_team.name,
+                'sort_order': 2,
+                'is_active': True,
+            },
+        )
+    if away_team:
+        PredictionOption.objects.update_or_create(
+            event=event,
+            team=away_team,
+            defaults={
+                'label': away_team.name,
+                'sort_order': 1,
+                'is_active': True,
+            },
+        )
+
+    (PredictionOption.objects
+        .filter(event=event)
+        .exclude(team__in=[team for team in [home_team, away_team] if team])
+        .delete())
+
+
+def _ensure_manual_events(
+    tip_type: TipType,
+    now: datetime,
+    starting_order: int = 1,
+) -> List[int]:
+    manual_games = (
+        ScheduledGame.objects
+        .filter(tip_type=tip_type, is_manual=True)
+        .order_by('game_date')
+    )
+    event_ids: List[int] = []
+
+    for index, manual in enumerate(manual_games, start=starting_order):
+        manual_opens = min(now, manual.game_date)
+        manual_defaults = {
+            'tip_type': tip_type,
+            'name': f"{manual.away_team_tricode} @ {manual.home_team_tricode}".strip(),
+            'description': f"{manual.away_team} at {manual.home_team}",
+            'target_kind': PredictionEvent.TargetKind.TEAM,
+            'selection_mode': PredictionEvent.SelectionMode.CURATED,
+            'opens_at': manual_opens,
+            'deadline': manual.game_date,
+            'reveal_at': manual_opens,
+            'is_active': True,
+            'sort_order': index,
+        }
+        event, _ = PredictionEvent.objects.update_or_create(
+            scheduled_game=manual,
+            defaults=manual_defaults,
+        )
+        event_ids.append(event.id)
+
+        home_team_data = {
+            'id': None,
+            'full_name': manual.home_team,
+            'name': manual.home_team,
+            'abbreviation': manual.home_team_tricode,
+            'city': '',
+            'conference': '',
+            'division': '',
+        }
+        away_team_data = {
+            'id': None,
+            'full_name': manual.away_team,
+            'name': manual.away_team,
+            'abbreviation': manual.away_team_tricode,
+            'city': '',
+            'conference': '',
+            'division': '',
+        }
+
+        home_team = _upsert_team(home_team_data)
+        away_team = _upsert_team(away_team_data)
+        _update_event_options(event, home_team, away_team)
+
+    return event_ids
+
+
+def sync_weekly_games(limit: int = 7) -> Tuple[Optional[TipType], List[PredictionEvent], Optional[date]]:
     week_start, games = fetch_upcoming_week_games(limit=limit)
     if not games:
         tip_type = TipType.objects.filter(slug='weekly-games').first()
         if tip_type is None:
             return None, [], week_start
 
-        scheduled_games = list(
-            ScheduledGame.objects.filter(tip_type=tip_type).order_by('game_date')
+        now = timezone.now()
+        _ensure_manual_events(tip_type, now)
+
+        events = list(
+            PredictionEvent.objects.filter(
+                tip_type=tip_type,
+                is_active=True,
+            ).order_by('deadline', 'sort_order')
         )
 
-        if scheduled_games:
-            earliest = scheduled_games[0].game_date
+        if events:
+            earliest = events[0].deadline
             if tip_type.deadline != earliest:
                 TipType.objects.filter(pk=tip_type.pk).update(deadline=earliest)
                 tip_type.deadline = earliest
-            return tip_type, scheduled_games, week_start
-
-        return tip_type, [], week_start
+        return tip_type, events, week_start
 
     earliest_game_time = min(game['game_time'] for game in games)
 
@@ -287,36 +448,69 @@ def sync_weekly_games(limit: int = 7) -> Tuple[Optional[TipType], List[Scheduled
         },
     )
 
+    now = timezone.now()
     selected_ids = []
-    for game in games:
+    event_ids = []
+    for sort_index, game in enumerate(games, start=1):
         scheduled, _ = ScheduledGame.objects.update_or_create(
             nba_game_id=game['game_id'],
             defaults={
                 'tip_type': tip_type,
                 'game_date': game['game_time'],
-                'home_team': game['home_team_name'],
-                'home_team_tricode': game['home_team_tricode'],
-                'away_team': game['away_team_name'],
-                'away_team_tricode': game['away_team_tricode'],
+                'home_team': game['home_team']['full_name'] or game['home_team']['name'],
+                'home_team_tricode': game['home_team']['abbreviation'],
+                'away_team': game['away_team']['full_name'] or game['away_team']['name'],
+                'away_team_tricode': game['away_team']['abbreviation'],
                 'venue': game['arena'],
                 'is_manual': False,
             },
         )
         selected_ids.append(scheduled.nba_game_id)
 
+        home_team = _upsert_team(game['home_team'])
+        away_team = _upsert_team(game['away_team'])
+
+        opens_at = min(now, game['game_time'])
+        event, _ = PredictionEvent.objects.update_or_create(
+            scheduled_game=scheduled,
+            defaults={
+                'tip_type': tip_type,
+                'name': f"{game['away_team']['abbreviation']} @ {game['home_team']['abbreviation']}",
+                'description': (
+                    f"{game['away_team']['full_name']} at {game['home_team']['full_name']}"
+                ),
+                'target_kind': PredictionEvent.TargetKind.TEAM,
+                'selection_mode': PredictionEvent.SelectionMode.CURATED,
+                'opens_at': opens_at,
+                'deadline': game['game_time'],
+                'reveal_at': opens_at,
+                'is_active': True,
+                'sort_order': sort_index,
+            },
+        )
+        event_ids.append(event.id)
+        _update_event_options(event, home_team, away_team)
+
     (ScheduledGame.objects
         .filter(tip_type=tip_type, is_manual=False)
         .exclude(nba_game_id__in=selected_ids)
         .delete())
 
-    scheduled_games = list(
-        ScheduledGame.objects.filter(tip_type=tip_type).order_by('game_date')
+    event_ids.extend(_ensure_manual_events(tip_type, now, starting_order=len(event_ids) + 1))
+
+    (PredictionEvent.objects
+        .filter(tip_type=tip_type, scheduled_game__isnull=False)
+        .exclude(id__in=event_ids)
+        .delete())
+
+    events = list(
+        PredictionEvent.objects.filter(tip_type=tip_type).order_by('deadline', 'sort_order')
     )
 
-    if scheduled_games:
-        earliest = scheduled_games[0].game_date
+    if events:
+        earliest = events[0].deadline
         if tip_type.deadline != earliest:
             TipType.objects.filter(pk=tip_type.pk).update(deadline=earliest)
             tip_type.deadline = earliest
 
-    return tip_type, scheduled_games, week_start
+    return tip_type, events, week_start

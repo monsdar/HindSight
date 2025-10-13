@@ -7,7 +7,7 @@ from django.test import TestCase as DjangoTestCase
 from django.utils import timezone
 
 from hooptipp.predictions import services
-from hooptipp.predictions.models import ScheduledGame, TipType
+from hooptipp.predictions.models import PredictionEvent, ScheduledGame, TipType
 
 
 class GetBdlApiKeyTests(TestCase):
@@ -91,11 +91,10 @@ class FetchUpcomingWeekGamesTests(TestCase):
         completed_game.status = 'Final'
         completed_game.date = '2024-01-12T00:00:00.000Z'
 
-        response = mock.Mock()
-        response.data = [scheduled_game, completed_game]
+        response = mock.Mock(data=[scheduled_game, completed_game])
 
         with mock.patch.object(services.timezone, 'now', return_value=fake_now):
-            with mock.patch.object(services, 'build_cached_bdl_client') as mock_builder:
+            with mock.patch.object(services, '_build_bdl_client') as mock_builder:
                 mock_client = mock.Mock()
                 mock_games_api = mock.Mock()
                 mock_client.nba = mock.Mock()
@@ -109,14 +108,14 @@ class FetchUpcomingWeekGamesTests(TestCase):
         self.assertEqual(len(games), 1)
         game = games[0]
         self.assertEqual(game['game_id'], '42')
-        self.assertEqual(game['home_team_name'], 'Los Angeles Lakers')
-        self.assertEqual(game['home_team_tricode'], 'LAL')
-        self.assertEqual(game['away_team_name'], 'Boston Celtics')
-        self.assertEqual(game['away_team_tricode'], 'BOS')
+        self.assertEqual(game['home_team']['full_name'], 'Los Angeles Lakers')
+        self.assertEqual(game['home_team']['abbreviation'], 'LAL')
+        self.assertEqual(game['away_team']['full_name'], 'Boston Celtics')
+        self.assertEqual(game['away_team']['abbreviation'], 'BOS')
         self.assertEqual(game['arena'], 'Crypto.com Arena')
         self.assertIsNotNone(game['game_time'].tzinfo)
 
-        mock_builder.assert_called_once_with(api_key='Bearer secret-token')
+        mock_builder.assert_called_once()
         mock_games_api.list.assert_called_once_with(
             start_date='2024-01-11',
             end_date='2024-02-09',
@@ -164,7 +163,7 @@ class FetchUpcomingWeekGamesTests(TestCase):
         response = mock.Mock(data=[day_one_late, day_one_early, day_two_first, day_two_second])
 
         with mock.patch.object(services.timezone, 'now', return_value=fake_now):
-            with mock.patch.object(services, 'build_cached_bdl_client') as mock_builder:
+            with mock.patch.object(services, '_build_bdl_client') as mock_builder:
                 mock_client = mock.Mock()
                 mock_games_api = mock.Mock()
                 mock_client.nba = mock.Mock()
@@ -213,7 +212,7 @@ class FetchUpcomingWeekGamesTests(TestCase):
         response = mock.Mock(data=[opener, same_week, later_game])
 
         with mock.patch.object(services.timezone, 'now', return_value=fake_now):
-            with mock.patch.object(services, 'build_cached_bdl_client') as mock_builder:
+            with mock.patch.object(services, '_build_bdl_client') as mock_builder:
                 mock_client = mock.Mock()
                 mock_games_api = mock.Mock()
                 mock_client.nba = mock.Mock()
@@ -231,7 +230,7 @@ class FetchUpcomingWeekGamesTests(TestCase):
     def test_fetch_upcoming_week_games_handles_request_errors(self) -> None:
         os.environ['BALLDONTLIE_API_TOKEN'] = 'secret-token'
 
-        with mock.patch.object(services, 'build_cached_bdl_client') as mock_builder:
+        with mock.patch.object(services, '_build_bdl_client') as mock_builder:
             mock_client = mock.Mock()
             mock_games_api = mock.Mock()
             mock_games_api.list.side_effect = exceptions.BallDontLieException('boom')
@@ -390,10 +389,24 @@ class SyncWeeklyGamesTests(DjangoTestCase):
         auto_game_payload = {
             'game_id': 'AUTO-1',
             'game_time': base_time + timedelta(days=1),
-            'home_team_name': 'Denver Nuggets',
-            'home_team_tricode': 'DEN',
-            'away_team_name': 'Phoenix Suns',
-            'away_team_tricode': 'PHX',
+            'home_team': {
+                'id': 1,
+                'full_name': 'Denver Nuggets',
+                'name': 'Denver Nuggets',
+                'abbreviation': 'DEN',
+                'city': 'Denver',
+                'conference': 'West',
+                'division': 'Northwest',
+            },
+            'away_team': {
+                'id': 2,
+                'full_name': 'Phoenix Suns',
+                'name': 'Phoenix Suns',
+                'abbreviation': 'PHX',
+                'city': 'Phoenix',
+                'conference': 'West',
+                'division': 'Pacific',
+            },
             'arena': 'Ball Arena',
         }
 
@@ -401,16 +414,23 @@ class SyncWeeklyGamesTests(DjangoTestCase):
             'hooptipp.predictions.services.fetch_upcoming_week_games',
             return_value=(timezone.localdate(auto_game_payload['game_time']), [auto_game_payload]),
         ):
-            tip_type, games, week_start = services.sync_weekly_games()
+            tip_type, events, week_start = services.sync_weekly_games()
 
         self.assertIsNotNone(tip_type)
         self.assertEqual(week_start, timezone.localdate(auto_game_payload['game_time']))
-        returned_ids = {game.nba_game_id for game in games}
+        returned_ids = {event.scheduled_game.nba_game_id for event in events}
         self.assertSetEqual(returned_ids, {'AUTO-1', 'MANUAL-1'})
         manual_game.refresh_from_db()
         self.assertTrue(manual_game.is_manual)
         tip_type.refresh_from_db()
-        self.assertEqual(tip_type.deadline, min(game.game_date for game in games))
+        self.assertEqual(
+            tip_type.deadline,
+            min(event.deadline for event in events),
+        )
+
+        auto_event = next(event for event in events if event.scheduled_game.nba_game_id == 'AUTO-1')
+        self.assertEqual(auto_event.selection_mode, PredictionEvent.SelectionMode.CURATED)
+        self.assertEqual(auto_event.options.count(), 2)
 
     def test_sync_weekly_games_returns_manual_when_no_automatic_games(self) -> None:
         base_time = timezone.now()
@@ -436,10 +456,10 @@ class SyncWeeklyGamesTests(DjangoTestCase):
             'hooptipp.predictions.services.fetch_upcoming_week_games',
             return_value=(timezone.localdate(base_time), []),
         ):
-            tip_type, games, week_start = services.sync_weekly_games()
+            tip_type, events, week_start = services.sync_weekly_games()
 
         self.assertIsNotNone(tip_type)
         self.assertEqual(week_start, timezone.localdate(base_time))
-        self.assertEqual([game.nba_game_id for game in games], ['MANUAL-ONLY'])
+        self.assertEqual([event.scheduled_game.nba_game_id for event in events], ['MANUAL-ONLY'])
         manual_game.refresh_from_db()
         self.assertTrue(manual_game.is_manual)

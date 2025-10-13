@@ -1,6 +1,9 @@
+from __future__ import annotations
+
 from django.conf import settings
 from django.core.validators import RegexValidator
 from django.db import models
+from django.utils import timezone
 
 
 class TipType(models.Model):
@@ -59,6 +62,140 @@ class ScheduledGame(models.Model):
         return f"{self.away_team} @ {self.home_team}"
 
 
+class NbaTeam(models.Model):
+    balldontlie_id = models.PositiveIntegerField(unique=True, null=True, blank=True)
+    name = models.CharField(max_length=150)
+    abbreviation = models.CharField(max_length=5, blank=True)
+    city = models.CharField(max_length=100, blank=True)
+    conference = models.CharField(max_length=30, blank=True)
+    division = models.CharField(max_length=30, blank=True)
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class NbaPlayer(models.Model):
+    balldontlie_id = models.PositiveIntegerField(unique=True, null=True, blank=True)
+    first_name = models.CharField(max_length=80)
+    last_name = models.CharField(max_length=80)
+    display_name = models.CharField(max_length=160)
+    position = models.CharField(max_length=10, blank=True)
+    team = models.ForeignKey(
+        NbaTeam,
+        on_delete=models.SET_NULL,
+        related_name="players",
+        null=True,
+        blank=True,
+    )
+
+    class Meta:
+        ordering = ["display_name"]
+
+    def __str__(self) -> str:
+        return self.display_name
+
+
+class PredictionEvent(models.Model):
+    class TargetKind(models.TextChoices):
+        TEAM = "team", "Team"
+        PLAYER = "player", "Player"
+
+    class SelectionMode(models.TextChoices):
+        ANY = "any", "Any selection"
+        CURATED = "curated", "Curated list"
+
+    tip_type = models.ForeignKey(
+        TipType,
+        on_delete=models.CASCADE,
+        related_name="events",
+    )
+    name = models.CharField(max_length=200)
+    description = models.TextField(blank=True)
+    target_kind = models.CharField(
+        max_length=10,
+        choices=TargetKind.choices,
+        default=TargetKind.TEAM,
+    )
+    selection_mode = models.CharField(
+        max_length=10,
+        choices=SelectionMode.choices,
+        default=SelectionMode.CURATED,
+    )
+    opens_at = models.DateTimeField()
+    deadline = models.DateTimeField()
+    reveal_at = models.DateTimeField(
+        help_text="The event becomes visible on or after this timestamp.",
+        default=timezone.now,
+    )
+    is_active = models.BooleanField(default=True)
+    scheduled_game = models.OneToOneField(
+        "ScheduledGame",
+        on_delete=models.CASCADE,
+        related_name="prediction_event",
+        null=True,
+        blank=True,
+    )
+    sort_order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ["deadline", "sort_order", "name"]
+
+    def __str__(self) -> str:
+        return self.name
+
+    def is_visible(self) -> bool:
+        from django.utils import timezone
+
+        now = timezone.now()
+        return self.is_active and self.reveal_at <= now
+
+
+class PredictionOption(models.Model):
+    event = models.ForeignKey(
+        PredictionEvent,
+        on_delete=models.CASCADE,
+        related_name="options",
+    )
+    label = models.CharField(max_length=200)
+    team = models.ForeignKey(
+        NbaTeam,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="prediction_options",
+    )
+    player = models.ForeignKey(
+        NbaPlayer,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="prediction_options",
+    )
+    is_active = models.BooleanField(default=True)
+    sort_order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ["sort_order", "label"]
+        unique_together = (
+            ("event", "team"),
+            ("event", "player"),
+        )
+
+    def __str__(self) -> str:
+        return self.label
+
+    def clean(self) -> None:
+        from django.core.exceptions import ValidationError
+
+        if not (self.team or self.player):
+            raise ValidationError("Prediction options must reference a team or player.")
+        if self.team and self.player:
+            raise ValidationError("Prediction options cannot reference both a team and a player.")
+
+
 class UserTip(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     tip_type = models.ForeignKey(TipType, on_delete=models.CASCADE)
@@ -69,16 +206,49 @@ class UserTip(models.Model):
         blank=True,
         null=True,
     )
+    prediction_event = models.ForeignKey(
+        PredictionEvent,
+        on_delete=models.CASCADE,
+        related_name='tips',
+        null=True,
+        blank=True,
+    )
+    prediction_option = models.ForeignKey(
+        PredictionOption,
+        on_delete=models.SET_NULL,
+        related_name='tips',
+        null=True,
+        blank=True,
+    )
+    selected_team = models.ForeignKey(
+        NbaTeam,
+        on_delete=models.SET_NULL,
+        related_name='tips',
+        null=True,
+        blank=True,
+    )
+    selected_player = models.ForeignKey(
+        NbaPlayer,
+        on_delete=models.SET_NULL,
+        related_name='tips',
+        null=True,
+        blank=True,
+    )
     prediction = models.CharField(max_length=255)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        unique_together = ('user', 'tip_type', 'scheduled_game')
+        unique_together = (
+            ('user', 'tip_type', 'scheduled_game'),
+            ('user', 'prediction_event'),
+        )
         verbose_name = 'User tip'
         verbose_name_plural = 'User tips'
 
     def __str__(self) -> str:
+        if self.prediction_event:
+            return f"{self.user} - {self.prediction_event}: {self.prediction}"
         if self.scheduled_game:
             return f"{self.user} - {self.scheduled_game}: {self.prediction}"
         return f"{self.user} - {self.tip_type}: {self.prediction}"
