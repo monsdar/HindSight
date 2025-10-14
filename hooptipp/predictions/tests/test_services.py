@@ -514,6 +514,129 @@ class SyncWeeklyGamesTests(DjangoTestCase):
         self.assertTrue(manual_game.is_manual)
 
 
+class SyncTeamsTests(DjangoTestCase):
+    def setUp(self) -> None:
+        services._BDL_CLIENT_CACHE.clear()
+        services.get_team_choices.cache_clear()
+        return super().setUp()
+
+    def test_sync_teams_creates_updates_and_removes(self) -> None:
+        existing = NbaTeam.objects.create(
+            balldontlie_id=1,
+            name='Old Lakers',
+            abbreviation='OLD',
+            city='Old City',
+            conference='Old',
+            division='Old',
+        )
+        manual = NbaTeam.objects.create(
+            name='Minnesota',
+            abbreviation='MIN',
+            city='Minneapolis',
+        )
+        stale = NbaTeam.objects.create(
+            balldontlie_id=99,
+            name='Stale Team',
+        )
+
+        lakers = SimpleNamespace(
+            id=1,
+            full_name='Los Angeles Lakers',
+            name='Lakers',
+            abbreviation='LAL',
+            city='Los Angeles',
+            conference='West',
+            division='Pacific',
+        )
+        wolves = SimpleNamespace(
+            id=30,
+            full_name='Minnesota Timberwolves',
+            name='Timberwolves',
+            abbreviation='MIN',
+            city='Minneapolis',
+            conference='West',
+            division='Northwest',
+        )
+
+        heat = SimpleNamespace(
+            id=17,
+            full_name='Miami Heat',
+            name='Heat',
+            abbreviation='MIA',
+            city='Miami',
+            conference='East',
+            division='Southeast',
+        )
+
+        response = SimpleNamespace(data=[lakers, wolves, heat])
+        mock_client = mock.Mock()
+        mock_client.nba.teams.list.return_value = response
+
+        with mock.patch.object(services, '_build_bdl_client', return_value=mock_client):
+            result = services.sync_teams()
+
+        self.assertEqual(result.created, 1)
+        self.assertEqual(result.updated, 2)
+        self.assertEqual(result.removed, 1)
+
+        mock_client.nba.teams.list.assert_called_once_with(per_page=100)
+
+        existing.refresh_from_db()
+        self.assertEqual(existing.name, 'Los Angeles Lakers')
+        self.assertEqual(existing.abbreviation, 'LAL')
+        self.assertEqual(existing.conference, 'West')
+        self.assertEqual(existing.division, 'Pacific')
+
+        manual.refresh_from_db()
+        self.assertEqual(manual.balldontlie_id, 30)
+        self.assertEqual(manual.name, 'Minnesota Timberwolves')
+
+        self.assertTrue(NbaTeam.objects.filter(balldontlie_id=17, name='Miami Heat').exists())
+
+        self.assertFalse(NbaTeam.objects.filter(pk=stale.pk).exists())
+
+    def test_sync_teams_retries_without_per_page(self) -> None:
+        lakers = SimpleNamespace(
+            id=1,
+            full_name='Los Angeles Lakers',
+            abbreviation='LAL',
+        )
+        response = SimpleNamespace(data=[lakers])
+
+        mock_client = mock.Mock()
+        mock_client.nba.teams.list.side_effect = [
+            TypeError("NBATeamsAPI.list() got an unexpected keyword argument 'per_page'"),
+            response,
+        ]
+
+        with mock.patch.object(services, '_build_bdl_client', return_value=mock_client):
+            result = services.sync_teams()
+
+        self.assertTrue(result.changed)
+        self.assertEqual(result.created, 1)
+        self.assertEqual(result.updated, 0)
+        self.assertEqual(result.removed, 0)
+
+        self.assertEqual(mock_client.nba.teams.list.call_count, 2)
+        first_call, second_call = mock_client.nba.teams.list.call_args_list
+        self.assertEqual(first_call.kwargs, {'per_page': 100})
+        self.assertEqual(second_call.kwargs, {})
+
+    def test_sync_teams_handles_api_errors(self) -> None:
+        mock_client = mock.Mock()
+        mock_client.nba.teams.list.side_effect = exceptions.BallDontLieException('boom')
+
+        with mock.patch.object(services, '_build_bdl_client', return_value=mock_client):
+            result = services.sync_teams()
+
+        self.assertFalse(result.changed)
+        self.assertEqual(result.created, 0)
+        self.assertEqual(result.updated, 0)
+        self.assertEqual(result.removed, 0)
+
+        mock_client.nba.teams.list.assert_called_once_with(per_page=100)
+
+
 class SyncActivePlayersTests(DjangoTestCase):
     def setUp(self) -> None:
         services._BDL_CLIENT_CACHE.clear()

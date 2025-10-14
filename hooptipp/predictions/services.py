@@ -26,8 +26,8 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass
-class PlayerSyncResult:
-    """Summary of a BallDontLie active player synchronisation run."""
+class SyncResult:
+    """Base summary of a BallDontLie synchronisation run."""
 
     created: int = 0
     updated: int = 0
@@ -38,6 +38,14 @@ class PlayerSyncResult:
         """Return ``True`` when the sync modified the database."""
 
         return any((self.created, self.updated, self.removed))
+
+
+class PlayerSyncResult(SyncResult):
+    """Summary of a BallDontLie active player synchronisation run."""
+
+
+class TeamSyncResult(SyncResult):
+    """Summary of a BallDontLie NBA team synchronisation run."""
 
 
 # The BallDontLie free tier allows 5 requests per minute. A throttle of 12.5
@@ -134,6 +142,103 @@ def get_team_choices() -> List[Tuple[str, str]]:
 
     choices.sort(key=lambda item: item[1])
     return choices
+
+
+def sync_teams() -> TeamSyncResult:
+    """Fetch the list of NBA teams from BallDontLie and persist them."""
+
+    client = _build_bdl_client()
+    if client is None:
+        return TeamSyncResult()
+
+    def _list_teams(per_page_value: Optional[int]) -> Any:
+        kwargs = {}
+        if per_page_value is not None:
+            kwargs['per_page'] = per_page_value
+        return client.nba.teams.list(**kwargs)
+
+    try:
+        response = _list_teams(100)
+    except TypeError as exc:
+        if "per_page" not in str(exc):
+            raise
+        logger.debug('NBATeamsAPI.list does not accept per_page parameter; retrying without pagination. %s', exc)
+        try:
+            response = _list_teams(None)
+        except BallDontLieException:
+            logger.exception('Unable to fetch team list from BallDontLie API.')
+            return TeamSyncResult()
+    except BallDontLieException:
+        logger.exception('Unable to fetch team list from BallDontLie API.')
+        return TeamSyncResult()
+
+    created = 0
+    updated = 0
+    seen_ids: set[int] = set()
+
+    for team in getattr(response, 'data', []) or []:
+        team_data = _serialise_team(team)
+        if not team_data:
+            continue
+
+        team_id = team_data.get('id')
+        if team_id is None:
+            continue
+
+        defaults = {
+            'name': team_data.get('full_name') or team_data.get('name') or '',
+            'abbreviation': team_data.get('abbreviation') or '',
+            'city': team_data.get('city') or '',
+            'conference': team_data.get('conference') or '',
+            'division': team_data.get('division') or '',
+        }
+
+        name = defaults['name'] or defaults['city'] or defaults['abbreviation']
+        if not name:
+            continue
+        defaults['name'] = name
+
+        balldontlie_id = int(team_id)
+
+        team_obj = NbaTeam.objects.filter(balldontlie_id=balldontlie_id).first()
+        created_flag = False
+        if team_obj is None:
+            abbreviation = defaults['abbreviation']
+            candidate = None
+            if abbreviation:
+                candidate = NbaTeam.objects.filter(abbreviation__iexact=abbreviation).first()
+            if candidate is None and name:
+                candidate = NbaTeam.objects.filter(name__iexact=name).first()
+
+            if candidate is None:
+                team_obj = NbaTeam(balldontlie_id=balldontlie_id)
+                created_flag = True
+            else:
+                team_obj = candidate
+
+        team_obj.name = defaults['name']
+        team_obj.abbreviation = defaults['abbreviation']
+        team_obj.city = defaults['city']
+        team_obj.conference = defaults['conference']
+        team_obj.division = defaults['division']
+        team_obj.balldontlie_id = balldontlie_id
+        team_obj.save()
+
+        seen_ids.add(balldontlie_id)
+        if created_flag:
+            created += 1
+        else:
+            updated += 1
+
+    removed = 0
+    if seen_ids:
+        query = NbaTeam.objects.filter(balldontlie_id__isnull=False)
+        query = query.exclude(balldontlie_id__in=seen_ids)
+        removed, _ = query.delete()
+
+    get_team_choices.cache_clear()
+
+    return TeamSyncResult(created=created, updated=updated, removed=removed)
 
 
 @lru_cache
