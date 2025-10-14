@@ -173,11 +173,15 @@ class UserTipAdmin(admin.ModelAdmin):
         'prediction_event',
         'scheduled_game',
         'prediction',
+        'is_locked',
+        'lock_status',
         'updated_at',
     )
     list_filter = (
         'tip_type',
         'scheduled_game__tip_type',
         'prediction_event__tip_type',
+        'is_locked',
+        'lock_status',
     )
     search_fields = ('user__username', 'prediction')

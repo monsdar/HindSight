@@ -197,6 +197,12 @@ class PredictionOption(models.Model):
 
 
 class UserTip(models.Model):
+    class LockStatus(models.TextChoices):
+        NONE = "none", "No lock"
+        ACTIVE = "active", "Active"
+        RETURNED = "returned", "Returned"
+        FORFEITED = "forfeited", "Forfeited"
+
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     tip_type = models.ForeignKey(TipType, on_delete=models.CASCADE)
     scheduled_game = models.ForeignKey(
@@ -237,6 +243,19 @@ class UserTip(models.Model):
     prediction = models.CharField(max_length=255)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    is_locked = models.BooleanField(default=False)
+    lock_status = models.CharField(
+        max_length=20,
+        choices=LockStatus.choices,
+        default=LockStatus.NONE,
+    )
+    lock_committed_at = models.DateTimeField(null=True, blank=True)
+    lock_released_at = models.DateTimeField(null=True, blank=True)
+    lock_releases_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Scheduled timestamp for automatically returning a forfeited lock.",
+    )
 
     class Meta:
         unique_together = (

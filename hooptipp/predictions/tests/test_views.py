@@ -264,3 +264,147 @@ class HomeViewTests(TestCase):
         self.assertTrue(form.errors)
         self.assertIn('theme_primary_color', form.errors)
         self.assertIn('theme_secondary_color', form.errors)
+
+    def test_save_tips_allows_lock_when_available(self) -> None:
+        session = self.client.session
+        session['active_user_id'] = self.alice.id
+        session.save()
+
+        with mock.patch(
+            'hooptipp.predictions.views.sync_weekly_games',
+            return_value=(self.tip_type, [self.event], self.game.game_date.date()),
+        ):
+            response = self.client.post(
+                reverse('predictions:home'),
+                {
+                    'save_tips': '1',
+                    f'prediction_{self.event.id}': str(self.away_option.id),
+                    f'lock_{self.event.id}': '1',
+                },
+            )
+
+        self.assertEqual(response.status_code, 302)
+        tip = UserTip.objects.get(user=self.alice, prediction_event=self.event)
+        self.assertTrue(tip.is_locked)
+        self.assertEqual(tip.lock_status, UserTip.LockStatus.ACTIVE)
+        self.assertIsNotNone(tip.lock_committed_at)
+
+    def test_save_tips_respects_lock_limit(self) -> None:
+        now = timezone.now()
+        base_tip = UserTip.objects.get(user=self.alice, prediction_event=self.event)
+        base_tip.is_locked = True
+        base_tip.lock_status = UserTip.LockStatus.ACTIVE
+        base_tip.lock_committed_at = now
+        base_tip.save(update_fields=['is_locked', 'lock_status', 'lock_committed_at'])
+
+        for index in range(2):
+            event = PredictionEvent.objects.create(
+                tip_type=self.tip_type,
+                name=f'Extra event {index + 1}',
+                description='Additional prediction',
+                target_kind=PredictionEvent.TargetKind.TEAM,
+                selection_mode=PredictionEvent.SelectionMode.CURATED,
+                opens_at=now - timedelta(days=1),
+                deadline=now + timedelta(days=1),
+                reveal_at=now - timedelta(days=1),
+                is_active=True,
+                sort_order=index + 10,
+            )
+            option = PredictionOption.objects.create(
+                event=event,
+                label=f'Lock option {index + 1}',
+                team=self.away_team,
+                sort_order=1,
+            )
+            locked_tip = UserTip.objects.create(
+                user=self.alice,
+                tip_type=self.tip_type,
+                prediction_event=event,
+                prediction_option=option,
+                selected_team=self.away_team,
+                prediction=option.label,
+            )
+            locked_tip.is_locked = True
+            locked_tip.lock_status = UserTip.LockStatus.ACTIVE
+            locked_tip.lock_committed_at = now
+            locked_tip.save(update_fields=['is_locked', 'lock_status', 'lock_committed_at'])
+
+        extra_event = PredictionEvent.objects.create(
+            tip_type=self.tip_type,
+            name='Overflow event',
+            description='Attempt to exceed locks',
+            target_kind=PredictionEvent.TargetKind.TEAM,
+            selection_mode=PredictionEvent.SelectionMode.CURATED,
+            opens_at=now - timedelta(days=1),
+            deadline=now + timedelta(days=1),
+            reveal_at=now - timedelta(days=1),
+            is_active=True,
+            sort_order=20,
+        )
+        extra_option = PredictionOption.objects.create(
+            event=extra_event,
+            label='Overflow pick',
+            team=self.home_team,
+            sort_order=1,
+        )
+
+        session = self.client.session
+        session['active_user_id'] = self.alice.id
+        session.save()
+
+        post_data = {
+            'save_tips': '1',
+            f'prediction_{extra_event.id}': str(extra_option.id),
+            f'lock_{extra_event.id}': '1',
+            f'lock_{self.event.id}': '1',
+        }
+        for idx, event in enumerate(
+            PredictionEvent.objects.filter(name__startswith='Extra event').order_by('sort_order'),
+            start=1,
+        ):
+            post_data[f'lock_{event.id}'] = '1'
+
+        with mock.patch(
+            'hooptipp.predictions.views.sync_weekly_games',
+            return_value=(self.tip_type, [self.event, extra_event], self.game.game_date.date()),
+        ):
+            response = self.client.post(
+                reverse('predictions:home'),
+                post_data,
+                follow=True,
+            )
+
+        self.assertEqual(response.status_code, 200)
+        tip = UserTip.objects.get(user=self.alice, prediction_event=extra_event)
+        self.assertFalse(tip.is_locked)
+        self.assertEqual(tip.lock_status, UserTip.LockStatus.NONE)
+        self.assertContains(response, 'Unable to lock', status_code=200)
+
+    def test_save_tips_unlocks_before_deadline(self) -> None:
+        tip = UserTip.objects.get(user=self.alice, prediction_event=self.event)
+        tip.is_locked = True
+        tip.lock_status = UserTip.LockStatus.ACTIVE
+        tip.lock_committed_at = timezone.now()
+        tip.save(update_fields=['is_locked', 'lock_status', 'lock_committed_at'])
+
+        session = self.client.session
+        session['active_user_id'] = self.alice.id
+        session.save()
+
+        with mock.patch(
+            'hooptipp.predictions.views.sync_weekly_games',
+            return_value=(self.tip_type, [self.event], self.game.game_date.date()),
+        ):
+            response = self.client.post(
+                reverse('predictions:home'),
+                {
+                    'save_tips': '1',
+                    f'prediction_{self.event.id}': str(self.away_option.id),
+                },
+            )
+
+        self.assertEqual(response.status_code, 302)
+        tip.refresh_from_db()
+        self.assertFalse(tip.is_locked)
+        self.assertEqual(tip.lock_status, UserTip.LockStatus.RETURNED)
+        self.assertIsNotNone(tip.lock_released_at)

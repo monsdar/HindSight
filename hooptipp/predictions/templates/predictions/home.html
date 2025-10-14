@@ -215,30 +215,50 @@
 
                             {% with user_tip=user_tips|get_item:event.id %}
                               {% if active_user %}
-                                <div class="mt-4 theme-accent-radio">
-                                  <fieldset class="space-y-2">
-                                    <legend class="text-xs uppercase tracking-wide text-slate-500">Your pick</legend>
-                                    {% for option in event.options.all %}
-                                      <label class="theme-accent-hover flex items-center gap-2 rounded-lg border border-slate-800 bg-slate-900 px-3 py-2 text-sm">
-                                        <input type="radio" name="prediction_{{ event.id }}" value="{{ option.id }}" form="tips-form" class="h-4 w-4 theme-accent-outline"
-                                          {% if user_tip and user_tip.prediction_option_id == option.id %}checked{% endif %} />
-                                        <span class="flex-1">
-                                          {% if option.team %}
-                                            {{ option.team.name }} wins
-                                          {% elif option.player %}
-                                            {{ option.player.display_name }}
-                                          {% else %}
-                                            {{ option.label }}
-                                          {% endif %}
-                                        </span>
-                                      </label>
-                                    {% endfor %}
-                                  </fieldset>
+                                <div class="mt-4 space-y-3">
+                                  <div class="theme-accent-radio">
+                                    <fieldset class="space-y-2">
+                                      <legend class="text-xs uppercase tracking-wide text-slate-500">Your pick</legend>
+                                      {% for option in event.options.all %}
+                                        <label class="theme-accent-hover flex items-center gap-2 rounded-lg border border-slate-800 bg-slate-900 px-3 py-2 text-sm">
+                                          <input type="radio" name="prediction_{{ event.id }}" value="{{ option.id }}" form="tips-form" class="h-4 w-4 theme-accent-outline"
+                                            {% if user_tip and user_tip.prediction_option_id == option.id %}checked{% endif %} />
+                                          <span class="flex-1">
+                                            {% if option.team %}
+                                              {{ option.team.name }} wins
+                                            {% elif option.player %}
+                                              {{ option.player.display_name }}
+                                            {% else %}
+                                              {{ option.label }}
+                                            {% endif %}
+                                          </span>
+                                        </label>
+                                      {% endfor %}
+                                    </fieldset>
+                                  </div>
+                                  <div class="flex flex-wrap items-center justify-between gap-3 text-xs text-slate-400">
+                                    <label class="inline-flex items-center gap-2 text-sm text-slate-300">
+                                      <input type="checkbox" name="lock_{{ event.id }}" value="1" form="tips-form" class="h-4 w-4 theme-accent-outline"
+                                        {% if user_tip and user_tip.is_locked %}checked{% endif %}
+                                        {% if lock_summary and lock_summary.available == 0 and not user_tip %}disabled{% elif lock_summary and lock_summary.available == 0 and user_tip and not user_tip.is_locked %}disabled{% endif %} />
+                                      <span>Lock this pick</span>
+                                    </label>
+                                    {% if user_tip and user_tip.is_locked %}
+                                      <span class="theme-accent-pill inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-semibold uppercase tracking-wide">Locked</span>
+                                    {% elif lock_summary and lock_summary.available == 0 %}
+                                      <span class="text-xs text-slate-500">No locks remaining</span>
+                                    {% endif %}
+                                  </div>
                                 </div>
                               {% endif %}
 
                               {% if active_user and user_tip %}
-                                <p class="mt-3 text-xs text-slate-500">Last updated: {{ user_tip.updated_at|date:"M d, Y H:i" }}</p>
+                                <p class="mt-3 text-xs text-slate-500">
+                                  Last updated: {{ user_tip.updated_at|date:"M d, Y H:i" }}
+                                  {% if user_tip.is_locked %}
+                                    <span class="ml-2 theme-accent-pill inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide">Locked</span>
+                                  {% endif %}
+                                </p>
                               {% endif %}
                             {% endwith %}
                           </article>
@@ -348,8 +368,29 @@
                           </div>
                         {% endif %}
 
+                        {% if active_user %}
+                          <div class="flex flex-wrap items-center justify-between gap-3 text-xs text-slate-400">
+                            <label class="inline-flex items-center gap-2 text-sm text-slate-300">
+                              <input type="checkbox" name="lock_{{ event.id }}" value="1" form="tips-form" class="h-4 w-4 theme-accent-outline"
+                                {% if user_tip and user_tip.is_locked %}checked{% endif %}
+                                {% if lock_summary and lock_summary.available == 0 and not user_tip %}disabled{% elif lock_summary and lock_summary.available == 0 and user_tip and not user_tip.is_locked %}disabled{% endif %} />
+                              <span>Lock this pick</span>
+                            </label>
+                            {% if user_tip and user_tip.is_locked %}
+                              <span class="theme-accent-pill inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-semibold uppercase tracking-wide">Locked</span>
+                            {% elif lock_summary and lock_summary.available == 0 %}
+                              <span class="text-xs text-slate-500">No locks remaining</span>
+                            {% endif %}
+                          </div>
+                        {% endif %}
+
                         {% if active_user and user_tip %}
-                          <p class="text-xs text-slate-500">Last updated: {{ user_tip.updated_at|date:"M d, Y H:i" }}</p>
+                          <p class="text-xs text-slate-500">
+                            Last updated: {{ user_tip.updated_at|date:"M d, Y H:i" }}
+                            {% if user_tip.is_locked %}
+                              <span class="ml-2 theme-accent-pill inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide">Locked</span>
+                            {% endif %}
+                          </p>
                         {% endif %}
                       </div>
                     {% endwith %}
@@ -365,6 +406,20 @@
             {% csrf_token %}
             <input type="hidden" name="save_tips" value="1" />
             <p class="mb-4 text-sm theme-accent-muted">Picks are automatically stored for <span class="font-semibold text-slate-100">{{ active_user.username }}</span>.</p>
+            {% if lock_summary %}
+              <div class="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-xs text-slate-300">
+                <span class="font-semibold text-slate-100">Locks remaining: {{ lock_summary.available }} / {{ lock_summary.total }}</span>
+                <span>
+                  Active locks: {{ lock_summary.active }}
+                  {% if lock_summary.pending %}
+                    &bull; Pending returns: {{ lock_summary.pending }}
+                  {% endif %}
+                </span>
+                {% if lock_summary.next_return_at %}
+                  <span>Next lock returns {{ lock_summary.next_return_at|date:"M d, Y" }}</span>
+                {% endif %}
+              </div>
+            {% endif %}
             <button type="submit" class="theme-accent-bg theme-accent-shadow inline-flex items-center gap-2 rounded-lg px-5 py-2 font-semibold transition">
               Save picks
             </button>
