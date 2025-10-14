@@ -138,6 +138,10 @@ def get_team_choices() -> List[Tuple[str, str]]:
         name = getattr(team, 'full_name', '') or getattr(team, 'name', '')
         if not name:
             continue
+        conference = getattr(team, 'conference', '') or ''
+        division = getattr(team, 'division', '') or ''
+        if not (conference and division):
+            continue
         choices.append((str(team_id), name))
 
     choices.sort(key=lambda item: item[1])
@@ -192,6 +196,9 @@ def sync_teams() -> TeamSyncResult:
             'conference': team_data.get('conference') or '',
             'division': team_data.get('division') or '',
         }
+
+        if not (defaults['conference'] and defaults['division']):
+            continue
 
         name = defaults['name'] or defaults['city'] or defaults['abbreviation']
         if not name:
