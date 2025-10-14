@@ -312,6 +312,48 @@ class GetPlayerChoicesTests(TestCase):
         self.assertEqual(first_call.kwargs, {'per_page': 100})
         self.assertEqual(second_call.kwargs, {'per_page': 100, 'cursor': 101})
 
+    def test_supports_dict_meta_with_next_link(self) -> None:
+        first_player = mock.Mock(
+            id=11,
+            first_name='Jalen',
+            last_name='Brunson',
+            team=mock.Mock(abbreviation='NYK'),
+        )
+        second_player = mock.Mock(
+            id=12,
+            first_name='Julius',
+            last_name='Randle',
+            team=mock.Mock(abbreviation='NYK'),
+        )
+
+        first_response = mock.Mock(
+            data=[first_player],
+            meta={'next': '/nba/v1/players/active?cursor=200'},
+        )
+        second_response = mock.Mock(
+            data=[second_player],
+            meta={'next': None},
+        )
+
+        mock_client = mock.Mock()
+        mock_client.nba.players.list_active.side_effect = [first_response, second_response]
+
+        with mock.patch.object(services, '_build_bdl_client', return_value=mock_client):
+            choices = services.get_player_choices()
+
+        self.assertEqual(
+            choices,
+            [
+                ('11', 'Jalen Brunson (NYK)'),
+                ('12', 'Julius Randle (NYK)'),
+            ],
+        )
+
+        self.assertEqual(mock_client.nba.players.list_active.call_count, 2)
+        first_call, second_call = mock_client.nba.players.list_active.call_args_list
+        self.assertEqual(first_call.kwargs, {'per_page': 100})
+        self.assertEqual(second_call.kwargs, {'per_page': 100, 'cursor': 200})
+
     def test_handles_api_errors(self) -> None:
         mock_client = mock.Mock()
         mock_client.nba.players.list_active.side_effect = exceptions.BallDontLieException('boom')
@@ -583,6 +625,50 @@ class SyncActivePlayersTests(DjangoTestCase):
         bulls_team_obj = NbaTeam.objects.get(balldontlie_id=4)
         self.assertEqual(bulls_team_obj.name, 'Chicago Bulls')
         self.assertEqual(bulls_team_obj.abbreviation, 'CHI')
+
+    def test_sync_active_players_supports_dict_meta(self) -> None:
+        lebron = SimpleNamespace(
+            id=23,
+            first_name='LeBron',
+            last_name='James',
+            position='F',
+        )
+        davis = SimpleNamespace(
+            id=3,
+            first_name='Anthony',
+            last_name='Davis',
+            position='C',
+        )
+
+        first_page = SimpleNamespace(
+            data=[lebron],
+            meta={'next': '/nba/v1/players/active?cursor=50'},
+        )
+        second_page = SimpleNamespace(
+            data=[davis],
+            meta={'next': None},
+        )
+
+        mock_client = mock.Mock()
+        mock_client.nba.players.list_active.side_effect = [first_page, second_page]
+
+        with mock.patch.object(services, '_build_bdl_client', return_value=mock_client):
+            result = services.sync_active_players(throttle_seconds=0)
+
+        self.assertEqual(result.created, 2)
+        self.assertEqual(result.updated, 0)
+        self.assertEqual(result.removed, 0)
+
+        mock_client.nba.players.list_active.assert_has_calls(
+            [
+                mock.call(per_page=100),
+                mock.call(per_page=100, cursor=50),
+            ]
+        )
+
+        self.assertEqual(NbaPlayer.objects.count(), 2)
+        self.assertTrue(NbaPlayer.objects.filter(display_name='LeBron James').exists())
+        self.assertTrue(NbaPlayer.objects.filter(display_name='Anthony Davis').exists())
 
     def test_sync_active_players_handles_api_errors(self) -> None:
         mock_client = mock.Mock()

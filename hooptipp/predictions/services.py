@@ -5,7 +5,8 @@ import time
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from functools import lru_cache
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
+from urllib.parse import parse_qs, urlparse
 
 from balldontlie.exceptions import BallDontLieException
 from django.utils import timezone
@@ -63,6 +64,8 @@ def _get_bdl_api_key() -> str:
 
 _BDL_CLIENT_CACHE: Dict[str, CachedBallDontLieAPI] = {}
 _BDL_CLIENT_LOCK = threading.Lock()
+
+CursorType = Union[int, str]
 
 
 def _build_bdl_client() -> Optional[CachedBallDontLieAPI]:
@@ -168,7 +171,7 @@ def get_player_choices() -> List[Tuple[str, str]]:
                 choices.append((str(player_id), name))
 
             meta = getattr(response, 'meta', None)
-            next_cursor = getattr(meta, 'next_cursor', None)
+            next_cursor = _extract_next_cursor(meta)
             if next_cursor is None or next_cursor in seen_cursors:
                 break
 
@@ -195,6 +198,43 @@ def _serialise_team(team_obj: Any) -> Optional[dict]:
         'conference': getattr(team_obj, 'conference', ''),
         'division': getattr(team_obj, 'division', ''),
     }
+
+
+def _extract_next_cursor(meta: Any) -> Optional[CursorType]:
+    if meta is None:
+        return None
+
+    next_cursor = getattr(meta, 'next_cursor', None)
+    if next_cursor is not None:
+        return next_cursor
+
+    if isinstance(meta, dict):
+        if meta.get('next_cursor') is not None:
+            return meta['next_cursor']
+
+        next_link: Optional[Any] = meta.get('next')
+        if isinstance(meta.get('links'), dict):
+            next_link = next_link or meta['links'].get('next')
+
+        if isinstance(next_link, str) and next_link:
+            parsed = urlparse(next_link)
+            query = parse_qs(parsed.query)
+            raw_cursor: Optional[str] = None
+            for key in ('cursor', 'page', 'next_cursor'):
+                values = query.get(key)
+                if values:
+                    raw_cursor = values[0]
+                    break
+            if raw_cursor is not None:
+                try:
+                    return int(raw_cursor)
+                except (TypeError, ValueError):
+                    return raw_cursor
+
+        if meta.get('next_page') is not None:
+            return meta['next_page']
+
+    return None
 
 
 def sync_active_players(throttle_seconds: float = PLAYER_SYNC_THROTTLE_SECONDS) -> PlayerSyncResult:
@@ -268,7 +308,7 @@ def sync_active_players(throttle_seconds: float = PLAYER_SYNC_THROTTLE_SECONDS) 
             processed += 1
 
         meta = getattr(response, 'meta', None)
-        next_cursor = getattr(meta, 'next_cursor', None)
+        next_cursor = _extract_next_cursor(meta)
         if next_cursor is None or next_cursor in seen_cursors:
             break
 
