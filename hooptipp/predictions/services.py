@@ -64,8 +64,18 @@ def _get_bdl_api_key() -> str:
         token = raw_value.strip()
         if not token:
             continue
-        if token.lower().startswith('bearer '):
+
+        lower_token = token.lower()
+        if lower_token.startswith('bearer '):
             return token
+
+        # Some deployments configure the environment variable with the full
+        # header value, e.g. ``Token <key>``. Treat any value that already
+        # contains whitespace as a complete header and return it unchanged so
+        # we do not accidentally prepend an additional prefix.
+        if ' ' in token:
+            return token
+
         return f'Bearer {token}'
     return ''
 
