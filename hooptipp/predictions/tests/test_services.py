@@ -74,6 +74,29 @@ class GetTeamChoicesTests(TestCase):
         self.assertEqual(first_call.kwargs, {'per_page': 100})
         self.assertEqual(second_call.kwargs, {})
 
+    def test_ignores_teams_without_conference_or_division(self) -> None:
+        active = mock.Mock(
+            id=14,
+            full_name='Los Angeles Lakers',
+            conference='West',
+            division='Pacific',
+        )
+        inactive = mock.Mock(
+            id=55,
+            full_name='Baltimore Bullets',
+            conference='',
+            division=None,
+        )
+
+        response = mock.Mock(data=[active, inactive])
+        mock_client = mock.Mock()
+        mock_client.nba.teams.list.return_value = response
+
+        with mock.patch.object(services, '_build_bdl_client', return_value=mock_client):
+            choices = services.get_team_choices()
+
+        self.assertEqual(choices, [('14', 'Los Angeles Lakers')])
+
 
 class FetchUpcomingWeekGamesTests(TestCase):
     def setUp(self) -> None:
@@ -600,6 +623,8 @@ class SyncTeamsTests(DjangoTestCase):
             id=1,
             full_name='Los Angeles Lakers',
             abbreviation='LAL',
+            conference='West',
+            division='Pacific',
         )
         response = SimpleNamespace(data=[lakers])
 
@@ -635,6 +660,48 @@ class SyncTeamsTests(DjangoTestCase):
         self.assertEqual(result.removed, 0)
 
         mock_client.nba.teams.list.assert_called_once_with(per_page=100)
+
+    def test_sync_teams_skips_inactive_teams(self) -> None:
+        inactive = NbaTeam.objects.create(
+            balldontlie_id=55,
+            name='Baltimore Bullets',
+            abbreviation='BAL',
+            city='Baltimore',
+        )
+
+        lakers = SimpleNamespace(
+            id=1,
+            full_name='Los Angeles Lakers',
+            name='Lakers',
+            abbreviation='LAL',
+            city='Los Angeles',
+            conference='West',
+            division='Pacific',
+        )
+        bullets = SimpleNamespace(
+            id=55,
+            full_name='Baltimore Bullets',
+            name='Bullets',
+            abbreviation='BAL',
+            city='Baltimore',
+            conference='',
+            division=None,
+        )
+
+        response = SimpleNamespace(data=[lakers, bullets])
+        mock_client = mock.Mock()
+        mock_client.nba.teams.list.return_value = response
+
+        with mock.patch.object(services, '_build_bdl_client', return_value=mock_client):
+            result = services.sync_teams()
+
+        self.assertEqual(result.created, 1)
+        self.assertEqual(result.updated, 0)
+        self.assertEqual(result.removed, 1)
+
+        self.assertTrue(NbaTeam.objects.filter(balldontlie_id=1).exists())
+        self.assertFalse(NbaTeam.objects.filter(pk=inactive.pk).exists())
+        self.assertFalse(NbaTeam.objects.filter(balldontlie_id=55).exists())
 
 
 class SyncActivePlayersTests(DjangoTestCase):
