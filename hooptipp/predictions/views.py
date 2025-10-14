@@ -8,6 +8,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
 from .forms import UserPreferencesForm
+from .lock_service import LockLimitError, LockService
 from .models import (
     NbaPlayer,
     NbaTeam,
@@ -110,6 +111,16 @@ def home(request):
     team_choices = list(NbaTeam.objects.order_by('name')) if requires_team_choices else []
     player_choices = list(NbaPlayer.objects.order_by('display_name')) if requires_player_choices else []
 
+    user_tips: dict[int, UserTip] = {}
+    if active_user and visible_events:
+        user_tips = {
+            tip.prediction_event_id: tip
+            for tip in UserTip.objects.filter(
+                user=active_user,
+                prediction_event__in=visible_events,
+            )
+        }
+
     if request.method == 'POST':
         if 'set_active_user' in request.POST:
             user_id = request.POST.get('user_id')
@@ -146,93 +157,126 @@ def home(request):
                 messages.error(request, 'No prediction events are available right now.')
                 return redirect('predictions:home')
 
+            lock_service = LockService(active_user)
+            lock_service.refresh()
+            insufficient_lock_events: list[PredictionEvent] = []
+            deadline_locked_events: list[PredictionEvent] = []
             saved = 0
             for event in visible_events:
                 key = f'prediction_{event.id}'
                 submitted_value = request.POST.get(key)
+                lock_key = f'lock_{event.id}'
+                should_lock = request.POST.get(lock_key) == '1'
+
                 if not submitted_value:
-                    continue
-                option = None
-                selected_team = None
-                selected_player = None
-                prediction_label = ''
-
-                if event.selection_mode == PredictionEvent.SelectionMode.CURATED:
-                    try:
-                        option_id = int(submitted_value)
-                    except (TypeError, ValueError):
+                    existing_tip = user_tips.get(event.id)
+                    if existing_tip is None:
                         continue
-                    option = next(
-                        (
-                            item
-                            for item in event.options.all()
-                            if item.id == option_id
-                        ),
-                        None,
-                    )
-                    if not option:
-                        continue
-                    selected_team = option.team
-                    selected_player = option.player
-                    prediction_label = option.label
+                    option = existing_tip.prediction_option
+                    selected_team = existing_tip.selected_team
+                    selected_player = existing_tip.selected_player
+                    prediction_label = existing_tip.prediction
                 else:
-                    if event.target_kind == PredictionEvent.TargetKind.TEAM:
+                    option = None
+                    selected_team = None
+                    selected_player = None
+                    prediction_label = ''
+
+                    if event.selection_mode == PredictionEvent.SelectionMode.CURATED:
                         try:
-                            team_id = int(submitted_value)
+                            option_id = int(submitted_value)
                         except (TypeError, ValueError):
                             continue
-                        selected_team = next(
-                            (team for team in team_choices if team.id == team_id),
+                        option = next(
+                            (
+                                item
+                                for item in event.options.all()
+                                if item.id == option_id
+                            ),
                             None,
                         )
-                        if not selected_team:
+                        if not option:
                             continue
-                        prediction_label = selected_team.name
+                        selected_team = option.team
+                        selected_player = option.player
+                        prediction_label = option.label
                     else:
-                        try:
-                            player_id = int(submitted_value)
-                        except (TypeError, ValueError):
-                            continue
-                        selected_player = next(
-                            (player for player in player_choices if player.id == player_id),
-                            None,
-                        )
-                        if not selected_player:
-                            continue
-                        prediction_label = selected_player.display_name
+                        if event.target_kind == PredictionEvent.TargetKind.TEAM:
+                            try:
+                                team_id = int(submitted_value)
+                            except (TypeError, ValueError):
+                                continue
+                            selected_team = next(
+                                (team for team in team_choices if team.id == team_id),
+                                None,
+                            )
+                            if not selected_team:
+                                continue
+                            prediction_label = selected_team.name
+                        else:
+                            try:
+                                player_id = int(submitted_value)
+                            except (TypeError, ValueError):
+                                continue
+                            selected_player = next(
+                                (player for player in player_choices if player.id == player_id),
+                                None,
+                            )
+                            if not selected_player:
+                                continue
+                            prediction_label = selected_player.display_name
 
-                defaults = {
-                    'tip_type': event.tip_type,
-                    'scheduled_game': event.scheduled_game,
-                    'prediction': prediction_label,
-                    'prediction_option': option,
-                    'selected_team': selected_team,
-                    'selected_player': selected_player,
-                }
-
-                UserTip.objects.update_or_create(
-                    user=active_user,
-                    prediction_event=event,
-                    defaults=defaults,
-                )
+                tip = user_tips.get(event.id)
+                if tip is None:
+                    tip = UserTip(
+                        user=active_user,
+                        prediction_event=event,
+                    )
+                tip.tip_type = event.tip_type
+                tip.scheduled_game = event.scheduled_game
+                tip.prediction = prediction_label
+                tip.prediction_option = option
+                tip.selected_team = selected_team
+                tip.selected_player = selected_player
+                tip.save()
+                user_tips[event.id] = tip
                 saved += 1
+
+                if should_lock:
+                    try:
+                        lock_service.ensure_locked(tip)
+                    except LockLimitError:
+                        insufficient_lock_events.append(event)
+                elif tip.is_locked:
+                    if event.deadline <= now:
+                        deadline_locked_events.append(event)
+                    else:
+                        lock_service.release_lock(tip)
 
             if saved:
                 messages.success(request, 'Your picks have been saved!')
             else:
                 messages.info(request, 'No picks were provided, nothing to save.')
+
+            if insufficient_lock_events:
+                event_titles = ', '.join(event.name for event in insufficient_lock_events)
+                messages.error(
+                    request,
+                    f"Unable to lock {event_titles}. You have no locks remaining.",
+                )
+
+            if deadline_locked_events:
+                event_titles = ', '.join(event.name for event in deadline_locked_events)
+                messages.warning(
+                    request,
+                    f"Locks for {event_titles} could not be removed because the deadline has passed.",
+                )
             return redirect('predictions:home')
 
     all_users = get_user_model().objects.order_by('username')
-    user_tips = {}
-    if active_user and visible_events:
-        user_tips = {
-            tip.prediction_event_id: tip
-            for tip in UserTip.objects.filter(
-                user=active_user,
-                prediction_event__in=visible_events,
-            )
-        }
+    lock_summary = None
+    if active_user:
+        lock_summary = LockService(active_user).refresh()
 
     event_tip_users: dict[int, list] = defaultdict(list)
     if visible_events:
@@ -282,5 +326,6 @@ def home(request):
         'event_sections': sections,
         'team_choices': team_choices,
         'player_choices': player_choices,
+        'lock_summary': lock_summary,
     }
     return render(request, 'predictions/home.html', context)
