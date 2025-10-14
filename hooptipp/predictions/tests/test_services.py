@@ -31,6 +31,10 @@ class GetBdlApiKeyTests(TestCase):
         os.environ['BALLDONTLIE_API_KEY'] = 'another-token'
         self.assertEqual(services._get_bdl_api_key(), 'Bearer another-token')
 
+    def test_preserves_explicit_header_prefix(self) -> None:
+        os.environ['BALLDONTLIE_API_TOKEN'] = 'Token test-token'
+        self.assertEqual(services._get_bdl_api_key(), 'Token test-token')
+
 
 class GetTeamChoicesTests(TestCase):
     def setUp(self) -> None:
