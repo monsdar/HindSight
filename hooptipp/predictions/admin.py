@@ -46,6 +46,44 @@ class NbaTeamAdmin(admin.ModelAdmin):
         'division',
     )
     search_fields = ('name', 'abbreviation', 'city')
+    change_list_template = 'admin/predictions/nbateam/change_list.html'
+
+    def get_urls(self):
+        urls = super().get_urls()
+        custom_urls = [
+            path(
+                'sync/',
+                self.admin_site.admin_view(self.sync_teams_view),
+                name='predictions_nbateam_sync',
+            ),
+        ]
+        return custom_urls + urls
+
+    def sync_teams_view(self, request: HttpRequest):
+        if request.method != 'POST':
+            return HttpResponseNotAllowed(['POST'])
+
+        if not self.has_change_permission(request):
+            raise PermissionDenied
+
+        result = services.sync_teams()
+
+        if result.changed:
+            message = _(
+                'Team data updated. %(created)d created, %(updated)d updated, %(removed)d removed.'
+            ) % {
+                'created': result.created,
+                'updated': result.updated,
+                'removed': result.removed,
+            }
+            level = messages.SUCCESS
+        else:
+            message = _('Team sync completed with no changes.')
+            level = messages.INFO
+
+        self.message_user(request, message, level=level)
+        changelist_url = reverse('admin:predictions_nbateam_changelist')
+        return HttpResponseRedirect(changelist_url)
 
 
 @admin.register(NbaPlayer)
