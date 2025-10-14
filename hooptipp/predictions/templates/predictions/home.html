@@ -40,7 +40,11 @@
             </select>
           </div>
           <button type="submit" class="theme-accent-bg theme-accent-shadow inline-flex items-center gap-2 rounded-lg px-4 py-2 font-semibold transition">
-            Activate user
+            {% if active_user %}
+              Finish my Round
+            {% else %}
+              Activate user
+            {% endif %}
           </button>
         </form>
 
