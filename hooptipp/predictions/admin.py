@@ -6,19 +6,21 @@ from django.utils.translation import gettext_lazy as _
 
 from . import services
 from .models import (
+    EventOutcome,
     NbaPlayer,
     NbaTeam,
     PredictionEvent,
     PredictionOption,
     ScheduledGame,
     TipType,
+    UserEventScore,
     UserTip,
 )
 
 
 @admin.register(TipType)
 class TipTypeAdmin(admin.ModelAdmin):
-    list_display = ('name', 'category', 'deadline', 'is_active')
+    list_display = ('name', 'category', 'default_points', 'deadline', 'is_active')
     list_filter = ('category', 'is_active')
     prepopulated_fields = {'slug': ('name',)}
 
@@ -144,11 +146,28 @@ class PredictionOptionInline(admin.TabularInline):
     extra = 0
 
 
+@admin.register(PredictionOption)
+class PredictionOptionAdmin(admin.ModelAdmin):
+    list_display = (
+        'event',
+        'label',
+        'team',
+        'player',
+        'is_active',
+        'sort_order',
+    )
+    list_filter = ('event__tip_type', 'is_active')
+    search_fields = ('label', 'team__name', 'player__display_name')
+    autocomplete_fields = ('event', 'team', 'player')
+
+
 @admin.register(PredictionEvent)
 class PredictionEventAdmin(admin.ModelAdmin):
     list_display = (
         'name',
         'tip_type',
+        'points',
+        'is_bonus_event',
         'target_kind',
         'selection_mode',
         'opens_at',
@@ -157,12 +176,65 @@ class PredictionEventAdmin(admin.ModelAdmin):
     )
     list_filter = (
         'tip_type',
+        'is_bonus_event',
         'target_kind',
         'selection_mode',
         'is_active',
     )
     search_fields = ('name', 'description')
     inlines = [PredictionOptionInline]
+
+
+@admin.register(EventOutcome)
+class EventOutcomeAdmin(admin.ModelAdmin):
+    list_display = (
+        'prediction_event',
+        'winning_option',
+        'winning_team',
+        'winning_player',
+        'resolved_at',
+        'scored_at',
+    )
+    list_filter = ('prediction_event__tip_type',)
+    search_fields = (
+        'prediction_event__name',
+        'winning_option__label',
+        'winning_team__name',
+        'winning_player__display_name',
+    )
+    autocomplete_fields = (
+        'prediction_event',
+        'winning_option',
+        'winning_team',
+        'winning_player',
+        'resolved_by',
+    )
+    readonly_fields = ('scored_at', 'score_error')
+
+
+@admin.register(UserEventScore)
+class UserEventScoreAdmin(admin.ModelAdmin):
+    list_display = (
+        'user',
+        'prediction_event',
+        'points_awarded',
+        'base_points',
+        'lock_multiplier',
+        'is_lock_bonus',
+        'awarded_at',
+    )
+    list_filter = (
+        'prediction_event__tip_type',
+        'is_lock_bonus',
+    )
+    search_fields = (
+        'user__username',
+        'prediction_event__name',
+    )
+    autocomplete_fields = (
+        'user',
+        'prediction_event',
+    )
 
 
 @admin.register(UserTip)
