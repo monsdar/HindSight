@@ -3,6 +3,8 @@ from datetime import timedelta
 
 from django.contrib import messages
 from django.contrib.auth import get_user_model
+from django.db.models import Case, Count, F, IntegerField, Q, Sum, When
+from django.db.models.functions import Coalesce
 from django.shortcuts import redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
@@ -15,6 +17,7 @@ from .models import (
     PredictionEvent,
     TipType,
     UserPreferences,
+    UserEventScore,
     UserTip,
 )
 from .services import sync_weekly_games
@@ -275,8 +278,56 @@ def home(request):
 
     all_users = get_user_model().objects.order_by('username')
     lock_summary = None
+    scoreboard_summary = None
+    recent_scores: list[UserEventScore] = []
     if active_user:
         lock_summary = LockService(active_user).refresh()
+
+        score_queryset = (
+            UserEventScore.objects.filter(user=active_user)
+            .select_related('prediction_event__tip_type')
+            .order_by('-awarded_at', '-id')
+        )
+        recent_scores = list(score_queryset[:5])
+        for score in recent_scores:
+            score.lock_bonus_value = max(score.points_awarded - score.base_points, 0)
+
+        bonus_event_points_expr = Case(
+            When(prediction_event__is_bonus_event=True, then=F('base_points')),
+            default=0,
+            output_field=IntegerField(),
+        )
+        bonus_event_count_expr = Case(
+            When(prediction_event__is_bonus_event=True, then=1),
+            default=0,
+            output_field=IntegerField(),
+        )
+        lock_bonus_points_expr = Case(
+            When(is_lock_bonus=True, then=F('points_awarded') - F('base_points')),
+            default=0,
+            output_field=IntegerField(),
+        )
+        lock_bonus_count_expr = Case(
+            When(is_lock_bonus=True, then=1),
+            default=0,
+            output_field=IntegerField(),
+        )
+
+        aggregated = score_queryset.aggregate(
+            total_points=Coalesce(Sum('points_awarded'), 0),
+            base_points_total=Coalesce(Sum('base_points'), 0),
+            bonus_event_points=Coalesce(Sum(bonus_event_points_expr), 0),
+            bonus_event_count=Coalesce(Sum(bonus_event_count_expr), 0),
+            lock_bonus_points=Coalesce(Sum(lock_bonus_points_expr), 0),
+            lock_bonus_count=Coalesce(Sum(lock_bonus_count_expr), 0),
+            events_scored=Coalesce(Count('prediction_event', distinct=True), 0),
+        )
+
+        scoreboard_summary = {key: int(value) for key, value in aggregated.items()}
+        base_points_total = scoreboard_summary.pop('base_points_total', 0)
+        scoreboard_summary['base_points'] = base_points_total
+        bonus_event_points_total = scoreboard_summary.get('bonus_event_points', 0)
+        scoreboard_summary['standard_points'] = max(base_points_total - bonus_event_points_total, 0)
 
     event_tip_users: dict[int, list] = defaultdict(list)
     if visible_events:
@@ -327,5 +378,130 @@ def home(request):
         'team_choices': team_choices,
         'player_choices': player_choices,
         'lock_summary': lock_summary,
+        'scoreboard_summary': scoreboard_summary,
+        'recent_scores': recent_scores,
     }
     return render(request, 'predictions/home.html', context)
+
+
+@require_http_methods(["GET"])
+def leaderboard(request):
+    User = get_user_model()
+
+    tip_types = list(TipType.objects.filter(is_active=True).order_by('name'))
+    tip_type_slug = request.GET.get('tip_type', '').strip()
+    selected_segment = request.GET.get('segment', '').strip()
+    selected_sort = request.GET.get('sort', 'total').strip().lower()
+
+    order_map = {
+        'total': ('-total_points', '-event_count', 'username'),
+        'bonus': ('-bonus_event_points', '-total_points', 'username'),
+        'locks': ('-lock_bonus_points', '-total_points', 'username'),
+        'events': ('-event_count', '-total_points', 'username'),
+    }
+    if selected_sort not in order_map:
+        selected_sort = 'total'
+
+    filter_condition = Q()
+    if tip_type_slug:
+        filter_condition &= Q(usereventscore__prediction_event__tip_type__slug=tip_type_slug)
+    if selected_segment:
+        filter_condition &= Q(usereventscore__prediction_event__tip_type__category=selected_segment)
+
+    user_queryset = User.objects.filter(usereventscore__isnull=False)
+
+    bonus_event_points_expr = Case(
+        When(
+            usereventscore__prediction_event__is_bonus_event=True,
+            then=F('usereventscore__base_points'),
+        ),
+        default=0,
+        output_field=IntegerField(),
+    )
+    bonus_event_count_expr = Case(
+        When(usereventscore__prediction_event__is_bonus_event=True, then=1),
+        default=0,
+        output_field=IntegerField(),
+    )
+    lock_bonus_points_expr = Case(
+        When(
+            usereventscore__is_lock_bonus=True,
+            then=F('usereventscore__points_awarded') - F('usereventscore__base_points'),
+        ),
+        default=0,
+        output_field=IntegerField(),
+    )
+    lock_bonus_count_expr = Case(
+        When(usereventscore__is_lock_bonus=True, then=1),
+        default=0,
+        output_field=IntegerField(),
+    )
+
+    annotated_users = user_queryset.annotate(
+        total_points=Coalesce(Sum('usereventscore__points_awarded', filter=filter_condition), 0),
+        base_points=Coalesce(Sum('usereventscore__base_points', filter=filter_condition), 0),
+        bonus_event_points=Coalesce(Sum(bonus_event_points_expr, filter=filter_condition), 0),
+        bonus_event_count=Coalesce(Sum(bonus_event_count_expr, filter=filter_condition), 0),
+        lock_bonus_points=Coalesce(Sum(lock_bonus_points_expr, filter=filter_condition), 0),
+        lock_bonus_count=Coalesce(Sum(lock_bonus_count_expr, filter=filter_condition), 0),
+        event_count=Coalesce(
+            Count('usereventscore__prediction_event', distinct=True, filter=filter_condition),
+            0,
+        ),
+    )
+
+    score_filters_applied = bool(tip_type_slug or selected_segment)
+    if score_filters_applied:
+        annotated_users = annotated_users.filter(event_count__gt=0)
+
+    order_fields = order_map[selected_sort]
+    leaderboard_qs = annotated_users.order_by(*order_fields)
+
+    leaderboard_rows = list(leaderboard_qs)
+    user_ids = [row.id for row in leaderboard_rows]
+    preferences_map = {
+        pref.user_id: pref
+        for pref in UserPreferences.objects.filter(user_id__in=user_ids)
+    }
+
+    for index, row in enumerate(leaderboard_rows, start=1):
+        pref = preferences_map.get(row.id)
+        nickname = ''
+        if pref and pref.nickname:
+            nickname = pref.nickname.strip()
+        row.display_name = nickname or row.username
+        row.total_points = int(row.total_points)
+        row.base_points = int(row.base_points)
+        row.bonus_event_points = int(row.bonus_event_points)
+        row.lock_bonus_points = int(row.lock_bonus_points)
+        row.event_count = int(row.event_count)
+        row.bonus_event_count = int(row.bonus_event_count)
+        row.lock_bonus_count = int(row.lock_bonus_count)
+        row.standard_points = max(row.base_points - row.bonus_event_points, 0)
+        row.rank = index
+
+    sort_options = [
+        ('total', 'Total points'),
+        ('bonus', 'Bonus events'),
+        ('locks', 'Lock bonuses'),
+        ('events', 'Events scored'),
+    ]
+
+    selected_tip_type_obj = next(
+        (tip_type for tip_type in tip_types if tip_type.slug == tip_type_slug),
+        None,
+    )
+
+    context = {
+        'leaderboard_rows': leaderboard_rows,
+        'tip_types': tip_types,
+        'segments': TipType.TipCategory.choices,
+        'selected_tip_type': tip_type_slug,
+        'selected_tip_type_obj': selected_tip_type_obj,
+        'selected_segment': selected_segment,
+        'sort_options': sort_options,
+        'selected_sort': selected_sort,
+        'score_filters_applied': score_filters_applied,
+        'result_count': len(leaderboard_rows),
+    }
+    return render(request, 'predictions/leaderboard.html', context)

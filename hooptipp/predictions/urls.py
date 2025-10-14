@@ -6,4 +6,5 @@ app_name = 'predictions'
 
 urlpatterns = [
     path('', views.home, name='home'),
+    path('leaderboard/', views.leaderboard, name='leaderboard'),
 ]
