@@ -221,10 +221,41 @@ class HomeViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         weekday_slots = response.context['weekday_slots']
         self.assertEqual(len(weekday_slots), 7)
-        first_day_events = weekday_slots[0]['games']
-        second_day_events = weekday_slots[1]['games']
+        first_day_events = weekday_slots[0]['events']
+        second_day_events = weekday_slots[1]['events']
         self.assertEqual([event.id for event in first_day_events], [self.event.id])
         self.assertEqual([event.id for event in second_day_events], [additional_event.id])
+
+    def test_weekday_slots_excludes_events_outside_range(self) -> None:
+        far_future_deadline = timezone.now() + timedelta(days=8)
+        distant_event = PredictionEvent.objects.create(
+            tip_type=self.tip_type,
+            name='Future matchup',
+            description='Far away showdown',
+            target_kind=PredictionEvent.TargetKind.TEAM,
+            selection_mode=PredictionEvent.SelectionMode.CURATED,
+            opens_at=timezone.now() - timedelta(days=1),
+            deadline=far_future_deadline,
+            reveal_at=timezone.now() - timedelta(days=1),
+            is_active=True,
+            sort_order=5,
+        )
+        PredictionOption.objects.create(
+            event=distant_event,
+            label='Option A',
+            sort_order=1,
+        )
+
+        with mock.patch(
+            'hooptipp.predictions.views.sync_weekly_games',
+            return_value=(self.tip_type, [self.event], self.game.game_date.date()),
+        ):
+            response = self.client.get(reverse('predictions:home'))
+
+        self.assertEqual(response.status_code, 200)
+        weekday_slots = response.context['weekday_slots']
+        included_ids = [event.id for slot in weekday_slots for event in slot['events']]
+        self.assertNotIn(distant_event.id, included_ids)
 
     def test_update_preferences_updates_record(self) -> None:
         session = self.client.session

@@ -60,7 +60,7 @@ def _apply_display_metadata(user, display_name_map: dict[int, str]) -> None:
 
 @require_http_methods(["GET", "POST"])
 def home(request):
-    weekly_tip_type, weekly_events, week_start = sync_weekly_games()
+    sync_weekly_games()
     active_user = _get_active_user(request)
     preferences = None
     preferences_form = None
@@ -98,30 +98,6 @@ def home(request):
                 continue
             seen_event_ids.add(event.id)
             visible_events.append(event)
-
-    weekly_visible_events: list[PredictionEvent] = []
-    if weekly_tip_type:
-        for section in sections:
-            if section['tip_type'].pk == weekly_tip_type.pk:
-                weekly_visible_events = section['events']
-                break
-        if not weekly_visible_events:
-            weekly_visible_events = [
-                event
-                for event in weekly_events
-                if event.is_active
-                and event.opens_at <= now
-                and event.deadline >= now
-            ]
-            if weekly_visible_events:
-                sections.insert(0, {
-                    'tip_type': weekly_tip_type,
-                    'events': weekly_visible_events,
-                })
-                for event in weekly_visible_events:
-                    if event.id not in seen_event_ids:
-                        visible_events.append(event)
-                        seen_event_ids.add(event.id)
 
     requires_team_choices = any(
         event.selection_mode == PredictionEvent.SelectionMode.ANY
@@ -376,24 +352,43 @@ def home(request):
             event_tip_users[tip.prediction_event_id].append(tip.user)
             tip_user_objects.append(tip.user)
 
-    if week_start is None and weekly_visible_events:
-        week_start = min(
-            timezone.localdate(event.scheduled_game.game_date)
-            for event in weekly_visible_events
-            if event.scheduled_game
+    upcoming_range_start = timezone.localdate(now)
+    upcoming_range_end = upcoming_range_start + timedelta(days=6)
+
+    def event_sort_key(event: PredictionEvent) -> tuple:
+        return (
+            event.deadline,
+            event.sort_order,
+            event.name.lower(),
         )
 
+    upcoming_events = [
+        event
+        for event in visible_events
+        if event.deadline is not None
+        and upcoming_range_start
+        <= timezone.localdate(event.deadline)
+        <= upcoming_range_end
+    ]
+
+    upcoming_events.sort(key=event_sort_key)
+
+    events_by_day: dict = defaultdict(list)
+    for event in upcoming_events:
+        deadline_date = timezone.localdate(event.deadline)
+        events_by_day[deadline_date].append(event)
+
+    for event_list in events_by_day.values():
+        event_list.sort(key=event_sort_key)
+
     weekday_slots = []
-    if week_start:
-        for offset in range(7):
-            slot_date = week_start + timedelta(days=offset)
-            day_games = [
-                event
-                for event in weekly_visible_events
-                if event.scheduled_game
-                and timezone.localdate(event.scheduled_game.game_date) == slot_date
-            ]
-            weekday_slots.append({'date': slot_date, 'games': day_games})
+    for offset in range(7):
+        slot_date = upcoming_range_start + timedelta(days=offset)
+        day_events = events_by_day.get(slot_date, [])
+        weekday_slots.append({'date': slot_date, 'events': day_events})
+
+    week_start = upcoming_range_start
+    week_end = upcoming_range_end
 
     if preferences_form is None and preferences is not None:
         preferences_form = UserPreferencesForm(instance=preferences)
@@ -419,8 +414,6 @@ def home(request):
     _apply_display_metadata(active_user, display_name_map)
 
     context = {
-        'weekly_tip_type': weekly_tip_type,
-        'weekly_events': weekly_visible_events,
         'active_user': active_user,
         'users': all_users,
         'user_tips': user_tips,
@@ -428,6 +421,7 @@ def home(request):
         'now': now,
         'weekday_slots': weekday_slots,
         'week_start': week_start,
+        'week_end': week_end,
         'user_preferences': preferences,
         'preferences_form': preferences_form,
         'event_sections': sections,
