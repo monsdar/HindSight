@@ -42,11 +42,16 @@
             <select id="user_id" name="user_id" class="theme-accent-outline mt-2 w-64 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100 focus:outline-none">
               <option value="">No active user</option>
               {% for user in users %}
-                <option value="{{ user.id }}" {% if active_user and user.id == active_user.id %}selected{% endif %}>{{ user.username }}</option>
+                <option value="{{ user.id }}" {% if active_user and user.id == active_user.id %}selected{% endif %}>{{ user.display_name }}{% if user.display_name != user.username %} (@{{ user.username }}){% endif %}</option>
               {% endfor %}
             </select>
           </div>
-          <button type="submit" class="theme-accent-bg theme-accent-shadow inline-flex items-center gap-2 rounded-lg px-4 py-2 font-semibold transition">
+          <button
+            type="submit"
+            name="active_user_action"
+            value="{% if active_user %}finish{% else %}activate{% endif %}"
+            class="theme-accent-bg theme-accent-shadow inline-flex items-center gap-2 rounded-lg px-4 py-2 font-semibold transition"
+          >
             {% if active_user %}
               Finish my Round
             {% else %}
@@ -157,10 +162,13 @@
               {% if scoreboard_summary and scoreboard_summary.events_scored %}
                 <p class="text-sm text-slate-400">
                   {{ scoreboard_summary.events_scored }} scored event{{ scoreboard_summary.events_scored|pluralize }} for
-                  <span class="font-semibold text-slate-100">{{ active_user.username }}</span>.
+                  <span class="font-semibold text-slate-100">{{ active_user.display_name }}</span>
+                  {% if active_user.display_name != active_user.username %}
+                    <span class="ml-1 text-xs font-semibold text-slate-500">@{{ active_user.username }}</span>
+                  {% endif %}.
                 </p>
               {% else %}
-                <p class="text-sm text-slate-400">No events have been scored for {{ active_user.username }} yet.</p>
+                <p class="text-sm text-slate-400">No events have been scored for {{ active_user.display_name }}{% if active_user.display_name != active_user.username %} (@{{ active_user.username }}){% endif %} yet.</p>
               {% endif %}
             </div>
             <a
@@ -302,10 +310,10 @@
                                     {% for pick_user in pick_users %}
                                       <span
                                         class="theme-accent-pill inline-flex h-6 w-6 items-center justify-center rounded-full border font-semibold"
-                                        title="{{ pick_user.username }}"
-                                        aria-label="{{ pick_user.username }}"
+                                        title="{{ pick_user.display_name }}{% if pick_user.display_name != pick_user.username %} (@{{ pick_user.username }}){% endif %}"
+                                        aria-label="{{ pick_user.display_name }}{% if pick_user.display_name != pick_user.username %} (@{{ pick_user.username }}){% endif %}"
                                       >
-                                        {{ pick_user.username|slice:':1'|upper }}
+                                        {{ pick_user.display_initial }}
                                       </span>
                                     {% endfor %}
                                   </div>
@@ -415,10 +423,10 @@
                             {% for pick_user in pick_users %}
                               <span
                                 class="theme-accent-pill inline-flex h-6 w-6 items-center justify-center rounded-full border font-semibold"
-                                title="{{ pick_user.username }}"
-                                aria-label="{{ pick_user.username }}"
+                                title="{{ pick_user.display_name }}{% if pick_user.display_name != pick_user.username %} (@{{ pick_user.username }}){% endif %}"
+                                aria-label="{{ pick_user.display_name }}{% if pick_user.display_name != pick_user.username %} (@{{ pick_user.username }}){% endif %}"
                               >
-                                {{ pick_user.username|slice:':1'|upper }}
+                                {{ pick_user.display_initial }}
                               </span>
                             {% endfor %}
                           </div>
@@ -514,7 +522,7 @@
           <form id="tips-form" method="post" class="theme-accent-border theme-accent-surface mt-8 rounded-2xl border p-5 backdrop-blur">
             {% csrf_token %}
             <input type="hidden" name="save_tips" value="1" />
-            <p class="mb-4 text-sm theme-accent-muted">Picks are automatically stored for <span class="font-semibold text-slate-100">{{ active_user.username }}</span>.</p>
+            <p class="mb-4 text-sm theme-accent-muted">Picks are automatically stored for <span class="font-semibold text-slate-100">{{ active_user.display_name }}</span>{% if active_user.display_name != active_user.username %}<span class="ml-1 text-xs text-slate-400">@{{ active_user.username }}</span>{% endif %}.</p>
             {% if lock_summary %}
               <div class="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-xs text-slate-300">
                 <span class="font-semibold text-slate-100">Locks remaining: {{ lock_summary.available }} / {{ lock_summary.total }}</span>

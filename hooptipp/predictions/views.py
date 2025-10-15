@@ -1,5 +1,6 @@
 from collections import defaultdict
 from datetime import timedelta
+from typing import Iterable
 
 from django.contrib import messages
 from django.contrib.auth import get_user_model
@@ -34,6 +35,27 @@ def _get_active_user(request):
     except User.DoesNotExist:
         request.session.pop('active_user_id', None)
         return None
+
+
+def _build_display_name_map(user_ids: Iterable[int]) -> dict[int, str]:
+    unique_ids = {user_id for user_id in user_ids if user_id}
+    if not unique_ids:
+        return {}
+
+    nickname_map: dict[int, str] = {}
+    for preferences in UserPreferences.objects.filter(user_id__in=unique_ids):
+        nickname = (preferences.nickname or '').strip()
+        if nickname:
+            nickname_map[preferences.user_id] = nickname
+    return nickname_map
+
+
+def _apply_display_metadata(user, display_name_map: dict[int, str]) -> None:
+    if user is None:
+        return
+    display_name = display_name_map.get(user.id, user.username)
+    user.display_name = display_name
+    user.display_initial = display_name[:1].upper() if display_name else ''
 
 
 @require_http_methods(["GET", "POST"])
@@ -128,6 +150,17 @@ def home(request):
     if request.method == 'POST':
         if 'set_active_user' in request.POST:
             user_id = request.POST.get('user_id')
+            action = request.POST.get('active_user_action')
+
+            if (
+                action == 'finish'
+                and active_user is not None
+                and user_id == str(active_user.id)
+            ):
+                request.session.pop('active_user_id', None)
+                messages.success(request, 'Active user cleared successfully.')
+                return redirect('predictions:home')
+
             if user_id:
                 request.session['active_user_id'] = int(user_id)
                 messages.success(request, 'Active user selected successfully.')
@@ -277,7 +310,7 @@ def home(request):
                 )
             return redirect('predictions:home')
 
-    all_users = get_user_model().objects.order_by('username')
+    all_users = list(get_user_model().objects.order_by('username'))
     lock_summary = None
     scoreboard_summary = None
     recent_scores: list[UserEventScore] = []
@@ -331,6 +364,7 @@ def home(request):
         scoreboard_summary['standard_points'] = max(base_points_total - bonus_event_points_total, 0)
 
     event_tip_users: dict[int, list] = defaultdict(list)
+    tip_user_objects: list = []
     if visible_events:
         for tip in (
             UserTip.objects.filter(
@@ -340,6 +374,7 @@ def home(request):
             .order_by('user__username')
         ):
             event_tip_users[tip.prediction_event_id].append(tip.user)
+            tip_user_objects.append(tip.user)
 
     if week_start is None and weekly_visible_events:
         week_start = min(
@@ -370,6 +405,18 @@ def home(request):
         selected_theme_key = preferences.theme
 
     active_theme_palette = get_theme_palette(selected_theme_key)
+
+    display_name_ids: list[int] = [user.id for user in all_users]
+    if active_user:
+        display_name_ids.append(active_user.id)
+    display_name_ids.extend(user.id for user in tip_user_objects)
+    display_name_map = _build_display_name_map(display_name_ids)
+
+    for user in all_users:
+        _apply_display_metadata(user, display_name_map)
+    for user in tip_user_objects:
+        _apply_display_metadata(user, display_name_map)
+    _apply_display_metadata(active_user, display_name_map)
 
     context = {
         'weekly_tip_type': weekly_tip_type,
@@ -469,17 +516,10 @@ def leaderboard(request):
 
     leaderboard_rows = list(leaderboard_qs)
     user_ids = [row.id for row in leaderboard_rows]
-    preferences_map = {
-        pref.user_id: pref
-        for pref in UserPreferences.objects.filter(user_id__in=user_ids)
-    }
+    display_name_map = _build_display_name_map(user_ids)
 
     for index, row in enumerate(leaderboard_rows, start=1):
-        pref = preferences_map.get(row.id)
-        nickname = ''
-        if pref and pref.nickname:
-            nickname = pref.nickname.strip()
-        row.display_name = nickname or row.username
+        row.display_name = display_name_map.get(row.id, row.username)
         row.total_points = int(row.total_points)
         row.base_points = int(row.base_points)
         row.bonus_event_points = int(row.bonus_event_points)

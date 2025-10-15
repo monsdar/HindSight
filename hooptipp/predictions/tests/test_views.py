@@ -111,11 +111,52 @@ class HomeViewTests(TestCase):
 
         event_tip_users = response.context['event_tip_users']
         self.assertIn(self.event.id, event_tip_users)
-        usernames = [user.username for user in event_tip_users[self.event.id]]
+        pick_users = event_tip_users[self.event.id]
+        usernames = [user.username for user in pick_users]
         self.assertEqual(usernames, ['alice', 'bob'])
+        self.assertEqual([user.display_name for user in pick_users], ['alice', 'bob'])
+        self.assertEqual([user.display_initial for user in pick_users], ['A', 'B'])
+
+        users_list = response.context['users']
+        self.assertGreaterEqual(len(users_list), 2)
+        self.assertEqual(users_list[0].display_name, 'alice')
+        self.assertEqual(users_list[0].display_initial, 'A')
 
         self.assertContains(response, 'title="alice"')
         self.assertContains(response, 'title="bob"')
+
+    def test_home_view_displays_nickname_everywhere(self) -> None:
+        UserPreferences.objects.create(user=self.alice, nickname='Ace')
+        UserPreferences.objects.create(user=self.bob, nickname='Buckets')
+
+        session = self.client.session
+        session['active_user_id'] = self.alice.id
+        session.save()
+
+        with mock.patch(
+            'hooptipp.predictions.views.sync_weekly_games',
+            return_value=(self.tip_type, [self.event], self.game.game_date.date()),
+        ):
+            response = self.client.get(reverse('predictions:home'))
+
+        self.assertEqual(response.status_code, 200)
+
+        self.assertContains(response, 'Ace (@alice)')
+        self.assertContains(response, 'Buckets (@bob)')
+        self.assertContains(response, 'No events have been scored for Ace (@alice) yet.')
+        self.assertContains(
+            response,
+            'Picks are automatically stored for <span class="font-semibold text-slate-100">Ace</span><span class="ml-1 text-xs text-slate-400">@alice</span>.',
+        )
+        self.assertContains(response, 'title="Buckets (@bob)"')
+
+        event_tip_users = response.context['event_tip_users'][self.event.id]
+        self.assertEqual([user.display_name for user in event_tip_users], ['Ace', 'Buckets'])
+        self.assertEqual([user.display_initial for user in event_tip_users], ['A', 'B'])
+
+        users_list = response.context['users']
+        self.assertEqual(users_list[0].display_name, 'Ace')
+        self.assertEqual(users_list[0].display_initial, 'A')
 
     def test_active_user_tip_renders_last_updated_timestamp(self) -> None:
         session = self.client.session
@@ -261,6 +302,48 @@ class HomeViewTests(TestCase):
         form = response.context['preferences_form']
         self.assertTrue(form.errors)
         self.assertIn('theme', form.errors)
+
+    def test_finish_round_clears_active_user(self) -> None:
+        session = self.client.session
+        session['active_user_id'] = self.alice.id
+        session.save()
+
+        with mock.patch(
+            'hooptipp.predictions.views.sync_weekly_games',
+            return_value=(self.tip_type, [self.event], self.game.game_date.date()),
+        ):
+            response = self.client.post(
+                reverse('predictions:home'),
+                {
+                    'set_active_user': '1',
+                    'user_id': str(self.alice.id),
+                    'active_user_action': 'finish',
+                },
+            )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIsNone(self.client.session.get('active_user_id'))
+
+    def test_finish_round_allows_switching_users(self) -> None:
+        session = self.client.session
+        session['active_user_id'] = self.alice.id
+        session.save()
+
+        with mock.patch(
+            'hooptipp.predictions.views.sync_weekly_games',
+            return_value=(self.tip_type, [self.event], self.game.game_date.date()),
+        ):
+            response = self.client.post(
+                reverse('predictions:home'),
+                {
+                    'set_active_user': '1',
+                    'user_id': str(self.bob.id),
+                    'active_user_action': 'finish',
+                },
+            )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(self.client.session.get('active_user_id'), self.bob.id)
 
     def test_save_tips_allows_lock_when_available(self) -> None:
         session = self.client.session
