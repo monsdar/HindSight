@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from django.conf import settings
-from django.core.validators import RegexValidator
 from django.db import models
 from django.utils import timezone
+
+from .theme_palettes import DEFAULT_THEME_KEY, THEME_CHOICES, get_theme_palette
 
 
 class TipType(models.Model):
@@ -371,11 +372,6 @@ class UserEventScore(models.Model):
 
 
 class UserPreferences(models.Model):
-    HEX_COLOR_VALIDATOR = RegexValidator(
-        regex=r"^#([0-9a-fA-F]{6})$",
-        message="Enter a color in hexadecimal format, e.g. #1A2B3C.",
-    )
-
     user = models.OneToOneField(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
@@ -384,15 +380,10 @@ class UserPreferences(models.Model):
     nickname = models.CharField(max_length=50, blank=True)
     favorite_team_id = models.PositiveIntegerField(blank=True, null=True)
     favorite_player_id = models.PositiveIntegerField(blank=True, null=True)
-    theme_primary_color = models.CharField(
-        max_length=7,
-        default="#f59e0b",
-        validators=[HEX_COLOR_VALIDATOR],
-    )
-    theme_secondary_color = models.CharField(
-        max_length=7,
-        default="#0f172a",
-        validators=[HEX_COLOR_VALIDATOR],
+    theme = models.CharField(
+        max_length=32,
+        choices=THEME_CHOICES,
+        default=DEFAULT_THEME_KEY,
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -433,7 +424,4 @@ class UserPreferences(models.Model):
         return player_lookup.get(self.favorite_player_id, "")
 
     def theme_palette(self) -> dict[str, str]:
-        return {
-            "primary": self.theme_primary_color or "#f59e0b",
-            "secondary": self.theme_secondary_color or "#0f172a",
-        }
+        return get_theme_palette(self.theme)
