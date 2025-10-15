@@ -266,6 +266,48 @@ class HomeViewTests(TestCase):
         self.assertIn('theme_primary_color', form.errors)
         self.assertIn('theme_secondary_color', form.errors)
 
+    def test_finish_round_clears_active_user(self) -> None:
+        session = self.client.session
+        session['active_user_id'] = self.alice.id
+        session.save()
+
+        with mock.patch(
+            'hooptipp.predictions.views.sync_weekly_games',
+            return_value=(self.tip_type, [self.event], self.game.game_date.date()),
+        ):
+            response = self.client.post(
+                reverse('predictions:home'),
+                {
+                    'set_active_user': '1',
+                    'user_id': str(self.alice.id),
+                    'active_user_action': 'finish',
+                },
+            )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIsNone(self.client.session.get('active_user_id'))
+
+    def test_finish_round_allows_switching_users(self) -> None:
+        session = self.client.session
+        session['active_user_id'] = self.alice.id
+        session.save()
+
+        with mock.patch(
+            'hooptipp.predictions.views.sync_weekly_games',
+            return_value=(self.tip_type, [self.event], self.game.game_date.date()),
+        ):
+            response = self.client.post(
+                reverse('predictions:home'),
+                {
+                    'set_active_user': '1',
+                    'user_id': str(self.bob.id),
+                    'active_user_action': 'finish',
+                },
+            )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(self.client.session.get('active_user_id'), self.bob.id)
+
     def test_save_tips_allows_lock_when_available(self) -> None:
         session = self.client.session
         session['active_user_id'] = self.alice.id

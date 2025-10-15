@@ -46,7 +46,12 @@
               {% endfor %}
             </select>
           </div>
-          <button type="submit" class="theme-accent-bg theme-accent-shadow inline-flex items-center gap-2 rounded-lg px-4 py-2 font-semibold transition">
+          <button
+            type="submit"
+            name="active_user_action"
+            value="{% if active_user %}finish{% else %}activate{% endif %}"
+            class="theme-accent-bg theme-accent-shadow inline-flex items-center gap-2 rounded-lg px-4 py-2 font-semibold transition"
+          >
             {% if active_user %}
               Finish my Round
             {% else %}

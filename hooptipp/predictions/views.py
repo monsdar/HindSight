@@ -127,6 +127,17 @@ def home(request):
     if request.method == 'POST':
         if 'set_active_user' in request.POST:
             user_id = request.POST.get('user_id')
+            action = request.POST.get('active_user_action')
+
+            if (
+                action == 'finish'
+                and active_user is not None
+                and user_id == str(active_user.id)
+            ):
+                request.session.pop('active_user_id', None)
+                messages.success(request, 'Active user cleared successfully.')
+                return redirect('predictions:home')
+
             if user_id:
                 request.session['active_user_id'] = int(user_id)
                 messages.success(request, 'Active user selected successfully.')
