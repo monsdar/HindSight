@@ -1,9 +1,10 @@
 from datetime import timedelta
+import uuid
 from unittest import mock
 
 from django.contrib.auth import get_user_model
 from django.contrib.messages import get_messages
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
@@ -175,3 +176,51 @@ class EventOutcomeAdminScoreTests(TestCase):
 
         mock_score.assert_called_once_with(self.outcome, force=True)
         self.assertEqual(response.status_code, 200)
+
+
+@override_settings(ALLOWED_HOSTS=['testserver'])
+class EventOutcomeAdminTemplateTests(TestCase):
+    def setUp(self) -> None:
+        self.user = get_user_model().objects.create_superuser(
+            username='admin',
+            email='admin@example.com',
+            password='process-events',
+        )
+        self.client.force_login(self.user)
+        super().setUp()
+
+    def _create_event_outcome(self, **extra_fields: object) -> EventOutcome:
+        now = timezone.now()
+        tip_type = TipType.objects.create(
+            name='Test Tip Type',
+            slug=f'test-tip-{uuid.uuid4()}',
+            deadline=now + timedelta(days=7),
+        )
+        event = PredictionEvent.objects.create(
+            tip_type=tip_type,
+            name=f'Event {uuid.uuid4()}',
+            opens_at=now - timedelta(days=2),
+            deadline=now - timedelta(days=1),
+        )
+        return EventOutcome.objects.create(
+            prediction_event=event,
+            **extra_fields,
+        )
+
+    def test_change_form_includes_process_event_button(self) -> None:
+        outcome = self._create_event_outcome()
+        url = reverse('admin:predictions_eventoutcome_change', args=[outcome.pk])
+
+        response = self.client.get(url)
+
+        self.assertContains(response, 'Process event')
+        self.assertNotContains(response, 'Re-score event')
+
+    def test_change_form_includes_re_score_button_when_scored(self) -> None:
+        outcome = self._create_event_outcome(scored_at=timezone.now())
+        url = reverse('admin:predictions_eventoutcome_change', args=[outcome.pk])
+
+        response = self.client.get(url)
+
+        self.assertContains(response, 'Process event')
+        self.assertContains(response, 'Re-score event')
