@@ -153,7 +153,7 @@
         <section class="space-y-4 rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-lg shadow-slate-900/30">
           <header class="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <h2 class="text-xl font-semibold text-slate-100">Scoring overview</h2>
+              <h2 class="text-xl font-semibold theme-accent-text">Scoring overview</h2>
               {% if scoreboard_summary and scoreboard_summary.events_scored %}
                 <p class="text-sm text-slate-400">
                   {{ scoreboard_summary.events_scored }} scored event{{ scoreboard_summary.events_scored|pluralize }} for
@@ -165,7 +165,7 @@
             </div>
             <a
               href="{% url 'predictions:leaderboard' %}"
-              class="text-sm font-semibold text-amber-400 transition hover:text-amber-300"
+              class="theme-accent-text text-sm font-semibold transition hover:opacity-80"
             >
               View leaderboard &rarr;
             </a>
@@ -173,26 +173,26 @@
 
           {% if scoreboard_summary %}
             <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-              <div class="rounded-xl border border-slate-800 bg-slate-950 p-4">
-                <p class="text-xs uppercase tracking-wide text-slate-500">Total points</p>
-                <p class="mt-2 text-3xl font-bold text-slate-100">{{ scoreboard_summary.total_points }} pts</p>
+              <div class="theme-accent-border theme-accent-surface rounded-xl border bg-slate-950 p-4">
+                <p class="text-xs uppercase tracking-wide theme-accent-muted">Total points</p>
+                <p class="mt-2 text-3xl font-bold theme-accent-text">{{ scoreboard_summary.total_points }} pts</p>
               </div>
-              <div class="rounded-xl border border-slate-800 bg-slate-950 p-4">
+              <div class="theme-accent-border rounded-xl border border-slate-800 bg-slate-950 p-4">
                 <p class="text-xs uppercase tracking-wide text-slate-500">Base picks</p>
-                <p class="mt-2 text-2xl font-semibold text-slate-100">{{ scoreboard_summary.standard_points }} pts</p>
-                <p class="mt-1 text-xs text-slate-500">From regular events</p>
+                <p class="mt-2 text-2xl font-semibold theme-accent-text">{{ scoreboard_summary.standard_points }} pts</p>
+                <p class="mt-1 text-xs theme-accent-muted">From regular events</p>
               </div>
-              <div class="rounded-xl border border-slate-800 bg-slate-950 p-4">
+              <div class="theme-accent-border rounded-xl border border-slate-800 bg-slate-950 p-4">
                 <p class="text-xs uppercase tracking-wide text-slate-500">Bonus events</p>
-                <p class="mt-2 text-2xl font-semibold text-amber-300">{{ scoreboard_summary.bonus_event_points }} pts</p>
-                <p class="mt-1 text-xs text-slate-500">
+                <p class="mt-2 text-2xl font-semibold theme-accent-text">{{ scoreboard_summary.bonus_event_points }} pts</p>
+                <p class="mt-1 text-xs theme-accent-muted">
                   {{ scoreboard_summary.bonus_event_count }} bonus event{{ scoreboard_summary.bonus_event_count|pluralize }}
                 </p>
               </div>
-              <div class="rounded-xl border border-slate-800 bg-slate-950 p-4">
+              <div class="theme-accent-border rounded-xl border border-slate-800 bg-slate-950 p-4">
                 <p class="text-xs uppercase tracking-wide text-slate-500">Lock bonuses</p>
-                <p class="mt-2 text-2xl font-semibold text-slate-100">{{ scoreboard_summary.lock_bonus_points }} pts</p>
-                <p class="mt-1 text-xs text-slate-500">
+                <p class="mt-2 text-2xl font-semibold theme-accent-text">{{ scoreboard_summary.lock_bonus_points }} pts</p>
+                <p class="mt-1 text-xs theme-accent-muted">
                   {{ scoreboard_summary.lock_bonus_count }} lock bonus{{ scoreboard_summary.lock_bonus_count|pluralize }}
                 </p>
               </div>
