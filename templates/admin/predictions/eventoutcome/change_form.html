@@ -1,0 +1,24 @@
+{% extends "admin/change_form.html" %}
+{% load i18n %}
+
+{% block object-tools-items %}
+    {% if change and not is_popup %}
+        <li>
+            <form action="{% url 'admin:predictions_eventoutcome_score' original.pk %}" method="post" class="score-event-outcome-form">
+                {% csrf_token %}
+                <input type="hidden" name="force" value="0">
+                <button type="submit" class="button">{% trans "Process predictions" %}</button>
+            </form>
+        </li>
+        {% if original.scored_at %}
+            <li>
+                <form action="{% url 'admin:predictions_eventoutcome_score' original.pk %}" method="post" class="score-event-outcome-form" onsubmit="return confirm('{% trans "This will re-score the event and replace existing results. Continue?" %}');">
+                    {% csrf_token %}
+                    <input type="hidden" name="force" value="1">
+                    <button type="submit" class="button">{% trans "Re-score predictions" %}</button>
+                </form>
+            </li>
+        {% endif %}
+    {% endif %}
+    {{ block.super }}
+{% endblock %}

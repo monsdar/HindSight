@@ -1,10 +1,10 @@
 from django.contrib import admin, messages
 from django.core.exceptions import PermissionDenied
-from django.http import HttpRequest, HttpResponseRedirect, HttpResponseNotAllowed
+from django.http import Http404, HttpRequest, HttpResponseRedirect, HttpResponseNotAllowed
 from django.urls import path, reverse
 from django.utils.translation import gettext_lazy as _
 
-from . import services
+from . import scoring_service, services
 from .models import (
     EventOutcome,
     NbaPlayer,
@@ -187,6 +187,7 @@ class PredictionEventAdmin(admin.ModelAdmin):
 
 @admin.register(EventOutcome)
 class EventOutcomeAdmin(admin.ModelAdmin):
+    change_form_template = 'admin/predictions/eventoutcome/change_form.html'
     list_display = (
         'prediction_event',
         'winning_option',
@@ -210,6 +211,73 @@ class EventOutcomeAdmin(admin.ModelAdmin):
         'resolved_by',
     )
     readonly_fields = ('scored_at', 'score_error')
+
+    def get_urls(self):
+        urls = super().get_urls()
+        custom_urls = [
+            path(
+                '<path:object_id>/score/',
+                self.admin_site.admin_view(self.score_event_view),
+                name='predictions_eventoutcome_score',
+            ),
+        ]
+        return custom_urls + urls
+
+    def score_event_view(self, request: HttpRequest, object_id: str) -> HttpResponseRedirect:
+        if request.method != 'POST':
+            return HttpResponseNotAllowed(['POST'])
+
+        outcome = self.get_object(request, object_id)
+        if outcome is None:
+            raise Http404("Event outcome does not exist.")
+
+        if not self.has_change_permission(request, outcome):
+            raise PermissionDenied
+
+        force = request.POST.get('force') == '1'
+
+        try:
+            result = scoring_service.score_event_outcome(outcome, force=force)
+        except ValueError as exc:
+            message = str(exc)
+            outcome.score_error = message
+            outcome.save(update_fields=['score_error'])
+            self.message_user(request, message, level=messages.ERROR)
+        else:
+            awarded_count = len(result.awarded_scores)
+            context = {
+                'event': result.event,
+                'total': result.total_awarded_points,
+                'awarded': awarded_count,
+                'created': result.created_count,
+                'updated': result.updated_count,
+                'skipped': result.skipped_tips,
+            }
+
+            if result.created_count or result.updated_count:
+                message = _(
+                    'Scored %(event)s. Awarded %(total)d total points across %(awarded)d tips '
+                    '(%(created)d created, %(updated)d updated). %(skipped)d tips skipped.'
+                ) % context
+                level = messages.SUCCESS
+            elif awarded_count:
+                message = _('%(event)s was already scored. No changes were made.') % context
+                level = messages.INFO
+            else:
+                message = _(
+                    'No user tips were awarded points for %(event)s. %(skipped)d tips evaluated.'
+                ) % context
+                level = messages.INFO
+
+            log_message = _(
+                'Processed scoring via admin (force=%(force)s). '
+                'total=%(total)d created=%(created)d updated=%(updated)d skipped=%(skipped)d'
+            ) % {**context, 'force': force}
+            self.log_change(request, outcome, log_message)
+            self.message_user(request, message, level=level)
+
+        change_url = reverse('admin:predictions_eventoutcome_change', args=[outcome.pk])
+        return HttpResponseRedirect(change_url)
 
 
 @admin.register(UserEventScore)
