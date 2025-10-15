@@ -21,6 +21,10 @@ class TipType(models.Model):
         choices=TipCategory.choices,
         default=TipCategory.GAME,
     )
+    default_points = models.PositiveSmallIntegerField(
+        default=1,
+        help_text="Base point value awarded for correctly predicting events in this tip type.",
+    )
     deadline = models.DateTimeField(
         help_text='No picks can be submitted after this deadline.'
     )
@@ -123,6 +127,14 @@ class PredictionEvent(models.Model):
         max_length=10,
         choices=SelectionMode.choices,
         default=SelectionMode.CURATED,
+    )
+    points = models.PositiveSmallIntegerField(
+        default=1,
+        help_text="Points awarded for a correct prediction on this event.",
+    )
+    is_bonus_event = models.BooleanField(
+        default=False,
+        help_text="Indicates whether this event awards more than the default tip type points.",
     )
     opens_at = models.DateTimeField()
     deadline = models.DateTimeField()
@@ -271,6 +283,91 @@ class UserTip(models.Model):
         if self.scheduled_game:
             return f"{self.user} - {self.scheduled_game}: {self.prediction}"
         return f"{self.user} - {self.tip_type}: {self.prediction}"
+
+
+class EventOutcome(models.Model):
+    prediction_event = models.OneToOneField(
+        PredictionEvent,
+        on_delete=models.CASCADE,
+        related_name="outcome",
+    )
+    winning_option = models.ForeignKey(
+        "PredictionOption",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="winning_outcomes",
+    )
+    winning_team = models.ForeignKey(
+        "NbaTeam",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="winning_event_outcomes",
+    )
+    winning_player = models.ForeignKey(
+        "NbaPlayer",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="winning_event_outcomes",
+    )
+    resolved_at = models.DateTimeField(default=timezone.now)
+    resolved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="resolved_event_outcomes",
+    )
+    notes = models.TextField(blank=True)
+    scored_at = models.DateTimeField(null=True, blank=True)
+    score_error = models.TextField(blank=True)
+
+    class Meta:
+        verbose_name = "Event outcome"
+        verbose_name_plural = "Event outcomes"
+
+    def __str__(self) -> str:
+        return f"Outcome for {self.prediction_event}" if self.prediction_event else "Event outcome"
+
+    def clean(self) -> None:
+        from django.core.exceptions import ValidationError
+
+        provided = [
+            value
+            for value in (self.winning_option, self.winning_team, self.winning_player)
+            if value is not None
+        ]
+        if not provided:
+            raise ValidationError(
+                "An event outcome must specify a winning option, team, or player.",
+            )
+
+
+class UserEventScore(models.Model):
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    prediction_event = models.ForeignKey(
+        PredictionEvent,
+        on_delete=models.CASCADE,
+        related_name="scores",
+    )
+    base_points = models.PositiveSmallIntegerField()
+    lock_multiplier = models.PositiveSmallIntegerField(default=1)
+    points_awarded = models.PositiveIntegerField()
+    is_lock_bonus = models.BooleanField(default=False)
+    awarded_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        unique_together = ("user", "prediction_event")
+        ordering = ["-awarded_at", "user__username"]
+        verbose_name = "User event score"
+        verbose_name_plural = "User event scores"
+
+    def __str__(self) -> str:
+        return f"{self.user} - {self.prediction_event}: {self.points_awarded} pts"
 
 
 class UserPreferences(models.Model):

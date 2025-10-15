@@ -64,8 +64,18 @@ def _get_bdl_api_key() -> str:
         token = raw_value.strip()
         if not token:
             continue
-        if token.lower().startswith('bearer '):
+
+        lower_token = token.lower()
+        if lower_token.startswith('bearer '):
             return token
+
+        # Some deployments configure the environment variable with the full
+        # header value, e.g. ``Token <key>``. Treat any value that already
+        # contains whitespace as a complete header and return it unchanged so
+        # we do not accidentally prepend an additional prefix.
+        if ' ' in token:
+            return token
+
         return f'Bearer {token}'
     return ''
 
@@ -602,6 +612,12 @@ def _upsert_team(team_data: dict) -> Optional[NbaTeam]:
     return team
 
 
+def _ensure_event_points(event: PredictionEvent, tip_type: TipType, *, created: bool) -> None:
+    if created and event.points != tip_type.default_points:
+        event.points = tip_type.default_points
+        event.save(update_fields=['points'])
+
+
 def _update_event_options(
     event: PredictionEvent,
     home_team: Optional[NbaTeam],
@@ -660,10 +676,11 @@ def _ensure_manual_events(
             'is_active': True,
             'sort_order': index,
         }
-        event, _ = PredictionEvent.objects.update_or_create(
+        event, created = PredictionEvent.objects.update_or_create(
             scheduled_game=manual,
             defaults=manual_defaults,
         )
+        _ensure_event_points(event, tip_type, created=created)
         event_ids.append(event.id)
 
         home_team_data = {
@@ -752,7 +769,7 @@ def sync_weekly_games(limit: int = 7) -> Tuple[Optional[TipType], List[Predictio
         away_team = _upsert_team(game['away_team'])
 
         opens_at = min(now, game['game_time'])
-        event, _ = PredictionEvent.objects.update_or_create(
+        event, created = PredictionEvent.objects.update_or_create(
             scheduled_game=scheduled,
             defaults={
                 'tip_type': tip_type,
@@ -769,6 +786,7 @@ def sync_weekly_games(limit: int = 7) -> Tuple[Optional[TipType], List[Predictio
                 'sort_order': sort_index,
             },
         )
+        _ensure_event_points(event, tip_type, created=created)
         event_ids.append(event.id)
         _update_event_options(event, home_team, away_team)
 

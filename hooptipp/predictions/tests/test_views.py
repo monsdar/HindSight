@@ -13,6 +13,7 @@ from hooptipp.predictions.models import (
     ScheduledGame,
     TipType,
     UserPreferences,
+    UserEventScore,
     UserTip,
 )
 
@@ -450,3 +451,169 @@ class HomeViewTests(TestCase):
         self.assertFalse(tip.is_locked)
         self.assertEqual(tip.lock_status, UserTip.LockStatus.RETURNED)
         self.assertIsNotNone(tip.lock_released_at)
+
+    def test_home_view_includes_scoring_summary_for_active_user(self) -> None:
+        session = self.client.session
+        session['active_user_id'] = self.alice.id
+        session.save()
+
+        self.event.points = 3
+        self.event.is_bonus_event = True
+        self.event.save(update_fields=['points', 'is_bonus_event'])
+
+        UserEventScore.objects.create(
+            user=self.alice,
+            prediction_event=self.event,
+            base_points=3,
+            lock_multiplier=2,
+            points_awarded=6,
+            is_lock_bonus=True,
+        )
+
+        with mock.patch(
+            'hooptipp.predictions.views.sync_weekly_games',
+            return_value=(self.tip_type, [self.event], self.game.game_date.date()),
+        ):
+            response = self.client.get(reverse('predictions:home'))
+
+        self.assertEqual(response.status_code, 200)
+        scoreboard = response.context['scoreboard_summary']
+        self.assertIsNotNone(scoreboard)
+        self.assertEqual(scoreboard['total_points'], 6)
+        self.assertEqual(scoreboard['bonus_event_points'], 3)
+        self.assertEqual(scoreboard['lock_bonus_points'], 3)
+        self.assertEqual(scoreboard['standard_points'], 0)
+        recent_scores = response.context['recent_scores']
+        self.assertEqual(len(recent_scores), 1)
+        self.assertEqual(recent_scores[0].points_awarded, 6)
+        self.assertContains(response, 'Scoring overview')
+        self.assertContains(response, '6 pts')
+        self.assertContains(response, 'Bonus event')
+
+
+class LeaderboardViewTests(TestCase):
+    def setUp(self) -> None:
+        user_model = get_user_model()
+        self.alice = user_model.objects.create_user(
+            username='alice',
+            password='password123',
+        )
+        self.bob = user_model.objects.create_user(
+            username='bob',
+            password='password123',
+        )
+        now = timezone.now()
+        self.tip_type_regular = TipType.objects.create(
+            name='Weekly games',
+            slug='weekly',
+            description='Regular season matchups',
+            category=TipType.TipCategory.GAME,
+            deadline=now,
+        )
+        self.tip_type_bonus = TipType.objects.create(
+            name='Finals picks',
+            slug='finals',
+            description='High-stakes playoff predictions',
+            category=TipType.TipCategory.SEASON,
+            deadline=now,
+        )
+        self.event_regular = PredictionEvent.objects.create(
+            tip_type=self.tip_type_regular,
+            name='Game of the week',
+            target_kind=PredictionEvent.TargetKind.TEAM,
+            selection_mode=PredictionEvent.SelectionMode.CURATED,
+            opens_at=now - timedelta(days=7),
+            deadline=now - timedelta(days=1),
+            reveal_at=now - timedelta(days=7),
+            is_active=False,
+            points=1,
+        )
+        self.event_bonus = PredictionEvent.objects.create(
+            tip_type=self.tip_type_bonus,
+            name='Season champion',
+            target_kind=PredictionEvent.TargetKind.TEAM,
+            selection_mode=PredictionEvent.SelectionMode.CURATED,
+            opens_at=now - timedelta(days=30),
+            deadline=now - timedelta(days=1),
+            reveal_at=now - timedelta(days=30),
+            is_active=False,
+            points=5,
+            is_bonus_event=True,
+        )
+
+        UserEventScore.objects.create(
+            user=self.alice,
+            prediction_event=self.event_regular,
+            base_points=1,
+            lock_multiplier=1,
+            points_awarded=1,
+        )
+        UserEventScore.objects.create(
+            user=self.alice,
+            prediction_event=self.event_bonus,
+            base_points=5,
+            lock_multiplier=2,
+            points_awarded=10,
+            is_lock_bonus=True,
+        )
+        UserEventScore.objects.create(
+            user=self.bob,
+            prediction_event=self.event_regular,
+            base_points=1,
+            lock_multiplier=1,
+            points_awarded=1,
+        )
+
+        super().setUp()
+
+    def test_leaderboard_orders_by_total_points(self) -> None:
+        response = self.client.get(reverse('predictions:leaderboard'))
+
+        self.assertEqual(response.status_code, 200)
+        rows = response.context['leaderboard_rows']
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(rows[0].username, 'alice')
+        self.assertEqual(rows[0].total_points, 11)
+        self.assertEqual(rows[0].bonus_event_points, 5)
+        self.assertEqual(rows[0].lock_bonus_points, 5)
+        self.assertEqual(rows[0].standard_points, 1)
+        self.assertContains(response, 'Showing 2 players')
+
+    def test_leaderboard_filters_by_tip_type(self) -> None:
+        response = self.client.get(
+            reverse('predictions:leaderboard'),
+            {'tip_type': self.tip_type_bonus.slug},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        rows = response.context['leaderboard_rows']
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0].username, 'alice')
+        self.assertEqual(rows[0].total_points, 10)
+        self.assertTrue(response.context['score_filters_applied'])
+        self.assertEqual(response.context['selected_tip_type'], self.tip_type_bonus.slug)
+
+    def test_leaderboard_filters_by_segment(self) -> None:
+        response = self.client.get(
+            reverse('predictions:leaderboard'),
+            {'segment': TipType.TipCategory.SEASON},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        rows = response.context['leaderboard_rows']
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0].username, 'alice')
+        self.assertEqual(rows[0].total_points, 10)
+        self.assertEqual(response.context['selected_segment'], TipType.TipCategory.SEASON)
+
+    def test_leaderboard_sort_by_lock_bonus(self) -> None:
+        response = self.client.get(
+            reverse('predictions:leaderboard'),
+            {'sort': 'locks'},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        rows = response.context['leaderboard_rows']
+        self.assertEqual(rows[0].username, 'alice')
+        self.assertEqual(rows[1].username, 'bob')
+        self.assertEqual(response.context['selected_sort'], 'locks')
