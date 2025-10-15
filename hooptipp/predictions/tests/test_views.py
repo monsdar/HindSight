@@ -213,8 +213,7 @@ class HomeViewTests(TestCase):
                     'nickname': 'Splash',
                     'favorite_team_id': '42',
                     'favorite_player_id': '8',
-                    'theme_primary_color': '#0a7abf',
-                    'theme_secondary_color': '#ffffff',
+                    'theme': 'golden-state-warriors',
                 },
             )
 
@@ -223,8 +222,7 @@ class HomeViewTests(TestCase):
         self.assertEqual(preferences.nickname, 'Splash')
         self.assertEqual(preferences.favorite_team_id, 42)
         self.assertEqual(preferences.favorite_player_id, 8)
-        self.assertEqual(preferences.theme_primary_color, '#0a7abf')
-        self.assertEqual(preferences.theme_secondary_color, '#ffffff')
+        self.assertEqual(preferences.theme, 'golden-state-warriors')
 
     def test_update_preferences_validation_errors_return_to_page(self) -> None:
         session = self.client.session
@@ -254,8 +252,7 @@ class HomeViewTests(TestCase):
                     'nickname': 'Splash',
                     'favorite_team_id': '42',
                     'favorite_player_id': '8',
-                    'theme_primary_color': '0a7abf',
-                    'theme_secondary_color': '#fffff',
+                    'theme': 'invalid-theme',
                 },
             )
 
@@ -263,8 +260,7 @@ class HomeViewTests(TestCase):
         self.assertIn('preferences_form', response.context)
         form = response.context['preferences_form']
         self.assertTrue(form.errors)
-        self.assertIn('theme_primary_color', form.errors)
-        self.assertIn('theme_secondary_color', form.errors)
+        self.assertIn('theme', form.errors)
 
     def test_save_tips_allows_lock_when_available(self) -> None:
         session = self.client.session

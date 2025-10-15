@@ -11,8 +11,8 @@
 {% block title %}HoopTipp &ndash; Weekly overview{% endblock %}
 
 {% block content %}
-  {% with primary=user_preferences.theme_primary_color|default:'#f59e0b' secondary=user_preferences.theme_secondary_color|default:'#0f172a' %}
-    <div class="space-y-8" style="--accent-color: {{ primary }}; --accent-contrast: {{ secondary }};">
+  {% with palette=active_theme_palette %}
+    <div class="space-y-8" style="--accent-color: {{ palette.primary }}; --accent-contrast: {{ palette.secondary }};">
       <style>
         .theme-accent-text { color: var(--accent-color); }
         .theme-accent-bg { background-color: var(--accent-color); color: var(--accent-contrast); }
@@ -99,24 +99,21 @@
                     </div>
                     <div class="grid gap-4 sm:grid-cols-2">
                       <div>
-                        <label for="{{ preferences_form.theme_primary_color.id_for_label }}" class="block text-sm font-semibold uppercase tracking-wide text-slate-400">Primary accent color</label>
-                        <div class="mt-2 flex items-center gap-3">
-                          {{ preferences_form.theme_primary_color }}
-                          <span class="text-xs text-slate-500">Used for buttons and highlights.</span>
-                        </div>
-                        {% if preferences_form.theme_primary_color.errors %}
-                          <p class="mt-2 text-sm text-red-300">{{ preferences_form.theme_primary_color.errors|join:', ' }}</p>
+                        <label for="{{ preferences_form.theme.id_for_label }}" class="block text-sm font-semibold uppercase tracking-wide text-slate-400">Theme</label>
+                        {{ preferences_form.theme }}
+                        <p class="mt-2 text-xs text-slate-500">{{ preferences_form.theme.help_text }}</p>
+                        {% if preferences_form.theme.errors %}
+                          <p class="mt-2 text-sm text-red-300">{{ preferences_form.theme.errors|join:', ' }}</p>
                         {% endif %}
                       </div>
-                      <div>
-                        <label for="{{ preferences_form.theme_secondary_color.id_for_label }}" class="block text-sm font-semibold uppercase tracking-wide text-slate-400">Accent text color</label>
-                        <div class="mt-2 flex items-center gap-3">
-                          {{ preferences_form.theme_secondary_color }}
-                          <span class="text-xs text-slate-500">Displayed on accent surfaces.</span>
+                      <div class="flex items-center gap-3 rounded-lg border border-slate-800 bg-slate-950 p-3">
+                        <div class="flex items-center gap-2 text-xs uppercase tracking-wide text-slate-500">
+                          <span>Current colors</span>
                         </div>
-                        {% if preferences_form.theme_secondary_color.errors %}
-                          <p class="mt-2 text-sm text-red-300">{{ preferences_form.theme_secondary_color.errors|join:', ' }}</p>
-                        {% endif %}
+                        <div class="flex items-center gap-2">
+                          <span class="h-8 w-8 rounded-full border border-slate-800" style="background-color: {{ palette.primary }};"></span>
+                          <span class="h-8 w-8 rounded-full border border-slate-800" style="background-color: {{ palette.secondary }};"></span>
+                        </div>
                       </div>
                     </div>
                   </div>
