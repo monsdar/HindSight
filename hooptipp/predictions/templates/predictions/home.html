@@ -11,8 +11,8 @@
 {% block title %}HoopTipp &ndash; Weekly overview{% endblock %}
 
 {% block content %}
-  {% with primary=user_preferences.theme_primary_color|default:'#f59e0b' secondary=user_preferences.theme_secondary_color|default:'#0f172a' %}
-    <div class="space-y-8" style="--accent-color: {{ primary }}; --accent-contrast: {{ secondary }};">
+  {% with palette=active_theme_palette %}
+    <div class="space-y-8" style="--accent-color: {{ palette.primary }}; --accent-contrast: {{ palette.secondary }};">
       <style>
         .theme-accent-text { color: var(--accent-color); }
         .theme-accent-bg { background-color: var(--accent-color); color: var(--accent-contrast); }
@@ -104,24 +104,21 @@
                     </div>
                     <div class="grid gap-4 sm:grid-cols-2">
                       <div>
-                        <label for="{{ preferences_form.theme_primary_color.id_for_label }}" class="block text-sm font-semibold uppercase tracking-wide text-slate-400">Primary accent color</label>
-                        <div class="mt-2 flex items-center gap-3">
-                          {{ preferences_form.theme_primary_color }}
-                          <span class="text-xs text-slate-500">Used for buttons and highlights.</span>
-                        </div>
-                        {% if preferences_form.theme_primary_color.errors %}
-                          <p class="mt-2 text-sm text-red-300">{{ preferences_form.theme_primary_color.errors|join:', ' }}</p>
+                        <label for="{{ preferences_form.theme.id_for_label }}" class="block text-sm font-semibold uppercase tracking-wide text-slate-400">Theme</label>
+                        {{ preferences_form.theme }}
+                        <p class="mt-2 text-xs text-slate-500">{{ preferences_form.theme.help_text }}</p>
+                        {% if preferences_form.theme.errors %}
+                          <p class="mt-2 text-sm text-red-300">{{ preferences_form.theme.errors|join:', ' }}</p>
                         {% endif %}
                       </div>
-                      <div>
-                        <label for="{{ preferences_form.theme_secondary_color.id_for_label }}" class="block text-sm font-semibold uppercase tracking-wide text-slate-400">Accent text color</label>
-                        <div class="mt-2 flex items-center gap-3">
-                          {{ preferences_form.theme_secondary_color }}
-                          <span class="text-xs text-slate-500">Displayed on accent surfaces.</span>
+                      <div class="flex items-center gap-3 rounded-lg border border-slate-800 bg-slate-950 p-3">
+                        <div class="flex items-center gap-2 text-xs uppercase tracking-wide text-slate-500">
+                          <span>Current colors</span>
                         </div>
-                        {% if preferences_form.theme_secondary_color.errors %}
-                          <p class="mt-2 text-sm text-red-300">{{ preferences_form.theme_secondary_color.errors|join:', ' }}</p>
-                        {% endif %}
+                        <div class="flex items-center gap-2">
+                          <span class="h-8 w-8 rounded-full border border-slate-800" style="background-color: {{ palette.primary }};"></span>
+                          <span class="h-8 w-8 rounded-full border border-slate-800" style="background-color: {{ palette.secondary }};"></span>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -161,7 +158,7 @@
         <section class="space-y-4 rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-lg shadow-slate-900/30">
           <header class="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <h2 class="text-xl font-semibold text-slate-100">Scoring overview</h2>
+              <h2 class="text-xl font-semibold theme-accent-text">Scoring overview</h2>
               {% if scoreboard_summary and scoreboard_summary.events_scored %}
                 <p class="text-sm text-slate-400">
                   {{ scoreboard_summary.events_scored }} scored event{{ scoreboard_summary.events_scored|pluralize }} for
@@ -176,7 +173,7 @@
             </div>
             <a
               href="{% url 'predictions:leaderboard' %}"
-              class="text-sm font-semibold text-amber-400 transition hover:text-amber-300"
+              class="theme-accent-text text-sm font-semibold transition hover:opacity-80"
             >
               View leaderboard &rarr;
             </a>
@@ -184,26 +181,26 @@
 
           {% if scoreboard_summary %}
             <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-              <div class="rounded-xl border border-slate-800 bg-slate-950 p-4">
-                <p class="text-xs uppercase tracking-wide text-slate-500">Total points</p>
-                <p class="mt-2 text-3xl font-bold text-slate-100">{{ scoreboard_summary.total_points }} pts</p>
+              <div class="theme-accent-border theme-accent-surface rounded-xl border bg-slate-950 p-4">
+                <p class="text-xs uppercase tracking-wide theme-accent-muted">Total points</p>
+                <p class="mt-2 text-3xl font-bold theme-accent-text">{{ scoreboard_summary.total_points }} pts</p>
               </div>
-              <div class="rounded-xl border border-slate-800 bg-slate-950 p-4">
+              <div class="theme-accent-border rounded-xl border border-slate-800 bg-slate-950 p-4">
                 <p class="text-xs uppercase tracking-wide text-slate-500">Base picks</p>
-                <p class="mt-2 text-2xl font-semibold text-slate-100">{{ scoreboard_summary.standard_points }} pts</p>
-                <p class="mt-1 text-xs text-slate-500">From regular events</p>
+                <p class="mt-2 text-2xl font-semibold theme-accent-text">{{ scoreboard_summary.standard_points }} pts</p>
+                <p class="mt-1 text-xs theme-accent-muted">From regular events</p>
               </div>
-              <div class="rounded-xl border border-slate-800 bg-slate-950 p-4">
+              <div class="theme-accent-border rounded-xl border border-slate-800 bg-slate-950 p-4">
                 <p class="text-xs uppercase tracking-wide text-slate-500">Bonus events</p>
-                <p class="mt-2 text-2xl font-semibold text-amber-300">{{ scoreboard_summary.bonus_event_points }} pts</p>
-                <p class="mt-1 text-xs text-slate-500">
+                <p class="mt-2 text-2xl font-semibold theme-accent-text">{{ scoreboard_summary.bonus_event_points }} pts</p>
+                <p class="mt-1 text-xs theme-accent-muted">
                   {{ scoreboard_summary.bonus_event_count }} bonus event{{ scoreboard_summary.bonus_event_count|pluralize }}
                 </p>
               </div>
-              <div class="rounded-xl border border-slate-800 bg-slate-950 p-4">
+              <div class="theme-accent-border rounded-xl border border-slate-800 bg-slate-950 p-4">
                 <p class="text-xs uppercase tracking-wide text-slate-500">Lock bonuses</p>
-                <p class="mt-2 text-2xl font-semibold text-slate-100">{{ scoreboard_summary.lock_bonus_points }} pts</p>
-                <p class="mt-1 text-xs text-slate-500">
+                <p class="mt-2 text-2xl font-semibold theme-accent-text">{{ scoreboard_summary.lock_bonus_points }} pts</p>
+                <p class="mt-1 text-xs theme-accent-muted">
                   {{ scoreboard_summary.lock_bonus_count }} lock bonus{{ scoreboard_summary.lock_bonus_count|pluralize }}
                 </p>
               </div>

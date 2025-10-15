@@ -22,6 +22,7 @@ from .models import (
     UserTip,
 )
 from .services import sync_weekly_games
+from .theme_palettes import DEFAULT_THEME_KEY, get_theme_palette
 
 
 def _get_active_user(request):
@@ -397,6 +398,14 @@ def home(request):
     if preferences_form is None and preferences is not None:
         preferences_form = UserPreferencesForm(instance=preferences)
 
+    selected_theme_key = DEFAULT_THEME_KEY
+    if preferences_form and preferences_form.is_bound:
+        selected_theme_key = preferences_form.data.get('theme', '') or selected_theme_key
+    elif preferences:
+        selected_theme_key = preferences.theme
+
+    active_theme_palette = get_theme_palette(selected_theme_key)
+
     display_name_ids: list[int] = [user.id for user in all_users]
     if active_user:
         display_name_ids.append(active_user.id)
@@ -427,6 +436,7 @@ def home(request):
         'lock_summary': lock_summary,
         'scoreboard_summary': scoreboard_summary,
         'recent_scores': recent_scores,
+        'active_theme_palette': active_theme_palette,
     }
     return render(request, 'predictions/home.html', context)
 

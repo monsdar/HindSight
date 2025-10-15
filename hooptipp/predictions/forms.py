@@ -7,6 +7,7 @@ from django import forms
 
 from .models import UserPreferences
 from .services import get_player_choices, get_team_choices
+from .theme_palettes import DEFAULT_THEME_KEY, THEME_CHOICES
 
 ChoiceList = Sequence[Tuple[str, str]]
 
@@ -29,26 +30,13 @@ class UserPreferencesForm(forms.ModelForm):
             "nickname",
             "favorite_team_id",
             "favorite_player_id",
-            "theme_primary_color",
-            "theme_secondary_color",
+            "theme",
         ]
         widgets = {
             "nickname": forms.TextInput(
                 attrs={
                     "class": "theme-accent-outline mt-1 block w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100 focus:outline-none",
                     "placeholder": "Enter a nickname",
-                }
-            ),
-            "theme_primary_color": forms.TextInput(
-                attrs={
-                    "type": "color",
-                    "class": "theme-accent-outline h-10 w-16 rounded border border-slate-700 bg-slate-950",
-                }
-            ),
-            "theme_secondary_color": forms.TextInput(
-                attrs={
-                    "type": "color",
-                    "class": "theme-accent-outline h-10 w-16 rounded border border-slate-700 bg-slate-950",
                 }
             ),
         }
@@ -93,17 +81,15 @@ class UserPreferencesForm(forms.ModelForm):
         )
 
         self.fields["nickname"].label = "Display nickname"
-        self.fields["theme_primary_color"].label = "Primary accent color"
-        self.fields["theme_secondary_color"].label = "Accent text color"
-
-    def clean_theme_primary_color(self) -> str:
-        return self._clean_hex_color("theme_primary_color")
-
-    def clean_theme_secondary_color(self) -> str:
-        return self._clean_hex_color("theme_secondary_color")
-
-    def _clean_hex_color(self, field_name: str) -> str:
-        value = self.cleaned_data.get(field_name)
-        if not value:
-            return value
-        return value.lower()
+        self.fields["theme"] = forms.ChoiceField(
+            required=True,
+            choices=THEME_CHOICES,
+            initial=DEFAULT_THEME_KEY,
+            label="Theme",
+            widget=forms.Select(
+                attrs={
+                    "class": "theme-accent-outline mt-1 block w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100 focus:outline-none",
+                }
+            ),
+            help_text="Choose an NBA-inspired colorway.",
+        )
