@@ -15,6 +15,8 @@ from .lock_service import LockLimitError, LockService
 from .models import (
     NbaPlayer,
     NbaTeam,
+    Option,
+    OptionCategory,
     PredictionEvent,
     TipType,
     UserPreferences,
@@ -186,11 +188,13 @@ def home(request):
                     if existing_tip is None:
                         continue
                     option = existing_tip.prediction_option
+                    selected_option = existing_tip.selected_option
                     selected_team = existing_tip.selected_team
                     selected_player = existing_tip.selected_player
                     prediction_label = existing_tip.prediction
                 else:
                     option = None
+                    selected_option = None
                     selected_team = None
                     selected_player = None
                     prediction_label = ''
@@ -210,6 +214,8 @@ def home(request):
                         )
                         if not option:
                             continue
+                        # Get the actual option (generic, team, or player)
+                        selected_option = option.option
                         selected_team = option.team
                         selected_player = option.player
                         prediction_label = option.label
@@ -226,7 +232,7 @@ def home(request):
                             if not selected_team:
                                 continue
                             prediction_label = selected_team.name
-                        else:
+                        elif event.target_kind == PredictionEvent.TargetKind.PLAYER:
                             try:
                                 player_id = int(submitted_value)
                             except (TypeError, ValueError):
@@ -238,6 +244,18 @@ def home(request):
                             if not selected_player:
                                 continue
                             prediction_label = selected_player.display_name
+                        else:
+                            # Generic option selection
+                            try:
+                                generic_option_id = int(submitted_value)
+                            except (TypeError, ValueError):
+                                continue
+                            selected_option = Option.objects.filter(
+                                id=generic_option_id
+                            ).first()
+                            if not selected_option:
+                                continue
+                            prediction_label = selected_option.name
 
                 tip = user_tips.get(event.id)
                 if tip is None:
@@ -249,6 +267,7 @@ def home(request):
                 tip.scheduled_game = event.scheduled_game
                 tip.prediction = prediction_label
                 tip.prediction_option = option
+                tip.selected_option = selected_option
                 tip.selected_team = selected_team
                 tip.selected_player = selected_player
                 tip.save()

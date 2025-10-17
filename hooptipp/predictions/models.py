@@ -7,6 +7,86 @@ from django.utils import timezone
 from .theme_palettes import DEFAULT_THEME_KEY, THEME_CHOICES, get_theme_palette
 
 
+class OptionCategory(models.Model):
+    """
+    Represents a category of prediction options.
+    
+    Examples: 'nba-teams', 'countries', 'political-parties', 'yes-no'
+    This allows the system to support any type of prediction target.
+    """
+    slug = models.SlugField(unique=True)
+    name = models.CharField(max_length=100)
+    description = models.TextField(blank=True)
+    icon = models.CharField(
+        max_length=50,
+        blank=True,
+        help_text="Icon identifier for UI display (e.g., 'basketball', 'flag', 'check')"
+    )
+    is_active = models.BooleanField(default=True)
+    sort_order = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['sort_order', 'name']
+        verbose_name = 'Option category'
+        verbose_name_plural = 'Option categories'
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class Option(models.Model):
+    """
+    Generic option that can represent any selectable choice in predictions.
+    
+    This replaces the need for separate NbaTeam, NbaPlayer, Country, etc. models.
+    All prediction targets are stored here with category-specific metadata.
+    """
+    category = models.ForeignKey(
+        OptionCategory,
+        on_delete=models.CASCADE,
+        related_name='options'
+    )
+    slug = models.SlugField(max_length=100)
+    name = models.CharField(max_length=200)
+    short_name = models.CharField(
+        max_length=50,
+        blank=True,
+        help_text="Abbreviated name (e.g., 'LAL' for Lakers, 'USA' for United States)"
+    )
+    description = models.TextField(blank=True)
+    metadata = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Flexible storage for category-specific data (e.g., team conference, player position)"
+    )
+    external_id = models.CharField(
+        max_length=200,
+        blank=True,
+        help_text="Reference to external API/system (e.g., BallDontLie team ID)"
+    )
+    sort_order = models.PositiveIntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ('category', 'slug')
+        ordering = ['category', 'sort_order', 'name']
+        verbose_name = 'Option'
+        verbose_name_plural = 'Options'
+        indexes = [
+            models.Index(fields=['category', 'is_active']),
+            models.Index(fields=['external_id']),
+        ]
+
+    def __str__(self) -> str:
+        if self.short_name:
+            return f"{self.name} ({self.short_name})"
+        return self.name
+
+
 class TipType(models.Model):
     class TipCategory(models.TextChoices):
         GAME = 'game', 'Game'
@@ -107,6 +187,8 @@ class PredictionEvent(models.Model):
     class TargetKind(models.TextChoices):
         TEAM = "team", "Team"
         PLAYER = "player", "Player"
+        # Generic option for non-NBA predictions
+        GENERIC = "generic", "Generic"
 
     class SelectionMode(models.TextChoices):
         ANY = "any", "Any selection"
@@ -129,6 +211,22 @@ class PredictionEvent(models.Model):
         choices=SelectionMode.choices,
         default=SelectionMode.CURATED,
     )
+    # New generic fields for extensibility
+    source_id = models.CharField(
+        max_length=100,
+        blank=True,
+        help_text="Identifier for the EventSource that created this event (e.g., 'nba-balldontlie', 'olympics-2028')",
+    )
+    source_event_id = models.CharField(
+        max_length=200,
+        blank=True,
+        help_text="External event ID from the source system",
+    )
+    metadata = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Source-specific data and additional event properties",
+    )
     points = models.PositiveSmallIntegerField(
         default=1,
         help_text="Points awarded for a correct prediction on this event.",
@@ -144,6 +242,7 @@ class PredictionEvent(models.Model):
         default=timezone.now,
     )
     is_active = models.BooleanField(default=True)
+    # Legacy NBA-specific field - kept for backward compatibility
     scheduled_game = models.OneToOneField(
         "ScheduledGame",
         on_delete=models.CASCADE,
@@ -155,6 +254,10 @@ class PredictionEvent(models.Model):
 
     class Meta:
         ordering = ["deadline", "sort_order", "name"]
+        indexes = [
+            models.Index(fields=['source_id', 'source_event_id']),
+            models.Index(fields=['is_active', 'opens_at', 'deadline']),
+        ]
 
     def __str__(self) -> str:
         return self.name
@@ -173,6 +276,17 @@ class PredictionOption(models.Model):
         related_name="options",
     )
     label = models.CharField(max_length=200)
+    # New generic option reference
+    option = models.ForeignKey(
+        Option,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="prediction_options",
+        help_text="Generic option reference for any type of prediction target",
+    )
+    # Legacy NBA-specific fields - kept for backward compatibility
+    # TODO: Mark as deprecated after migration
     team = models.ForeignKey(
         NbaTeam,
         on_delete=models.CASCADE,
@@ -203,10 +317,23 @@ class PredictionOption(models.Model):
     def clean(self) -> None:
         from django.core.exceptions import ValidationError
 
-        if not (self.team or self.player):
-            raise ValidationError("Prediction options must reference a team or player.")
-        if self.team and self.player:
-            raise ValidationError("Prediction options cannot reference both a team and a player.")
+        # Check if any reference is provided
+        has_option = bool(self.option or self.team or self.player)
+        if not has_option:
+            raise ValidationError(
+                "Prediction options must reference an option, team, or player."
+            )
+        
+        # Validate only one reference type is used
+        references = [bool(x) for x in [self.option, self.team, self.player]]
+        if sum(references) > 1:
+            raise ValidationError(
+                "Prediction options can only reference one of: option, team, or player."
+            )
+    
+    def get_display_option(self) -> 'Option | NbaTeam | NbaPlayer | None':
+        """Get the actual option object regardless of which field is used."""
+        return self.option or self.team or self.player
 
 
 class UserTip(models.Model):
@@ -239,6 +366,17 @@ class UserTip(models.Model):
         null=True,
         blank=True,
     )
+    # New generic option reference
+    selected_option = models.ForeignKey(
+        Option,
+        on_delete=models.SET_NULL,
+        related_name='tips',
+        null=True,
+        blank=True,
+        help_text="Generic option selected for any type of prediction",
+    )
+    # Legacy NBA-specific fields - kept for backward compatibility
+    # TODO: Mark as deprecated after migration
     selected_team = models.ForeignKey(
         NbaTeam,
         on_delete=models.SET_NULL,
@@ -284,6 +422,10 @@ class UserTip(models.Model):
         if self.scheduled_game:
             return f"{self.user} - {self.scheduled_game}: {self.prediction}"
         return f"{self.user} - {self.tip_type}: {self.prediction}"
+    
+    def get_selected_option(self) -> 'Option | NbaTeam | NbaPlayer | None':
+        """Get the selected option regardless of which field is used."""
+        return self.selected_option or self.selected_team or self.selected_player
 
 
 class EventOutcome(models.Model):
@@ -299,6 +441,17 @@ class EventOutcome(models.Model):
         blank=True,
         related_name="winning_outcomes",
     )
+    # New generic winning option field
+    winning_generic_option = models.ForeignKey(
+        "Option",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="winning_event_outcomes",
+        help_text="Generic option that won this event",
+    )
+    # Legacy NBA-specific fields - kept for backward compatibility
+    # TODO: Mark as deprecated after migration
     winning_team = models.ForeignKey(
         "NbaTeam",
         on_delete=models.SET_NULL,
@@ -337,13 +490,27 @@ class EventOutcome(models.Model):
 
         provided = [
             value
-            for value in (self.winning_option, self.winning_team, self.winning_player)
+            for value in (
+                self.winning_option,
+                self.winning_generic_option,
+                self.winning_team,
+                self.winning_player,
+            )
             if value is not None
         ]
         if not provided:
             raise ValidationError(
                 "An event outcome must specify a winning option, team, or player.",
             )
+    
+    def get_winning_option(self) -> 'PredictionOption | Option | NbaTeam | NbaPlayer | None':
+        """Get the winning option regardless of which field is used."""
+        return (
+            self.winning_option
+            or self.winning_generic_option
+            or self.winning_team
+            or self.winning_player
+        )
 
 
 class UserEventScore(models.Model):

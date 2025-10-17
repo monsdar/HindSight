@@ -2,13 +2,17 @@ from django.contrib import admin, messages
 from django.core.exceptions import PermissionDenied
 from django.http import Http404, HttpRequest, HttpResponseRedirect, HttpResponseNotAllowed
 from django.urls import path, reverse
+from django.utils.html import format_html
 from django.utils.translation import gettext_lazy as _
 
 from . import scoring_service, services
+from .event_sources import list_sources, get_source
 from .models import (
     EventOutcome,
     NbaPlayer,
     NbaTeam,
+    Option,
+    OptionCategory,
     PredictionEvent,
     PredictionOption,
     ScheduledGame,
@@ -18,11 +22,54 @@ from .models import (
 )
 
 
+@admin.register(OptionCategory)
+class OptionCategoryAdmin(admin.ModelAdmin):
+    list_display = ('name', 'slug', 'icon', 'option_count', 'is_active', 'sort_order')
+    list_filter = ('is_active',)
+    search_fields = ('name', 'slug', 'description')
+    prepopulated_fields = {'slug': ('name',)}
+    ordering = ('sort_order', 'name')
+
+    def option_count(self, obj):
+        return obj.options.filter(is_active=True).count()
+
+    option_count.short_description = 'Active Options'
+
+
+@admin.register(Option)
+class OptionAdmin(admin.ModelAdmin):
+    list_display = (
+        'name',
+        'short_name',
+        'category',
+        'external_id',
+        'is_active',
+        'sort_order',
+    )
+    list_filter = ('category', 'is_active')
+    search_fields = ('name', 'short_name', 'slug', 'external_id')
+    autocomplete_fields = ('category',)
+    ordering = ('category', 'sort_order', 'name')
+    fieldsets = (
+        (None, {
+            'fields': ('category', 'name', 'short_name', 'slug', 'description')
+        }),
+        ('Configuration', {
+            'fields': ('is_active', 'sort_order')
+        }),
+        ('External Integration', {
+            'fields': ('external_id', 'metadata'),
+            'classes': ('collapse',),
+        }),
+    )
+
+
 @admin.register(TipType)
 class TipTypeAdmin(admin.ModelAdmin):
     list_display = ('name', 'category', 'default_points', 'deadline', 'is_active')
     list_filter = ('category', 'is_active')
     prepopulated_fields = {'slug': ('name',)}
+    search_fields = ('name', 'slug')
 
 
 @admin.register(ScheduledGame)
@@ -141,6 +188,132 @@ class NbaPlayerAdmin(admin.ModelAdmin):
         return HttpResponseRedirect(changelist_url)
 
 
+class EventSourceAdmin(admin.ModelAdmin):
+    """
+    Admin interface for managing event sources.
+    
+    This is a pseudo-model admin that provides a UI for managing
+    event sources without a backing database model.
+    """
+    
+    change_list_template = 'admin/predictions/eventsource/change_list.html'
+    
+    def has_add_permission(self, request):
+        return False
+    
+    def has_delete_permission(self, request, obj=None):
+        return False
+    
+    def changelist_view(self, request, extra_context=None):
+        sources = []
+        for source in list_sources():
+            sources.append({
+                'id': source.source_id,
+                'name': source.source_name,
+                'categories': ', '.join(source.category_slugs),
+                'configured': source.is_configured(),
+                'config_help': source.get_configuration_help(),
+            })
+        
+        extra_context = extra_context or {}
+        extra_context['sources'] = sources
+        extra_context['title'] = 'Event Sources'
+        
+        return super().changelist_view(request, extra_context=extra_context)
+    
+    def get_urls(self):
+        urls = super().get_urls()
+        custom_urls = [
+            path(
+                '<str:source_id>/sync-options/',
+                self.admin_site.admin_view(self.sync_options_view),
+                name='predictions_eventsource_sync_options',
+            ),
+            path(
+                '<str:source_id>/sync-events/',
+                self.admin_site.admin_view(self.sync_events_view),
+                name='predictions_eventsource_sync_events',
+            ),
+        ]
+        return custom_urls + urls
+    
+    def sync_options_view(self, request: HttpRequest, source_id: str):
+        if request.method != 'POST':
+            return HttpResponseNotAllowed(['POST'])
+        
+        if not self.has_change_permission(request):
+            raise PermissionDenied
+        
+        try:
+            source = get_source(source_id)
+        except ValueError as e:
+            messages.error(request, str(e))
+            return HttpResponseRedirect(reverse('admin:predictions_eventsource_changelist'))
+        
+        result = source.sync_options()
+        
+        if result.has_errors:
+            for error in result.errors:
+                messages.error(request, error)
+        
+        if result.changed:
+            message = _(
+                'Options synced for %(source)s. %(created)d created, %(updated)d updated, %(removed)d removed.'
+            ) % {
+                'source': source.source_name,
+                'created': result.options_created,
+                'updated': result.options_updated,
+                'removed': result.options_removed,
+            }
+            level = messages.SUCCESS
+        else:
+            message = _('Options sync completed with no changes for %(source)s.') % {
+                'source': source.source_name
+            }
+            level = messages.INFO
+        
+        self.message_user(request, message, level=level)
+        return HttpResponseRedirect(reverse('admin:predictions_eventsource_changelist'))
+    
+    def sync_events_view(self, request: HttpRequest, source_id: str):
+        if request.method != 'POST':
+            return HttpResponseNotAllowed(['POST'])
+        
+        if not self.has_change_permission(request):
+            raise PermissionDenied
+        
+        try:
+            source = get_source(source_id)
+        except ValueError as e:
+            messages.error(request, str(e))
+            return HttpResponseRedirect(reverse('admin:predictions_eventsource_changelist'))
+        
+        result = source.sync_events()
+        
+        if result.has_errors:
+            for error in result.errors:
+                messages.error(request, error)
+        
+        if result.changed:
+            message = _(
+                'Events synced for %(source)s. %(created)d created, %(updated)d updated, %(removed)d removed.'
+            ) % {
+                'source': source.source_name,
+                'created': result.events_created,
+                'updated': result.events_updated,
+                'removed': result.events_removed,
+            }
+            level = messages.SUCCESS
+        else:
+            message = _('Events sync completed with no changes for %(source)s.') % {
+                'source': source.source_name
+            }
+            level = messages.INFO
+        
+        self.message_user(request, message, level=level)
+        return HttpResponseRedirect(reverse('admin:predictions_eventsource_changelist'))
+
+
 class PredictionOptionInline(admin.TabularInline):
     model = PredictionOption
     extra = 0
@@ -151,14 +324,47 @@ class PredictionOptionAdmin(admin.ModelAdmin):
     list_display = (
         'event',
         'label',
-        'team',
-        'player',
+        'option_display',
         'is_active',
         'sort_order',
     )
-    list_filter = ('event__tip_type', 'is_active')
-    search_fields = ('label', 'team__name', 'player__display_name')
-    autocomplete_fields = ('event', 'team', 'player')
+    list_filter = ('event__tip_type', 'is_active', 'option__category')
+    search_fields = (
+        'label',
+        'option__name',
+        'team__name',
+        'player__display_name',
+    )
+    autocomplete_fields = ('event', 'option', 'team', 'player')
+    fieldsets = (
+        (None, {
+            'fields': ('event', 'label', 'is_active', 'sort_order')
+        }),
+        ('Generic Option (Recommended)', {
+            'fields': ('option',),
+            'description': 'Select a generic option for any type of prediction target'
+        }),
+        ('Legacy NBA Options (Deprecated)', {
+            'fields': ('team', 'player'),
+            'classes': ('collapse',),
+            'description': 'These fields are deprecated. Use the generic Option field instead.'
+        }),
+    )
+    
+    def option_display(self, obj):
+        if obj.option:
+            return format_html(
+                '<strong>{}</strong> <em>({})</em>',
+                obj.option.name,
+                obj.option.category.name
+            )
+        elif obj.team:
+            return format_html('<em>Team:</em> {}', obj.team.name)
+        elif obj.player:
+            return format_html('<em>Player:</em> {}', obj.player.display_name)
+        return '-'
+    
+    option_display.short_description = 'Option'
 
 
 @admin.register(PredictionEvent)
@@ -166,6 +372,7 @@ class PredictionEventAdmin(admin.ModelAdmin):
     list_display = (
         'name',
         'tip_type',
+        'source_display',
         'points',
         'is_bonus_event',
         'target_kind',
@@ -176,13 +383,44 @@ class PredictionEventAdmin(admin.ModelAdmin):
     )
     list_filter = (
         'tip_type',
+        'source_id',
         'is_bonus_event',
         'target_kind',
         'selection_mode',
         'is_active',
     )
-    search_fields = ('name', 'description')
+    search_fields = ('name', 'description', 'source_id', 'source_event_id')
     inlines = [PredictionOptionInline]
+    fieldsets = (
+        (None, {
+            'fields': ('tip_type', 'name', 'description')
+        }),
+        ('Configuration', {
+            'fields': (
+                'target_kind',
+                'selection_mode',
+                'points',
+                'is_bonus_event',
+                'sort_order',
+            )
+        }),
+        ('Schedule', {
+            'fields': ('opens_at', 'deadline', 'reveal_at', 'is_active')
+        }),
+        ('Source Information', {
+            'fields': ('source_id', 'source_event_id', 'metadata', 'scheduled_game'),
+            'classes': ('collapse',),
+            'description': 'Metadata for events imported from external sources'
+        }),
+    )
+    
+    def source_display(self, obj):
+        if obj.source_id:
+            return format_html('<code>{}</code>', obj.source_id)
+        return format_html('<em>manual</em>')
+    
+    source_display.short_description = 'Source'
+    source_display.admin_order_field = 'source_id'
 
 
 @admin.register(EventOutcome)
@@ -190,9 +428,7 @@ class EventOutcomeAdmin(admin.ModelAdmin):
     change_form_template = 'admin/predictions/eventoutcome/change_form.html'
     list_display = (
         'prediction_event',
-        'winning_option',
-        'winning_team',
-        'winning_player',
+        'winner_display',
         'resolved_at',
         'scored_at',
     )
@@ -200,17 +436,53 @@ class EventOutcomeAdmin(admin.ModelAdmin):
     search_fields = (
         'prediction_event__name',
         'winning_option__label',
+        'winning_generic_option__name',
         'winning_team__name',
         'winning_player__display_name',
     )
     autocomplete_fields = (
         'prediction_event',
         'winning_option',
+        'winning_generic_option',
         'winning_team',
         'winning_player',
         'resolved_by',
     )
     readonly_fields = ('scored_at', 'score_error')
+    fieldsets = (
+        (None, {
+            'fields': ('prediction_event', 'resolved_at', 'resolved_by', 'notes')
+        }),
+        ('Winning Option', {
+            'fields': (
+                'winning_option',
+                'winning_generic_option',
+                'winning_team',
+                'winning_player',
+            ),
+            'description': 'Specify which option won. Only one field should be set.'
+        }),
+        ('Scoring', {
+            'fields': ('scored_at', 'score_error'),
+            'classes': ('collapse',),
+        }),
+    )
+    
+    def winner_display(self, obj):
+        winner = obj.get_winning_option()
+        if winner:
+            if isinstance(winner, Option):
+                return format_html(
+                    '<strong>{}</strong> <em>({})</em>',
+                    winner.name,
+                    winner.category.name if winner.category else 'N/A'
+                )
+            elif hasattr(winner, 'label'):
+                return winner.label
+            return str(winner)
+        return '-'
+    
+    winner_display.short_description = 'Winner'
 
     def get_urls(self):
         urls = super().get_urls()
@@ -311,17 +583,59 @@ class UserTipAdmin(admin.ModelAdmin):
         'user',
         'tip_type',
         'prediction_event',
-        'scheduled_game',
         'prediction',
+        'option_display',
         'is_locked',
         'lock_status',
         'updated_at',
     )
     list_filter = (
         'tip_type',
-        'scheduled_game__tip_type',
         'prediction_event__tip_type',
         'is_locked',
         'lock_status',
     )
     search_fields = ('user__username', 'prediction')
+    fieldsets = (
+        (None, {
+            'fields': (
+                'user',
+                'tip_type',
+                'prediction_event',
+                'prediction_option',
+                'prediction',
+            )
+        }),
+        ('Selected Option', {
+            'fields': ('selected_option', 'selected_team', 'selected_player'),
+            'description': 'The option selected by the user'
+        }),
+        ('Lock Information', {
+            'fields': (
+                'is_locked',
+                'lock_status',
+                'lock_committed_at',
+                'lock_released_at',
+                'lock_releases_at',
+            ),
+            'classes': ('collapse',),
+        }),
+        ('Legacy', {
+            'fields': ('scheduled_game',),
+            'classes': ('collapse',),
+        }),
+    )
+    
+    def option_display(self, obj):
+        option = obj.get_selected_option()
+        if option:
+            if isinstance(option, Option):
+                return format_html(
+                    '<strong>{}</strong> <em>({})</em>',
+                    option.name,
+                    option.category.name if option.category else 'N/A'
+                )
+            return str(option)
+        return '-'
+    
+    option_display.short_description = 'Selected'
