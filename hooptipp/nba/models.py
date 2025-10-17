@@ -4,56 +4,10 @@ from __future__ import annotations
 
 from django.conf import settings
 from django.db import models
-from django.db.models.signals import post_save
-from django.dispatch import receiver
 
-
-class ScheduledGame(models.Model):
-    """NBA game scheduling model."""
-
-    tip_type = models.ForeignKey(
-        'predictions.TipType',
-        on_delete=models.CASCADE,
-        related_name='nba_games',
-    )
-    nba_game_id = models.CharField(max_length=20, unique=True)
-    game_date = models.DateTimeField()
-
-    # Team references via Options
-    home_team_option = models.ForeignKey(
-        'predictions.Option',
-        on_delete=models.CASCADE,
-        related_name='nba_home_games',
-        null=True,
-        blank=True,
-    )
-    away_team_option = models.ForeignKey(
-        'predictions.Option',
-        on_delete=models.CASCADE,
-        related_name='nba_away_games',
-        null=True,
-        blank=True,
-    )
-
-    # Denormalized fields for convenience
-    home_team = models.CharField(max_length=100)
-    home_team_tricode = models.CharField(max_length=5)
-    away_team = models.CharField(max_length=100)
-    away_team_tricode = models.CharField(max_length=5)
-    venue = models.CharField(max_length=150, blank=True)
-
-    is_manual = models.BooleanField(
-        default=False,
-        help_text='Indicates that the game was added manually rather than via the BallDontLie sync.',
-    )
-
-    class Meta:
-        ordering = ['game_date']
-        verbose_name = 'NBA scheduled game'
-        verbose_name_plural = 'NBA scheduled games'
-
-    def __str__(self) -> str:
-        return f"{self.away_team} @ {self.home_team}"
+# Note: ScheduledGame is currently in predictions.models for backward compatibility
+# It will be migrated to this app in a future update
+# from hooptipp.predictions.models import ScheduledGame
 
 
 class NbaUserPreferences(models.Model):
@@ -143,8 +97,6 @@ class NbaUserPreferences(models.Model):
         )
 
 
-@receiver(post_save, sender=settings.AUTH_USER_MODEL)
-def create_nba_preferences(sender, instance, created, **kwargs):
-    """Auto-create NBA preferences when a user is created."""
-    if created:
-        NbaUserPreferences.objects.get_or_create(user=instance)
+# Note: We don't auto-create NBA preferences via signal to avoid issues
+# with test database creation. Instead, create on-demand via get_or_create
+# when accessed.

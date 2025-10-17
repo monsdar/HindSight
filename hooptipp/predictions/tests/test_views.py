@@ -310,26 +310,12 @@ class HomeViewTests(TestCase):
         with mock.patch(
             'hooptipp.predictions.views.sync_weekly_games',
             return_value=(self.tip_type, [self.event], self.game.game_date.date()),
-        ), mock.patch(
-            'hooptipp.predictions.forms.get_team_choices',
-            return_value=[('42', 'Golden State Warriors')],
-        ), mock.patch(
-            'hooptipp.predictions.forms.get_player_choices',
-            return_value=[('8', 'Stephen Curry')],
-        ), mock.patch(
-            'hooptipp.predictions.services.get_team_choices',
-            return_value=[('42', 'Golden State Warriors')],
-        ), mock.patch(
-            'hooptipp.predictions.services.get_player_choices',
-            return_value=[('8', 'Stephen Curry')],
         ):
             response = self.client.post(
                 reverse('predictions:home'),
                 {
                     'update_preferences': '1',
                     'nickname': 'Splash',
-                    'favorite_team_id': '42',
-                    'favorite_player_id': '8',
                     'theme': 'golden-state-warriors',
                 },
             )
@@ -337,8 +323,6 @@ class HomeViewTests(TestCase):
         self.assertEqual(response.status_code, 302)
         preferences = UserPreferences.objects.get(user=self.alice)
         self.assertEqual(preferences.nickname, 'Splash')
-        self.assertEqual(preferences.favorite_team_id, 42)
-        self.assertEqual(preferences.favorite_player_id, 8)
         self.assertEqual(preferences.theme, 'golden-state-warriors')
 
     def test_update_preferences_validation_errors_return_to_page(self) -> None:
@@ -349,26 +333,12 @@ class HomeViewTests(TestCase):
         with mock.patch(
             'hooptipp.predictions.views.sync_weekly_games',
             return_value=(self.tip_type, [self.event], self.game.game_date.date()),
-        ), mock.patch(
-            'hooptipp.predictions.forms.get_team_choices',
-            return_value=[('42', 'Golden State Warriors')],
-        ), mock.patch(
-            'hooptipp.predictions.forms.get_player_choices',
-            return_value=[('8', 'Stephen Curry')],
-        ), mock.patch(
-            'hooptipp.predictions.services.get_team_choices',
-            return_value=[('42', 'Golden State Warriors')],
-        ), mock.patch(
-            'hooptipp.predictions.services.get_player_choices',
-            return_value=[('8', 'Stephen Curry')],
         ):
             response = self.client.post(
                 reverse('predictions:home'),
                 {
                     'update_preferences': '1',
                     'nickname': 'Splash',
-                    'favorite_team_id': '42',
-                    'favorite_player_id': '8',
                     'theme': 'invalid-theme',
                 },
             )

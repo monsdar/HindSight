@@ -86,6 +86,7 @@ class ScheduledGameAdmin(admin.ModelAdmin):
     )
     list_filter = ('tip_type', 'is_manual')
     search_fields = ('nba_game_id', 'home_team', 'away_team')
+    autocomplete_fields = ('tip_type',)
 
 
 @admin.register(NbaTeam)

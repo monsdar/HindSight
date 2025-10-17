@@ -18,11 +18,11 @@ from hooptipp.predictions.models import (
     OptionCategory,
     PredictionEvent,
     PredictionOption,
+    ScheduledGame,
     TipType,
 )
 
 from .managers import NbaPlayerManager, NbaTeamManager
-from .models import ScheduledGame
 
 logger = logging.getLogger(__name__)
 

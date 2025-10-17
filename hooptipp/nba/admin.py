@@ -7,54 +7,11 @@ from django.urls import path, reverse
 from django.utils.html import format_html
 from django.utils.translation import gettext_lazy as _
 
-from .models import NbaUserPreferences, ScheduledGame
+from .models import NbaUserPreferences
 from .services import sync_players, sync_teams
 
-
-@admin.register(ScheduledGame)
-class ScheduledGameAdmin(admin.ModelAdmin):
-    """Admin for NBA scheduled games."""
-
-    list_display = (
-        "nba_game_id",
-        "game_date",
-        "away_team_tricode",
-        "home_team_tricode",
-        "tip_type",
-        "is_manual",
-    )
-    list_filter = ("tip_type", "is_manual")
-    search_fields = ("nba_game_id", "home_team", "away_team")
-    autocomplete_fields = ("tip_type", "home_team_option", "away_team_option")
-    readonly_fields = ("nba_game_id",)
-
-    fieldsets = (
-        (
-            None,
-            {
-                "fields": (
-                    "tip_type",
-                    "nba_game_id",
-                    "game_date",
-                    "venue",
-                    "is_manual",
-                )
-            },
-        ),
-        (
-            "Teams",
-            {
-                "fields": (
-                    "home_team",
-                    "home_team_tricode",
-                    "home_team_option",
-                    "away_team",
-                    "away_team_tricode",
-                    "away_team_option",
-                )
-            },
-        ),
-    )
+# Note: ScheduledGame admin is in predictions.admin for now
+# It will be moved here when we fully migrate ScheduledGame to the nba app
 
 
 @admin.register(NbaUserPreferences)
