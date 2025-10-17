@@ -3,12 +3,12 @@
 
 {% block nav %}
   <div class="flex items-center gap-3 text-sm font-semibold text-slate-300">
-    <a href="{% url 'predictions:home' %}" class="rounded-full bg-slate-800 px-3 py-1 text-slate-100 shadow-inner shadow-slate-900/60">Weekly picks</a>
+    <a href="{% url 'predictions:home' %}" class="rounded-full bg-slate-800 px-3 py-1 text-slate-100 shadow-inner shadow-slate-900/60">Dashboard</a>
     <a href="{% url 'predictions:leaderboard' %}" class="rounded-full px-3 py-1 text-slate-400 transition hover:text-slate-100">Leaderboard</a>
   </div>
 {% endblock %}
 
-{% block title %}HoopTipp &ndash; Weekly overview{% endblock %}
+{% block title %}HoopTipp &ndash; Dashboard{% endblock %}
 
 {% block content %}
   {% with palette=active_theme_palette %}
@@ -27,19 +27,66 @@
       </style>
 
       <section class="space-y-3">
-        <h1 class="text-3xl font-bold theme-accent-text">Weekly picks</h1>
+        <h1 class="text-3xl font-bold theme-accent-text">Dashboard</h1>
         <p class="max-w-2xl text-slate-300">
-          Select a user to submit picks for the upcoming games. When no user is active you will not see any saved predictions.
+          Track the leaderboard, select a user, and make your predictions.
         </p>
       </section>
 
+      {# 1. CURRENT RANKING #}
+      <section class="space-y-4 rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-lg shadow-slate-900/30">
+        <header class="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 class="text-xl font-semibold theme-accent-text">Current Ranking</h2>
+            <p class="text-sm text-slate-400">
+              {% if leaderboard_rows %}
+                {{ leaderboard_rows|length }} player{{ leaderboard_rows|length|pluralize }} ranked
+              {% else %}
+                No scores yet
+              {% endif %}
+            </p>
+          </div>
+          <a
+            href="{% url 'predictions:leaderboard' %}"
+            class="theme-accent-text text-sm font-semibold transition hover:opacity-80"
+          >
+            View full leaderboard &rarr;
+          </a>
+        </header>
+
+        {% if leaderboard_rows %}
+          <div class="space-y-2">
+            {% for row in leaderboard_rows %}
+              <div class="flex items-center justify-between gap-3 rounded-lg border border-slate-800 bg-slate-950 px-4 py-3">
+                <div class="flex items-center gap-3">
+                  <span class="flex h-8 w-8 items-center justify-center rounded-full theme-accent-pill font-bold text-sm">
+                    {{ row.rank }}
+                  </span>
+                  <div>
+                    <p class="font-semibold text-slate-200">{{ row.display_name }}</p>
+                    <p class="text-xs text-slate-500">{{ row.event_count }} event{{ row.event_count|pluralize }} scored</p>
+                  </div>
+                </div>
+                <div class="text-right">
+                  <p class="text-2xl font-bold theme-accent-text">{{ row.total_points }}</p>
+                  <p class="text-xs text-slate-500">points</p>
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+        {% else %}
+          <p class="text-sm text-slate-400">No scores have been recorded yet. Start making predictions!</p>
+        {% endif %}
+      </section>
+
+      {# 2. USER SELECTION, ACTIVATION AND CUSTOMIZATION #}
       <section class="space-y-6">
         <form method="post" class="flex flex-wrap items-end gap-3 rounded-xl border border-slate-800 bg-slate-900 p-4 shadow-lg shadow-slate-900/30">
           {% csrf_token %}
           <input type="hidden" name="set_active_user" value="1" />
-          <div>
+          <div class="flex-1">
             <label for="user_id" class="block text-sm font-semibold uppercase tracking-wide text-slate-400">Active user</label>
-            <select id="user_id" name="user_id" class="theme-accent-outline mt-2 w-64 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100 focus:outline-none">
+            <select id="user_id" name="user_id" class="theme-accent-outline mt-2 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100 focus:outline-none">
               <option value="">No active user</option>
               {% for user in users %}
                 <option value="{{ user.id }}" {% if active_user and user.id == active_user.id %}selected{% endif %}>{{ user.display_name }}{% if user.display_name != user.username %} (@{{ user.username }}){% endif %}</option>
@@ -49,20 +96,16 @@
           <button
             type="submit"
             name="active_user_action"
-            value="{% if active_user %}finish{% else %}activate{% endif %}"
+            value="activate"
             class="theme-accent-bg theme-accent-shadow inline-flex items-center gap-2 rounded-lg px-4 py-2 font-semibold transition"
           >
-            {% if active_user %}
-              Finish my Round
-            {% else %}
-              Activate user
-            {% endif %}
+            Activate user
           </button>
         </form>
 
         {% if active_user and preferences_form %}
           <section class="rounded-2xl border border-slate-800 bg-slate-900 p-4 shadow-lg shadow-slate-900/30">
-            <details class="group" {% if preferences_form.errors %}open{% endif %}>
+            <details class="group">
               <summary class="flex w-full cursor-pointer items-center justify-between gap-3 rounded-xl border border-slate-800 bg-slate-950 px-4 py-3 text-left transition hover:border-slate-700">
                 <div>
                   <h2 class="text-lg font-semibold theme-accent-text">Customize experience</h2>
@@ -154,411 +197,258 @@
         {% endif %}
       </section>
 
-      {% if active_user %}
-        <section class="space-y-4 rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-lg shadow-slate-900/30">
-          <header class="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <h2 class="text-xl font-semibold theme-accent-text">Scoring overview</h2>
-              {% if scoreboard_summary and scoreboard_summary.events_scored %}
-                <p class="text-sm text-slate-400">
-                  {{ scoreboard_summary.events_scored }} scored event{{ scoreboard_summary.events_scored|pluralize }} for
-                  <span class="font-semibold text-slate-100">{{ active_user.display_name }}</span>
-                  {% if active_user.display_name != active_user.username %}
-                    <span class="ml-1 text-xs font-semibold text-slate-500">@{{ active_user.username }}</span>
-                  {% endif %}.
-                </p>
-              {% else %}
-                <p class="text-sm text-slate-400">No events have been scored for {{ active_user.display_name }}{% if active_user.display_name != active_user.username %} (@{{ active_user.username }}){% endif %} yet.</p>
-              {% endif %}
-            </div>
-            <a
-              href="{% url 'predictions:leaderboard' %}"
-              class="theme-accent-text text-sm font-semibold transition hover:opacity-80"
-            >
-              View leaderboard &rarr;
-            </a>
-          </header>
-
-          {% if scoreboard_summary %}
-            <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-              <div class="theme-accent-border theme-accent-surface rounded-xl border bg-slate-950 p-4">
-                <p class="text-xs uppercase tracking-wide theme-accent-muted">Total points</p>
-                <p class="mt-2 text-3xl font-bold theme-accent-text">{{ scoreboard_summary.total_points }} pts</p>
-              </div>
-              <div class="theme-accent-border rounded-xl border border-slate-800 bg-slate-950 p-4">
-                <p class="text-xs uppercase tracking-wide text-slate-500">Base picks</p>
-                <p class="mt-2 text-2xl font-semibold theme-accent-text">{{ scoreboard_summary.standard_points }} pts</p>
-                <p class="mt-1 text-xs theme-accent-muted">From regular events</p>
-              </div>
-              <div class="theme-accent-border rounded-xl border border-slate-800 bg-slate-950 p-4">
-                <p class="text-xs uppercase tracking-wide text-slate-500">Bonus events</p>
-                <p class="mt-2 text-2xl font-semibold theme-accent-text">{{ scoreboard_summary.bonus_event_points }} pts</p>
-                <p class="mt-1 text-xs theme-accent-muted">
-                  {{ scoreboard_summary.bonus_event_count }} bonus event{{ scoreboard_summary.bonus_event_count|pluralize }}
-                </p>
-              </div>
-              <div class="theme-accent-border rounded-xl border border-slate-800 bg-slate-950 p-4">
-                <p class="text-xs uppercase tracking-wide text-slate-500">Lock bonuses</p>
-                <p class="mt-2 text-2xl font-semibold theme-accent-text">{{ scoreboard_summary.lock_bonus_points }} pts</p>
-                <p class="mt-1 text-xs theme-accent-muted">
-                  {{ scoreboard_summary.lock_bonus_count }} lock bonus{{ scoreboard_summary.lock_bonus_count|pluralize }}
-                </p>
-              </div>
-            </div>
-
-            {% if recent_scores %}
-              <div class="space-y-2 pt-3">
-                <h3 class="text-sm font-semibold uppercase tracking-wide text-slate-400">Recent results</h3>
-                <ul class="space-y-2">
-                  {% for score in recent_scores %}
-                    <li class="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-sm">
-                      <div>
-                        <p class="font-semibold text-slate-200">{{ score.prediction_event.name }}</p>
-                        <p class="text-xs text-slate-500">
-                          {{ score.prediction_event.tip_type.name }} &bull; Awarded {{ score.awarded_at|date:"M d, Y H:i" }}
-                        </p>
-                        <p class="text-xs text-slate-500">
-                          Base {{ score.base_points }} pts{% if score.is_lock_bonus %}
-                            &bull; +{{ score.lock_bonus_value }} lock bonus pts
-                          {% endif %}
-                        </p>
-                      </div>
-                      <div class="text-right">
-                        <p class="text-lg font-bold text-slate-100">{{ score.points_awarded }} pts</p>
-                        {% if score.is_lock_bonus %}
-                          <p class="text-xs font-semibold text-amber-300">Lock multiplier &times;{{ score.lock_multiplier }}</p>
-                        {% endif %}
-                      </div>
-                    </li>
-                  {% endfor %}
-                </ul>
-              </div>
+      {# 3. RECENTLY RESOLVED PREDICTIONS #}
+      <section class="space-y-4 rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-lg shadow-slate-900/30">
+        <header>
+          <h2 class="text-xl font-semibold theme-accent-text">Recently Resolved Predictions</h2>
+          <p class="text-sm text-slate-400">
+            {% if resolved_predictions %}
+              Last {{ resolved_predictions|length }} resolved prediction{{ resolved_predictions|length|pluralize }}
             {% else %}
-              <p class="pt-3 text-sm text-slate-400">Recent results will appear after events are scored.</p>
+              No resolved predictions yet
             {% endif %}
-          {% endif %}
-        </section>
-      {% endif %}
+          </p>
+        </header>
 
-      {% if not event_sections %}
-        <div class="rounded-2xl border border-slate-800 bg-slate-900 p-6 text-slate-300">
-          <h2 class="text-xl font-semibold theme-accent-text">No prediction events found</h2>
-          <p class="mt-2">There are no open prediction windows right now. Please check back soon for new events.</p>
-        </div>
-      {% else %}
-        {% if weekday_slots %}
-          <section class="space-y-6">
-            <header class="flex flex-wrap items-center justify-between gap-4">
-              <div>
-                <h2 class="text-2xl font-semibold theme-accent-text">Upcoming deadlines</h2>
-                <p class="text-sm text-slate-400">
-                  {% if week_start and week_end %}
-                    Showing picks due between {{ week_start|date:"M d, Y" }} and {{ week_end|date:"M d, Y" }}.
-                  {% elif week_start %}
-                    Showing picks due on {{ week_start|date:"M d, Y" }}.
-                  {% else %}
-                    Showing picks due in the next 7 days.
-                  {% endif %}
-                </p>
-              </div>
-              {% if not active_user %}
-                <p class="text-sm text-slate-400">Activate a user to display or submit picks.</p>
-              {% endif %}
-            </header>
-
-            <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {% for slot in weekday_slots %}
-                <section class="rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-lg shadow-slate-900/40">
-                  <header class="flex items-baseline justify-between gap-2 text-sm text-slate-400">
-                    <h3 class="text-lg font-semibold text-slate-200">{{ slot.date|date:"l" }}</h3>
-                    <p>{{ slot.date|date:"M d, Y" }}</p>
+        {% if resolved_predictions %}
+          <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {% for item in resolved_predictions %}
+              {% with outcome=item.outcome user_tip=item.user_tip is_correct=item.is_correct %}
+                <article class="rounded-xl border {% if active_user %}{% if user_tip %}{% if is_correct %}border-green-500/50 bg-green-500/5{% else %}border-red-500/50 bg-red-500/5{% endif %}{% else %}border-slate-800 bg-slate-950{% endif %}{% else %}border-slate-800 bg-slate-950{% endif %} p-4">
+                  <header class="space-y-1">
+                    <p class="text-xs uppercase tracking-wide text-slate-500">{{ outcome.prediction_event.tip_type.name }}</p>
+                    <h3 class="text-lg font-semibold text-slate-200">{{ outcome.prediction_event.name }}</h3>
+                    {% if outcome.prediction_event.description %}
+                      <p class="text-sm text-slate-400">{{ outcome.prediction_event.description }}</p>
+                    {% endif %}
                   </header>
 
-                  {% if slot.events %}
-                    <div class="mt-4 space-y-4">
-                      {% for event in slot.events %}
-                        <article class="rounded-xl border border-slate-800 bg-slate-950 p-4">
-                          <header class="flex flex-wrap items-start justify-between gap-3">
-                            <div>
-                              <p class="text-xs uppercase tracking-wide text-slate-500">{{ event.tip_type.name }}</p>
-                              <h4 class="mt-1 text-lg font-semibold text-slate-200">{{ event.name }}</h4>
-                              {% if event.description %}
-                                <p class="mt-1 text-sm text-slate-400">{{ event.description }}</p>
-                              {% endif %}
-                            </div>
-                            <div class="text-right text-xs uppercase tracking-wide text-slate-500">
-                              <div>Opens {{ event.opens_at|date:"M d, H:i" }}</div>
-                              <div>Deadline {{ event.deadline|date:"M d, H:i" }}</div>
-                            </div>
-                          </header>
-
-                          {% with scheduled=event.scheduled_game %}
-                            {% if scheduled %}
-                              <div class="mt-3 space-y-2">
-                                <div class="flex items-center justify-between">
-                                  <span class="text-lg font-semibold text-slate-200">{{ scheduled.away_team_tricode }}</span>
-                                  <span class="text-xs uppercase tracking-wide text-slate-500">@</span>
-                                  <span class="text-lg font-semibold text-slate-200">{{ scheduled.home_team_tricode }}</span>
-                                </div>
-                                <p class="text-sm text-slate-400">
-                                  {{ scheduled.away_team }} <span class="theme-accent-text">@</span> {{ scheduled.home_team }}
-                                </p>
-                                <div class="flex items-center justify-between text-xs text-slate-500">
-                                  <span>{{ scheduled.game_date|date:"H:i" }}</span>
-                                  {% if scheduled.venue %}
-                                    <span>{{ scheduled.venue }}</span>
-                                  {% endif %}
-                                </div>
-                              </div>
-                            {% endif %}
-                          {% endwith %}
-
-                          {% with pick_users=event_tip_users|get_item:event.id %}
-                            {% if pick_users %}
-                              <div class="mt-3 flex flex-wrap items-center gap-2 text-xs">
-                                <span class="font-semibold uppercase tracking-wide text-slate-500">Picked by</span>
-                                <div class="flex flex-wrap gap-1">
-                                  {% for pick_user in pick_users %}
-                                    <span
-                                      class="theme-accent-pill inline-flex h-6 w-6 items-center justify-center rounded-full border font-semibold"
-                                      title="{{ pick_user.display_name }}{% if pick_user.display_name != pick_user.username %} (@{{ pick_user.username }}){% endif %}"
-                                      aria-label="{{ pick_user.display_name }}{% if pick_user.display_name != pick_user.username %} (@{{ pick_user.username }}){% endif %}"
-                                    >
-                                      {{ pick_user.display_initial }}
-                                    </span>
-                                  {% endfor %}
-                                </div>
-                              </div>
-                            {% endif %}
-                          {% endwith %}
-
-                          <div class="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs uppercase tracking-wide text-slate-500">
-                            <span class="theme-accent-pill inline-flex items-center gap-1 rounded-full px-2 py-1 font-semibold">
-                              {{ event.points }} pt{{ event.points|pluralize }}
-                            </span>
-                            {% if event.is_bonus_event %}
-                              <span class="text-amber-300 font-semibold">Bonus event</span>
-                            {% endif %}
-                          </div>
-
-                          {% with user_tip=user_tips|get_item:event.id %}
-                            {% if active_user %}
-                              <div class="mt-4 space-y-3">
-                                <div class="theme-accent-radio">
-                                  <fieldset class="space-y-2">
-                                    <legend class="text-xs uppercase tracking-wide text-slate-500">Your pick</legend>
-                                    {% for option in event.options.all %}
-                                      <label class="theme-accent-hover flex items-center gap-2 rounded-lg border border-slate-800 bg-slate-900 px-3 py-2 text-sm">
-                                        <input type="radio" name="prediction_{{ event.id }}" value="{{ option.id }}" form="tips-form" class="h-4 w-4 theme-accent-outline"
-                                          {% if user_tip and user_tip.prediction_option_id == option.id %}checked{% endif %} />
-                                        <span class="flex-1">
-                                          {% if option.team %}
-                                            {{ option.team.name }} wins
-                                          {% elif option.player %}
-                                            {{ option.player.display_name }}
-                                          {% else %}
-                                            {{ option.label }}
-                                          {% endif %}
-                                        </span>
-                                      </label>
-                                    {% endfor %}
-                                  </fieldset>
-                                </div>
-                                <div class="flex flex-wrap items-center justify-between gap-3 text-xs text-slate-400">
-                                  <label class="inline-flex items-center gap-2 text-sm text-slate-300">
-                                    <input type="checkbox" name="lock_{{ event.id }}" value="1" form="tips-form" class="h-4 w-4 theme-accent-outline"
-                                      {% if user_tip and user_tip.is_locked %}checked{% endif %}
-                                      {% if lock_summary and lock_summary.available == 0 and not user_tip %}disabled{% elif lock_summary and lock_summary.available == 0 and user_tip and not user_tip.is_locked %}disabled{% endif %} />
-                                    <span>Lock this pick</span>
-                                  </label>
-                                  {% if user_tip and user_tip.is_locked %}
-                                    <span class="theme-accent-pill inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-semibold uppercase tracking-wide">Locked</span>
-                                  {% elif lock_summary and lock_summary.available == 0 %}
-                                    <span class="text-xs text-slate-500">No locks remaining</span>
-                                  {% endif %}
-                                </div>
-                              </div>
-                            {% endif %}
-
-                            {% if active_user and user_tip %}
-                              <p class="mt-3 text-xs text-slate-500">
-                                Last updated: {{ user_tip.updated_at|date:"M d, Y H:i" }}
-                                {% if user_tip.is_locked %}
-                                  <span class="ml-2 theme-accent-pill inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide">Locked</span>
-                                {% endif %}
-                              </p>
-                            {% endif %}
-                          {% endwith %}
-                        </article>
-                      {% endfor %}
+                  <div class="mt-3 space-y-2">
+                    <div class="rounded-lg border border-slate-800 bg-slate-900 p-3">
+                      <p class="text-xs uppercase tracking-wide text-slate-500">Winning outcome</p>
+                      <p class="mt-1 font-semibold text-slate-100">
+                        {% if outcome.winning_option %}
+                          {{ outcome.winning_option.label }}
+                        {% elif outcome.winning_generic_option %}
+                          {{ outcome.winning_generic_option.name }}
+                        {% else %}
+                          Not specified
+                        {% endif %}
+                      </p>
                     </div>
-                  {% else %}
-                    <p class="mt-4 text-sm text-slate-500">No predictions due on this day.</p>
-                  {% endif %}
-                </section>
-              {% endfor %}
-            </div>
-          </section>
+
+                    {% if active_user and user_tip %}
+                      <div class="rounded-lg border {% if is_correct %}border-green-500/30 bg-green-500/10{% else %}border-red-500/30 bg-red-500/10{% endif %} p-3">
+                        <p class="text-xs uppercase tracking-wide {% if is_correct %}text-green-400{% else %}text-red-400{% endif %}">Your prediction</p>
+                        <p class="mt-1 font-semibold {% if is_correct %}text-green-200{% else %}text-red-200{% endif %}">
+                          {{ user_tip.prediction }}
+                        </p>
+                        <p class="mt-1 text-xs font-bold uppercase {% if is_correct %}text-green-300{% else %}text-red-300{% endif %}">
+                          {% if is_correct %}✓ Correct{% else %}✗ Incorrect{% endif %}
+                        </p>
+                      </div>
+                    {% endif %}
+                  </div>
+
+                  <div class="mt-3 flex items-center justify-between text-xs text-slate-500">
+                    <span>Resolved {{ outcome.resolved_at|date:"M d, H:i" }}</span>
+                    <span class="theme-accent-pill inline-flex items-center gap-1 rounded-full px-2 py-1 font-semibold">
+                      {{ outcome.prediction_event.points }} pt{{ outcome.prediction_event.points|pluralize }}
+                    </span>
+                  </div>
+                </article>
+              {% endwith %}
+            {% endfor %}
+          </div>
+        {% else %}
+          <p class="text-sm text-slate-400">No predictions have been resolved yet.</p>
         {% endif %}
+      </section>
 
-        {% for section in event_sections %}
-            <section class="space-y-5">
-              <header>
-                <h2 class="text-2xl font-semibold theme-accent-text">{{ section.tip_type.name }}</h2>
-                <p class="text-sm text-slate-400">Submit picks before {{ section.tip_type.deadline|date:"M d, Y H:i" }}.</p>
-              </header>
+      {# 4. OPEN ACTIVE PREDICTIONS #}
+      <section class="space-y-4">
+        <header>
+          <h2 class="text-2xl font-semibold theme-accent-text">Open Predictions</h2>
+          <p class="text-sm text-slate-400">
+            {% if open_predictions %}
+              {{ open_predictions|length }} open prediction{{ open_predictions|length|pluralize }} available
+            {% else %}
+              No open predictions
+            {% endif %}
+          </p>
+        </header>
 
-              <div class="grid gap-4 lg:grid-cols-2">
-                {% for event in section.events %}
-                  <article class="rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-lg shadow-slate-900/40">
-                    <header class="flex flex-wrap items-start justify-between gap-3">
-                      <div>
-                        <h3 class="text-lg font-semibold text-slate-100">{{ event.name }}</h3>
-                        {% if event.description %}
-                          <p class="mt-1 text-sm text-slate-400">{{ event.description }}</p>
+        {% if open_predictions %}
+          <div class="grid gap-4 lg:grid-cols-2">
+            {% for event in open_predictions %}
+              <article class="rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-lg shadow-slate-900/40">
+                <header class="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p class="text-xs uppercase tracking-wide text-slate-500">{{ event.tip_type.name }}</p>
+                    <h3 class="mt-1 text-lg font-semibold text-slate-100">{{ event.name }}</h3>
+                    {% if event.description %}
+                      <p class="mt-1 text-sm text-slate-400">{{ event.description }}</p>
+                    {% endif %}
+                  </div>
+                  <div class="text-right text-xs uppercase tracking-wide text-slate-500">
+                    <div>Deadline</div>
+                    <div class="font-semibold text-slate-300">{{ event.deadline|date:"M d, H:i" }}</div>
+                  </div>
+                </header>
+
+                <div class="mt-3 flex flex-wrap items-center gap-2 text-xs uppercase tracking-wide text-slate-500">
+                  <span class="theme-accent-pill inline-flex items-center gap-1 rounded-full px-2 py-1 font-semibold">
+                    {{ event.points }} pt{{ event.points|pluralize }}
+                  </span>
+                  {% if event.is_bonus_event %}
+                    <span class="text-amber-300 font-semibold">Bonus event</span>
+                  {% endif %}
+                </div>
+
+                {% with scheduled=event.scheduled_game %}
+                  {% if scheduled %}
+                    <div class="mt-3 space-y-2 rounded-lg border border-slate-800 bg-slate-950 p-3">
+                      <div class="flex items-center justify-between">
+                        <span class="text-lg font-semibold text-slate-200">{{ scheduled.away_team_tricode }}</span>
+                        <span class="text-xs uppercase tracking-wide text-slate-500">@</span>
+                        <span class="text-lg font-semibold text-slate-200">{{ scheduled.home_team_tricode }}</span>
+                      </div>
+                      <p class="text-sm text-slate-400">
+                        {{ scheduled.away_team }} <span class="theme-accent-text">@</span> {{ scheduled.home_team }}
+                      </p>
+                      <div class="flex items-center justify-between text-xs text-slate-500">
+                        <span>{{ scheduled.game_date|date:"M d, H:i" }}</span>
+                        {% if scheduled.venue %}
+                          <span>{{ scheduled.venue }}</span>
                         {% endif %}
                       </div>
-                      <div class="text-xs uppercase tracking-wide text-slate-500">
-                        <div>Opens {{ event.opens_at|date:"M d, H:i" }}</div>
-                        <div>Closes {{ event.deadline|date:"M d, H:i" }}</div>
-                      </div>
-                    </header>
-
-                    <div class="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs uppercase tracking-wide text-slate-500">
-                      <span class="theme-accent-pill inline-flex items-center gap-1 rounded-full px-2 py-1 font-semibold">
-                        {{ event.points }} pt{{ event.points|pluralize }}
-                      </span>
-                      {% if event.is_bonus_event %}
-                        <span class="text-amber-300 font-semibold">Bonus event</span>
-                      {% endif %}
                     </div>
+                  {% endif %}
+                {% endwith %}
 
-                    {% with pick_users=event_tip_users|get_item:event.id %}
-                      {% if pick_users %}
-                        <div class="mt-3 flex flex-wrap items-center gap-2 text-xs">
-                          <span class="font-semibold uppercase tracking-wide text-slate-500">Picked by</span>
-                          <div class="flex flex-wrap gap-1">
-                            {% for pick_user in pick_users %}
-                              <span
-                                class="theme-accent-pill inline-flex h-6 w-6 items-center justify-center rounded-full border font-semibold"
-                                title="{{ pick_user.display_name }}{% if pick_user.display_name != pick_user.username %} (@{{ pick_user.username }}){% endif %}"
-                                aria-label="{{ pick_user.display_name }}{% if pick_user.display_name != pick_user.username %} (@{{ pick_user.username }}){% endif %}"
-                              >
-                                {{ pick_user.display_initial }}
-                              </span>
-                            {% endfor %}
-                          </div>
+                {% with user_tip=user_tips|get_item:event.id %}
+                  {% if active_user %}
+                    <div class="mt-4 space-y-3">
+                      {% if event.selection_mode == 'curated' %}
+                        <div class="theme-accent-radio space-y-2">
+                          <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Your pick</p>
+                          {% for option in event.options.all %}
+                            <label class="theme-accent-hover flex items-center gap-2 rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-sm">
+                              <input type="radio" name="prediction_{{ event.id }}" value="{{ option.id }}" form="tips-form" class="h-4 w-4 theme-accent-outline"
+                                {% if user_tip and user_tip.prediction_option_id == option.id %}checked{% endif %} />
+                              <div class="flex-1">
+                                <p class="font-semibold text-slate-200">{{ option.label }}</p>
+                              </div>
+                            </label>
+                          {% empty %}
+                            <p class="text-sm text-slate-500">No options configured yet.</p>
+                          {% endfor %}
+                        </div>
+                      {% else %}
+                        <div>
+                          {% if event.target_kind == 'team' %}
+                            {% if team_choices %}
+                              <label class="block text-sm font-semibold uppercase tracking-wide text-slate-400" for="prediction_{{ event.id }}">Select a team</label>
+                              <select id="prediction_{{ event.id }}" name="prediction_{{ event.id }}" form="tips-form" class="theme-accent-outline mt-2 w-full rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-slate-100 focus:outline-none">
+                                <option value="">Choose a team</option>
+                                {% for team in team_choices %}
+                                  <option value="{{ team.id }}" {% if user_tip and user_tip.selected_team_id == team.id %}selected{% endif %}>{{ team.name }}</option>
+                                {% endfor %}
+                              </select>
+                            {% else %}
+                              <p class="text-sm text-slate-500">No teams available for selection.</p>
+                            {% endif %}
+                          {% elif event.target_kind == 'player' %}
+                            {% if player_choices %}
+                              <label class="block text-sm font-semibold uppercase tracking-wide text-slate-400" for="prediction_{{ event.id }}">Select a player</label>
+                              <select id="prediction_{{ event.id }}" name="prediction_{{ event.id }}" form="tips-form" class="theme-accent-outline mt-2 w-full rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-slate-100 focus:outline-none">
+                                <option value="">Choose a player</option>
+                                {% for player in player_choices %}
+                                  <option value="{{ player.id }}" {% if user_tip and user_tip.selected_player_id == player.id %}selected{% endif %}>{{ player.display_name }}</option>
+                                {% endfor %}
+                              </select>
+                            {% else %}
+                              <p class="text-sm text-slate-500">No players available for selection.</p>
+                            {% endif %}
+                          {% endif %}
                         </div>
                       {% endif %}
-                    {% endwith %}
 
-                    {% with user_tip=user_tips|get_item:event.id %}
-                      <div class="mt-4 space-y-3">
-                        {% if event.selection_mode == 'curated' %}
-                          <div class="theme-accent-radio space-y-2">
-                            {% for option in event.options.all %}
-                              <label class="theme-accent-hover flex items-center gap-2 rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-sm">
-                                <input type="radio" name="prediction_{{ event.id }}" value="{{ option.id }}" form="tips-form" class="h-4 w-4 theme-accent-outline"
-                                  {% if user_tip and user_tip.prediction_option_id == option.id %}checked{% endif %} />
-                                <div class="flex-1">
-                                  <p class="font-semibold text-slate-200">{{ option.label }}</p>
-                                  {% if option.team and option.team.abbreviation %}
-                                    <p class="text-xs uppercase tracking-wide text-slate-500">{{ option.team.abbreviation }}</p>
-                                  {% elif option.player %}
-                                    <p class="text-xs uppercase tracking-wide text-slate-500">Player</p>
-                                  {% endif %}
-                                </div>
-                              </label>
-                            {% empty %}
-                              <p class="text-sm text-slate-500">No options configured yet.</p>
-                            {% endfor %}
-                          </div>
-                        {% else %}
-                          <div>
-                            {% if event.target_kind == 'team' %}
-                              {% if team_choices %}
-                                <label class="block text-sm font-semibold uppercase tracking-wide text-slate-400" for="prediction_{{ event.id }}">Select a team</label>
-                                <select id="prediction_{{ event.id }}" name="prediction_{{ event.id }}" form="tips-form" class="theme-accent-outline mt-2 w-full rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-slate-100 focus:outline-none">
-                                  <option value="">Choose a team</option>
-                                  {% for team in team_choices %}
-                                    <option value="{{ team.id }}" {% if user_tip and user_tip.selected_team_id == team.id %}selected{% endif %}>{{ team.name }}</option>
-                                  {% endfor %}
-                                </select>
-                              {% else %}
-                                <p class="text-sm text-slate-500">No teams available for selection.</p>
-                              {% endif %}
-                            {% else %}
-                              {% if player_choices %}
-                                <label class="block text-sm font-semibold uppercase tracking-wide text-slate-400" for="prediction_{{ event.id }}">Select a player</label>
-                                <select id="prediction_{{ event.id }}" name="prediction_{{ event.id }}" form="tips-form" class="theme-accent-outline mt-2 w-full rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-slate-100 focus:outline-none">
-                                  <option value="">Choose a player</option>
-                                  {% for player in player_choices %}
-                                    <option value="{{ player.id }}" {% if user_tip and user_tip.selected_player_id == player.id %}selected{% endif %}>{{ player.display_name }}</option>
-                                  {% endfor %}
-                                </select>
-                              {% else %}
-                                <p class="text-sm text-slate-500">No players available for selection.</p>
-                              {% endif %}
-                            {% endif %}
-                          </div>
-                        {% endif %}
-
-                        {% if active_user %}
-                          <div class="flex flex-wrap items-center justify-between gap-3 text-xs text-slate-400">
-                            <label class="inline-flex items-center gap-2 text-sm text-slate-300">
-                              <input type="checkbox" name="lock_{{ event.id }}" value="1" form="tips-form" class="h-4 w-4 theme-accent-outline"
-                                {% if user_tip and user_tip.is_locked %}checked{% endif %}
-                                {% if lock_summary and lock_summary.available == 0 and not user_tip %}disabled{% elif lock_summary and lock_summary.available == 0 and user_tip and not user_tip.is_locked %}disabled{% endif %} />
-                              <span>Lock this pick</span>
-                            </label>
-                            {% if user_tip and user_tip.is_locked %}
-                              <span class="theme-accent-pill inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-semibold uppercase tracking-wide">Locked</span>
-                            {% elif lock_summary and lock_summary.available == 0 %}
-                              <span class="text-xs text-slate-500">No locks remaining</span>
-                            {% endif %}
-                          </div>
-                        {% endif %}
-
-                        {% if active_user and user_tip %}
-                          <p class="text-xs text-slate-500">
-                            Last updated: {{ user_tip.updated_at|date:"M d, Y H:i" }}
-                            {% if user_tip.is_locked %}
-                              <span class="ml-2 theme-accent-pill inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide">Locked</span>
-                            {% endif %}
-                          </p>
+                      <div class="flex flex-wrap items-center justify-between gap-3 text-xs text-slate-400">
+                        <label class="inline-flex items-center gap-2 text-sm text-slate-300">
+                          <input type="checkbox" name="lock_{{ event.id }}" value="1" form="tips-form" class="h-4 w-4 theme-accent-outline"
+                            {% if user_tip and user_tip.is_locked %}checked{% endif %}
+                            {% if lock_summary and lock_summary.available == 0 and not user_tip %}disabled{% elif lock_summary and lock_summary.available == 0 and user_tip and not user_tip.is_locked %}disabled{% endif %} />
+                          <span>Lock this pick</span>
+                        </label>
+                        {% if user_tip and user_tip.is_locked %}
+                          <span class="theme-accent-pill inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-semibold uppercase tracking-wide">Locked</span>
+                        {% elif lock_summary and lock_summary.available == 0 %}
+                          <span class="text-xs text-slate-500">No locks remaining</span>
                         {% endif %}
                       </div>
-                    {% endwith %}
-                  </article>
-                {% endfor %}
-              </div>
-            </section>
-        {% endfor %}
 
-        {% if active_user %}
-          <form id="tips-form" method="post" class="theme-accent-border theme-accent-surface mt-8 rounded-2xl border p-5 backdrop-blur">
+                      {% if user_tip %}
+                        <p class="text-xs text-slate-500">
+                          Last updated: {{ user_tip.updated_at|date:"M d, Y H:i" }}
+                        </p>
+                      {% endif %}
+                    </div>
+                  {% else %}
+                    <p class="mt-4 text-sm text-slate-400">Activate a user to make predictions.</p>
+                  {% endif %}
+                {% endwith %}
+              </article>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="rounded-2xl border border-slate-800 bg-slate-900 p-6 text-slate-300">
+            <p>There are no open prediction windows right now. Please check back soon for new events.</p>
+          </div>
+        {% endif %}
+      </section>
+
+      {# 5. FINISH ROUND BUTTON (only when user is active) #}
+      {% if active_user %}
+        <section class="theme-accent-border theme-accent-surface rounded-2xl border p-5 backdrop-blur">
+          {% if lock_summary %}
+            <div class="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-xs text-slate-300">
+              <span class="font-semibold text-slate-100">Locks remaining: {{ lock_summary.available }} / {{ lock_summary.total }}</span>
+              <span>
+                Active locks: {{ lock_summary.active }}
+                {% if lock_summary.pending %}
+                  &bull; Pending returns: {{ lock_summary.pending }}
+                {% endif %}
+              </span>
+              {% if lock_summary.next_return_at %}
+                <span>Next lock returns {{ lock_summary.next_return_at|date:"M d, Y" }}</span>
+              {% endif %}
+            </div>
+          {% endif %}
+
+          <form id="tips-form" method="post" class="flex flex-wrap items-center justify-between gap-4">
             {% csrf_token %}
             <input type="hidden" name="save_tips" value="1" />
-            <p class="mb-4 text-sm theme-accent-muted">Picks are automatically stored for <span class="font-semibold text-slate-100">{{ active_user.display_name }}</span>{% if active_user.display_name != active_user.username %}<span class="ml-1 text-xs text-slate-400">@{{ active_user.username }}</span>{% endif %}.</p>
-            {% if lock_summary %}
-              <div class="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-xs text-slate-300">
-                <span class="font-semibold text-slate-100">Locks remaining: {{ lock_summary.available }} / {{ lock_summary.total }}</span>
-                <span>
-                  Active locks: {{ lock_summary.active }}
-                  {% if lock_summary.pending %}
-                    &bull; Pending returns: {{ lock_summary.pending }}
-                  {% endif %}
-                </span>
-                {% if lock_summary.next_return_at %}
-                  <span>Next lock returns {{ lock_summary.next_return_at|date:"M d, Y" }}</span>
-                {% endif %}
-              </div>
-            {% endif %}
-            <button type="submit" class="theme-accent-bg theme-accent-shadow inline-flex items-center gap-2 rounded-lg px-5 py-2 font-semibold transition">
-              Save picks
-            </button>
+            <p class="text-sm theme-accent-muted">
+              Making predictions as <span class="font-semibold text-slate-100">{{ active_user.display_name }}</span>{% if active_user.display_name != active_user.username %}<span class="ml-1 text-xs text-slate-400">@{{ active_user.username }}</span>{% endif %}
+            </p>
+            <div class="flex gap-3">
+              <button type="submit" class="theme-accent-bg theme-accent-shadow inline-flex items-center gap-2 rounded-lg px-5 py-2 font-semibold transition">
+                Save picks
+              </button>
+              <button
+                type="submit"
+                formaction="{% url 'predictions:home' %}"
+                name="set_active_user"
+                value="1"
+                onclick="document.getElementById('user_id').value = '';"
+                class="inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-900 px-5 py-2 font-semibold text-slate-200 transition hover:bg-slate-800"
+              >
+                Finish Round
+              </button>
+            </div>
           </form>
-        {% endif %}
+        </section>
       {% endif %}
     </div>
   {% endwith %}
