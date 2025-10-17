@@ -276,64 +276,21 @@ class PredictionOption(models.Model):
         related_name="options",
     )
     label = models.CharField(max_length=200)
-    # New generic option reference
     option = models.ForeignKey(
         Option,
         on_delete=models.CASCADE,
-        null=True,
-        blank=True,
         related_name="prediction_options",
         help_text="Generic option reference for any type of prediction target",
-    )
-    # Legacy NBA-specific fields - kept for backward compatibility
-    # TODO: Mark as deprecated after migration
-    team = models.ForeignKey(
-        NbaTeam,
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True,
-        related_name="prediction_options",
-    )
-    player = models.ForeignKey(
-        NbaPlayer,
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True,
-        related_name="prediction_options",
     )
     is_active = models.BooleanField(default=True)
     sort_order = models.PositiveIntegerField(default=0)
 
     class Meta:
         ordering = ["sort_order", "label"]
-        unique_together = (
-            ("event", "team"),
-            ("event", "player"),
-        )
+        unique_together = (("event", "option"),)
 
     def __str__(self) -> str:
         return self.label
-
-    def clean(self) -> None:
-        from django.core.exceptions import ValidationError
-
-        # Check if any reference is provided
-        has_option = bool(self.option or self.team or self.player)
-        if not has_option:
-            raise ValidationError(
-                "Prediction options must reference an option, team, or player."
-            )
-        
-        # Validate only one reference type is used
-        references = [bool(x) for x in [self.option, self.team, self.player]]
-        if sum(references) > 1:
-            raise ValidationError(
-                "Prediction options can only reference one of: option, team, or player."
-            )
-    
-    def get_display_option(self) -> 'Option | NbaTeam | NbaPlayer | None':
-        """Get the actual option object regardless of which field is used."""
-        return self.option or self.team or self.player
 
 
 class UserTip(models.Model):
@@ -345,19 +302,10 @@ class UserTip(models.Model):
 
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     tip_type = models.ForeignKey(TipType, on_delete=models.CASCADE)
-    scheduled_game = models.ForeignKey(
-        ScheduledGame,
-        on_delete=models.CASCADE,
-        related_name='tips',
-        blank=True,
-        null=True,
-    )
     prediction_event = models.ForeignKey(
         PredictionEvent,
         on_delete=models.CASCADE,
         related_name='tips',
-        null=True,
-        blank=True,
     )
     prediction_option = models.ForeignKey(
         PredictionOption,
@@ -365,33 +313,17 @@ class UserTip(models.Model):
         related_name='tips',
         null=True,
         blank=True,
+        help_text="The specific option the user selected (references a PredictionOption from the event)",
     )
-    # New generic option reference
     selected_option = models.ForeignKey(
         Option,
         on_delete=models.SET_NULL,
         related_name='tips',
         null=True,
         blank=True,
-        help_text="Generic option selected for any type of prediction",
+        help_text="The underlying generic option selected (denormalized for easier querying)",
     )
-    # Legacy NBA-specific fields - kept for backward compatibility
-    # TODO: Mark as deprecated after migration
-    selected_team = models.ForeignKey(
-        NbaTeam,
-        on_delete=models.SET_NULL,
-        related_name='tips',
-        null=True,
-        blank=True,
-    )
-    selected_player = models.ForeignKey(
-        NbaPlayer,
-        on_delete=models.SET_NULL,
-        related_name='tips',
-        null=True,
-        blank=True,
-    )
-    prediction = models.CharField(max_length=255)
+    prediction = models.CharField(max_length=255, help_text="Human-readable prediction text")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     is_locked = models.BooleanField(default=False)
@@ -409,23 +341,16 @@ class UserTip(models.Model):
     )
 
     class Meta:
-        unique_together = (
-            ('user', 'tip_type', 'scheduled_game'),
-            ('user', 'prediction_event'),
-        )
+        unique_together = (('user', 'prediction_event'),)
         verbose_name = 'User tip'
         verbose_name_plural = 'User tips'
+        indexes = [
+            models.Index(fields=['user', 'is_locked']),
+            models.Index(fields=['prediction_event', 'user']),
+        ]
 
     def __str__(self) -> str:
-        if self.prediction_event:
-            return f"{self.user} - {self.prediction_event}: {self.prediction}"
-        if self.scheduled_game:
-            return f"{self.user} - {self.scheduled_game}: {self.prediction}"
-        return f"{self.user} - {self.tip_type}: {self.prediction}"
-    
-    def get_selected_option(self) -> 'Option | NbaTeam | NbaPlayer | None':
-        """Get the selected option regardless of which field is used."""
-        return self.selected_option or self.selected_team or self.selected_player
+        return f"{self.user} - {self.prediction_event}: {self.prediction}"
 
 
 class EventOutcome(models.Model):
@@ -440,31 +365,15 @@ class EventOutcome(models.Model):
         null=True,
         blank=True,
         related_name="winning_outcomes",
+        help_text="The PredictionOption that won (includes label and event context)",
     )
-    # New generic winning option field
     winning_generic_option = models.ForeignKey(
         "Option",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name="winning_event_outcomes",
-        help_text="Generic option that won this event",
-    )
-    # Legacy NBA-specific fields - kept for backward compatibility
-    # TODO: Mark as deprecated after migration
-    winning_team = models.ForeignKey(
-        "NbaTeam",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="winning_event_outcomes",
-    )
-    winning_player = models.ForeignKey(
-        "NbaPlayer",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="winning_event_outcomes",
+        help_text="The underlying generic Option that won (denormalized for easier querying)",
     )
     resolved_at = models.DateTimeField(default=timezone.now)
     resolved_by = models.ForeignKey(
@@ -488,29 +397,10 @@ class EventOutcome(models.Model):
     def clean(self) -> None:
         from django.core.exceptions import ValidationError
 
-        provided = [
-            value
-            for value in (
-                self.winning_option,
-                self.winning_generic_option,
-                self.winning_team,
-                self.winning_player,
-            )
-            if value is not None
-        ]
-        if not provided:
+        if not (self.winning_option or self.winning_generic_option):
             raise ValidationError(
-                "An event outcome must specify a winning option, team, or player.",
+                "An event outcome must specify a winning option.",
             )
-    
-    def get_winning_option(self) -> 'PredictionOption | Option | NbaTeam | NbaPlayer | None':
-        """Get the winning option regardless of which field is used."""
-        return (
-            self.winning_option
-            or self.winning_generic_option
-            or self.winning_team
-            or self.winning_player
-        )
 
 
 class UserEventScore(models.Model):

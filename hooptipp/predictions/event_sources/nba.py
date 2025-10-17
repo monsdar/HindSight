@@ -287,7 +287,7 @@ class NbaEventSource(EventSource):
                 event_ids.append(event.id)
 
                 # Create/update prediction options for home and away teams
-                # Find teams in Option model
+                # Find team options
                 teams_cat = OptionCategory.objects.get(slug="nba-teams")
 
                 home_option = Option.objects.filter(
@@ -300,42 +300,35 @@ class NbaEventSource(EventSource):
                     short_name=game["away_team"]["abbreviation"],
                 ).first()
 
-                # Also get legacy NbaTeam objects
-                home_team = NbaTeam.objects.filter(
-                    abbreviation=game["home_team"]["abbreviation"]
-                ).first()
-                away_team = NbaTeam.objects.filter(
-                    abbreviation=game["away_team"]["abbreviation"]
-                ).first()
-
-                if away_team:
+                # Create prediction options
+                if away_option:
                     PredictionOption.objects.update_or_create(
                         event=event,
-                        team=away_team,
+                        option=away_option,
                         defaults={
-                            "label": away_team.name,
-                            "option": away_option,
+                            "label": away_option.name,
                             "sort_order": 1,
                             "is_active": True,
                         },
                     )
 
-                if home_team:
+                if home_option:
                     PredictionOption.objects.update_or_create(
                         event=event,
-                        team=home_team,
+                        option=home_option,
                         defaults={
-                            "label": home_team.name,
-                            "option": home_option,
+                            "label": home_option.name,
                             "sort_order": 2,
                             "is_active": True,
                         },
                     )
 
                 # Remove options that aren't home or away
-                PredictionOption.objects.filter(event=event).exclude(
-                    team__in=[t for t in [home_team, away_team] if t]
-                ).delete()
+                valid_options = [opt for opt in [home_option, away_option] if opt]
+                if valid_options:
+                    PredictionOption.objects.filter(event=event).exclude(
+                        option__in=valid_options
+                    ).delete()
 
             # Clean up old games
             deleted_count, _ = (

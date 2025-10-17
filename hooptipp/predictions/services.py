@@ -623,31 +623,53 @@ def _update_event_options(
     home_team: Optional[NbaTeam],
     away_team: Optional[NbaTeam],
 ) -> None:
+    from .models import Option, OptionCategory
+    
+    teams_cat = OptionCategory.objects.filter(slug='nba-teams').first()
+    if not teams_cat:
+        return
+    
+    valid_options = []
+    
     if home_team:
-        PredictionOption.objects.update_or_create(
-            event=event,
-            team=home_team,
-            defaults={
-                'label': home_team.name,
-                'sort_order': 2,
-                'is_active': True,
-            },
-        )
+        home_option = Option.objects.filter(
+            category=teams_cat,
+            metadata__nba_team_id=home_team.id
+        ).first()
+        if home_option:
+            PredictionOption.objects.update_or_create(
+                event=event,
+                option=home_option,
+                defaults={
+                    'label': home_option.name,
+                    'sort_order': 2,
+                    'is_active': True,
+                },
+            )
+            valid_options.append(home_option)
+    
     if away_team:
-        PredictionOption.objects.update_or_create(
-            event=event,
-            team=away_team,
-            defaults={
-                'label': away_team.name,
-                'sort_order': 1,
-                'is_active': True,
-            },
-        )
+        away_option = Option.objects.filter(
+            category=teams_cat,
+            metadata__nba_team_id=away_team.id
+        ).first()
+        if away_option:
+            PredictionOption.objects.update_or_create(
+                event=event,
+                option=away_option,
+                defaults={
+                    'label': away_option.name,
+                    'sort_order': 1,
+                    'is_active': True,
+                },
+            )
+            valid_options.append(away_option)
 
-    (PredictionOption.objects
-        .filter(event=event)
-        .exclude(team__in=[team for team in [home_team, away_team] if team])
-        .delete())
+    if valid_options:
+        (PredictionOption.objects
+            .filter(event=event)
+            .exclude(option__in=valid_options)
+            .delete())
 
 
 def _ensure_manual_events(

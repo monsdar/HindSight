@@ -189,14 +189,10 @@ def home(request):
                         continue
                     option = existing_tip.prediction_option
                     selected_option = existing_tip.selected_option
-                    selected_team = existing_tip.selected_team
-                    selected_player = existing_tip.selected_player
                     prediction_label = existing_tip.prediction
                 else:
                     option = None
                     selected_option = None
-                    selected_team = None
-                    selected_player = None
                     prediction_label = ''
 
                     if event.selection_mode == PredictionEvent.SelectionMode.CURATED:
@@ -214,12 +210,11 @@ def home(request):
                         )
                         if not option:
                             continue
-                        # Get the actual option (generic, team, or player)
+                        # Get the underlying generic option
                         selected_option = option.option
-                        selected_team = option.team
-                        selected_player = option.player
                         prediction_label = option.label
                     else:
+                        # ANY selection mode - select from available options
                         if event.target_kind == PredictionEvent.TargetKind.TEAM:
                             try:
                                 team_id = int(submitted_value)
@@ -232,6 +227,11 @@ def home(request):
                             if not selected_team:
                                 continue
                             prediction_label = selected_team.name
+                            # Find or create the Option for this team
+                            selected_option = Option.objects.filter(
+                                category__slug='nba-teams',
+                                metadata__nba_team_id=selected_team.id
+                            ).first()
                         elif event.target_kind == PredictionEvent.TargetKind.PLAYER:
                             try:
                                 player_id = int(submitted_value)
@@ -244,6 +244,11 @@ def home(request):
                             if not selected_player:
                                 continue
                             prediction_label = selected_player.display_name
+                            # Find or create the Option for this player
+                            selected_option = Option.objects.filter(
+                                category__slug='nba-players',
+                                metadata__nba_player_id=selected_player.id
+                            ).first()
                         else:
                             # Generic option selection
                             try:
@@ -264,12 +269,9 @@ def home(request):
                         prediction_event=event,
                     )
                 tip.tip_type = event.tip_type
-                tip.scheduled_game = event.scheduled_game
                 tip.prediction = prediction_label
                 tip.prediction_option = option
                 tip.selected_option = selected_option
-                tip.selected_team = selected_team
-                tip.selected_player = selected_player
                 tip.save()
                 user_tips[event.id] = tip
                 saved += 1

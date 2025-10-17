@@ -8,6 +8,8 @@ from django.utils import timezone
 
 from hooptipp.predictions.models import (
     NbaTeam,
+    Option,
+    OptionCategory,
     PredictionEvent,
     PredictionOption,
     ScheduledGame,
@@ -29,11 +31,11 @@ class HomeViewTests(TestCase):
             username='bob',
             password='password123',
         )
-        self.tip_type = TipType.objects.create(
-            name='Weekly games',
-            slug='weekly-games',
-            description='Featured matchups for the upcoming week',
-            deadline=timezone.now(),
+        
+        # Create Option category and options
+        teams_cat = OptionCategory.objects.create(
+            slug='nba-teams',
+            name='NBA Teams'
         )
         self.home_team = NbaTeam.objects.create(
             name='Los Angeles Lakers',
@@ -42,6 +44,27 @@ class HomeViewTests(TestCase):
         self.away_team = NbaTeam.objects.create(
             name='Boston Celtics',
             abbreviation='BOS',
+        )
+        self.home_option_obj = Option.objects.create(
+            category=teams_cat,
+            slug='lal',
+            name='Los Angeles Lakers',
+            short_name='LAL',
+            metadata={'nba_team_id': self.home_team.id}
+        )
+        self.away_option_obj = Option.objects.create(
+            category=teams_cat,
+            slug='bos',
+            name='Boston Celtics',
+            short_name='BOS',
+            metadata={'nba_team_id': self.away_team.id}
+        )
+        
+        self.tip_type = TipType.objects.create(
+            name='Weekly games',
+            slug='weekly-games',
+            description='Featured matchups for the upcoming week',
+            deadline=timezone.now(),
         )
         game_time = timezone.now() + timedelta(hours=1)
         self.game = ScheduledGame.objects.create(
@@ -70,31 +93,29 @@ class HomeViewTests(TestCase):
         self.away_option = PredictionOption.objects.create(
             event=self.event,
             label='Boston Celtics',
-            team=self.away_team,
+            option=self.away_option_obj,
             sort_order=1,
         )
         self.home_option = PredictionOption.objects.create(
             event=self.event,
             label='Los Angeles Lakers',
-            team=self.home_team,
+            option=self.home_option_obj,
             sort_order=2,
         )
         UserTip.objects.create(
             user=self.alice,
             tip_type=self.tip_type,
-            scheduled_game=self.game,
             prediction_event=self.event,
             prediction_option=self.away_option,
-            selected_team=self.away_team,
+            selected_option=self.away_option_obj,
             prediction='BOS',
         )
         UserTip.objects.create(
             user=self.bob,
             tip_type=self.tip_type,
-            scheduled_game=self.game,
             prediction_event=self.event,
             prediction_option=self.home_option,
-            selected_team=self.home_team,
+            selected_option=self.home_option_obj,
             prediction='LAL',
         )
         super().setUp()

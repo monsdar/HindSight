@@ -332,24 +332,8 @@ class PredictionOptionAdmin(admin.ModelAdmin):
     search_fields = (
         'label',
         'option__name',
-        'team__name',
-        'player__display_name',
     )
-    autocomplete_fields = ('event', 'option', 'team', 'player')
-    fieldsets = (
-        (None, {
-            'fields': ('event', 'label', 'is_active', 'sort_order')
-        }),
-        ('Generic Option (Recommended)', {
-            'fields': ('option',),
-            'description': 'Select a generic option for any type of prediction target'
-        }),
-        ('Legacy NBA Options (Deprecated)', {
-            'fields': ('team', 'player'),
-            'classes': ('collapse',),
-            'description': 'These fields are deprecated. Use the generic Option field instead.'
-        }),
-    )
+    autocomplete_fields = ('event', 'option')
     
     def option_display(self, obj):
         if obj.option:
@@ -358,10 +342,6 @@ class PredictionOptionAdmin(admin.ModelAdmin):
                 obj.option.name,
                 obj.option.category.name
             )
-        elif obj.team:
-            return format_html('<em>Team:</em> {}', obj.team.name)
-        elif obj.player:
-            return format_html('<em>Player:</em> {}', obj.player.display_name)
         return '-'
     
     option_display.short_description = 'Option'
@@ -437,15 +417,11 @@ class EventOutcomeAdmin(admin.ModelAdmin):
         'prediction_event__name',
         'winning_option__label',
         'winning_generic_option__name',
-        'winning_team__name',
-        'winning_player__display_name',
     )
     autocomplete_fields = (
         'prediction_event',
         'winning_option',
         'winning_generic_option',
-        'winning_team',
-        'winning_player',
         'resolved_by',
     )
     readonly_fields = ('scored_at', 'score_error')
@@ -457,10 +433,8 @@ class EventOutcomeAdmin(admin.ModelAdmin):
             'fields': (
                 'winning_option',
                 'winning_generic_option',
-                'winning_team',
-                'winning_player',
             ),
-            'description': 'Specify which option won. Only one field should be set.'
+            'description': 'Specify the PredictionOption that won, and optionally the generic Option for easier querying.'
         }),
         ('Scoring', {
             'fields': ('scored_at', 'score_error'),
@@ -469,17 +443,17 @@ class EventOutcomeAdmin(admin.ModelAdmin):
     )
     
     def winner_display(self, obj):
-        winner = obj.get_winning_option()
-        if winner:
-            if isinstance(winner, Option):
-                return format_html(
-                    '<strong>{}</strong> <em>({})</em>',
-                    winner.name,
-                    winner.category.name if winner.category else 'N/A'
-                )
-            elif hasattr(winner, 'label'):
-                return winner.label
-            return str(winner)
+        if obj.winning_option:
+            return format_html(
+                '<strong>{}</strong>',
+                obj.winning_option.label
+            )
+        elif obj.winning_generic_option:
+            return format_html(
+                '<strong>{}</strong> <em>({})</em>',
+                obj.winning_generic_option.name,
+                obj.winning_generic_option.category.name if obj.winning_generic_option.category else 'N/A'
+            )
         return '-'
     
     winner_display.short_description = 'Winner'
@@ -596,6 +570,7 @@ class UserTipAdmin(admin.ModelAdmin):
         'lock_status',
     )
     search_fields = ('user__username', 'prediction')
+    autocomplete_fields = ('user', 'prediction_event', 'prediction_option', 'selected_option')
     fieldsets = (
         (None, {
             'fields': (
@@ -603,12 +578,9 @@ class UserTipAdmin(admin.ModelAdmin):
                 'tip_type',
                 'prediction_event',
                 'prediction_option',
+                'selected_option',
                 'prediction',
             )
-        }),
-        ('Selected Option', {
-            'fields': ('selected_option', 'selected_team', 'selected_player'),
-            'description': 'The option selected by the user'
         }),
         ('Lock Information', {
             'fields': (
@@ -620,22 +592,15 @@ class UserTipAdmin(admin.ModelAdmin):
             ),
             'classes': ('collapse',),
         }),
-        ('Legacy', {
-            'fields': ('scheduled_game',),
-            'classes': ('collapse',),
-        }),
     )
     
     def option_display(self, obj):
-        option = obj.get_selected_option()
-        if option:
-            if isinstance(option, Option):
-                return format_html(
-                    '<strong>{}</strong> <em>({})</em>',
-                    option.name,
-                    option.category.name if option.category else 'N/A'
-                )
-            return str(option)
+        if obj.selected_option:
+            return format_html(
+                '<strong>{}</strong> <em>({})</em>',
+                obj.selected_option.name,
+                obj.selected_option.category.name if obj.selected_option.category else 'N/A'
+            )
         return '-'
     
     option_display.short_description = 'Selected'
