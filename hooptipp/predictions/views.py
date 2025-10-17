@@ -84,7 +84,7 @@ def home(request):
             )
             .exclude(deadline__lt=now)
             .select_related('scheduled_game')
-            .prefetch_related('options__team', 'options__player')
+            .prefetch_related('options__option__category')
             .order_by('deadline', 'sort_order', 'name')
         )
         if not events:

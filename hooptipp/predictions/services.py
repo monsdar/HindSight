@@ -569,6 +569,8 @@ def fetch_upcoming_week_games(limit: int = 7) -> Tuple[Optional[date], List[dict
 
 
 def _upsert_team(team_data: dict) -> Optional[NbaTeam]:
+    from .models import Option, OptionCategory
+    
     team_id = team_data.get('id')
 
     defaults = {
@@ -589,26 +591,51 @@ def _upsert_team(team_data: dict) -> Optional[NbaTeam]:
             balldontlie_id=int(team_id),
             defaults=defaults,
         )
-        return team
-
-    abbreviation = defaults['abbreviation']
-    candidates = NbaTeam.objects.all()
-    if abbreviation:
-        team = candidates.filter(abbreviation__iexact=abbreviation).first()
-        if team:
-            for field, value in defaults.items():
-                setattr(team, field, value)
-            team.save()
-            return team
-
-    team = candidates.filter(name__iexact=name).first()
-    if team:
-        for field, value in defaults.items():
-            setattr(team, field, value)
-        team.save()
-        return team
-
-    team = NbaTeam.objects.create(**defaults)
+    else:
+        abbreviation = defaults['abbreviation']
+        candidates = NbaTeam.objects.all()
+        if abbreviation:
+            team = candidates.filter(abbreviation__iexact=abbreviation).first()
+            if team:
+                for field, value in defaults.items():
+                    setattr(team, field, value)
+                team.save()
+            else:
+                team = NbaTeam.objects.create(**defaults)
+        else:
+            team = candidates.filter(name__iexact=name).first()
+            if team:
+                for field, value in defaults.items():
+                    setattr(team, field, value)
+                team.save()
+            else:
+                team = NbaTeam.objects.create(**defaults)
+    
+    # Also create/update the generic Option for this team
+    teams_cat, _ = OptionCategory.objects.get_or_create(
+        slug='nba-teams',
+        defaults={'name': 'NBA Teams', 'icon': 'basketball'}
+    )
+    
+    Option.objects.update_or_create(
+        category=teams_cat,
+        metadata__nba_team_id=team.id,
+        defaults={
+            'slug': (defaults['abbreviation'] or name).lower().replace(' ', '-'),
+            'name': name,
+            'short_name': defaults['abbreviation'],
+            'description': f"{defaults['city']} - {defaults['conference']} Conference" if defaults['conference'] else defaults['city'],
+            'metadata': {
+                'nba_team_id': team.id,
+                'city': defaults['city'],
+                'conference': defaults['conference'],
+                'division': defaults['division'],
+            },
+            'external_id': str(team_id) if team_id else '',
+            'is_active': True,
+        }
+    )
+    
     return team
 
 

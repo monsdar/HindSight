@@ -7,6 +7,8 @@ from django.utils import timezone
 from hooptipp.predictions.models import (
     EventOutcome,
     NbaTeam,
+    Option,
+    OptionCategory,
     PredictionEvent,
     PredictionOption,
     TipType,
@@ -19,6 +21,13 @@ from hooptipp.predictions.scoring_service import LOCK_MULTIPLIER, score_event_ou
 class ScoreEventOutcomeTests(TestCase):
     def setUp(self) -> None:
         self.user_model = get_user_model()
+        
+        # Create option category for NBA teams
+        self.teams_cat = OptionCategory.objects.create(
+            slug='nba-teams',
+            name='NBA Teams'
+        )
+        
         self.tip_type = TipType.objects.create(
             name="Weekly Games",
             slug="weekly-games",
@@ -40,18 +49,38 @@ class ScoreEventOutcomeTests(TestCase):
             reveal_at=timezone.now() - timedelta(hours=3),
             is_active=True,
         )
-        self.lakers = NbaTeam.objects.create(name="Los Angeles Lakers")
-        self.celtics = NbaTeam.objects.create(name="Boston Celtics")
+        
+        # Create NbaTeam objects (still used for legacy data)
+        self.lakers = NbaTeam.objects.create(name="Los Angeles Lakers", abbreviation="LAL")
+        self.celtics = NbaTeam.objects.create(name="Boston Celtics", abbreviation="BOS")
+        
+        # Create generic Options
+        self.lakers_option_obj = Option.objects.create(
+            category=self.teams_cat,
+            slug='lal',
+            name='Los Angeles Lakers',
+            short_name='LAL',
+            metadata={'nba_team_id': self.lakers.id}
+        )
+        self.celtics_option_obj = Option.objects.create(
+            category=self.teams_cat,
+            slug='bos',
+            name='Boston Celtics',
+            short_name='BOS',
+            metadata={'nba_team_id': self.celtics.id}
+        )
+        
+        # Create PredictionOptions using generic Options
         self.lakers_option = PredictionOption.objects.create(
             event=self.event,
             label="Los Angeles Lakers",
-            team=self.lakers,
+            option=self.lakers_option_obj,
             sort_order=1,
         )
         self.celtics_option = PredictionOption.objects.create(
             event=self.event,
             label="Boston Celtics",
-            team=self.celtics,
+            option=self.celtics_option_obj,
             sort_order=2,
         )
 
@@ -64,6 +93,7 @@ class ScoreEventOutcomeTests(TestCase):
             tip_type=self.tip_type,
             prediction_event=self.event,
             prediction_option=self.lakers_option,
+            selected_option=self.lakers_option_obj,
             prediction="Los Angeles Lakers",
             is_locked=True,
             lock_status=UserTip.LockStatus.ACTIVE,
@@ -73,6 +103,7 @@ class ScoreEventOutcomeTests(TestCase):
             tip_type=self.tip_type,
             prediction_event=self.event,
             prediction_option=self.celtics_option,
+            selected_option=self.celtics_option_obj,
             prediction="Boston Celtics",
             is_locked=False,
             lock_status=UserTip.LockStatus.NONE,
@@ -81,6 +112,7 @@ class ScoreEventOutcomeTests(TestCase):
         outcome = EventOutcome.objects.create(
             prediction_event=self.event,
             winning_option=self.lakers_option,
+            winning_generic_option=self.lakers_option_obj,
         )
 
         result = score_event_outcome(outcome)
@@ -103,6 +135,7 @@ class ScoreEventOutcomeTests(TestCase):
             tip_type=self.tip_type,
             prediction_event=self.event,
             prediction_option=self.lakers_option,
+            selected_option=self.lakers_option_obj,
             prediction="Los Angeles Lakers",
             is_locked=False,
             lock_status=UserTip.LockStatus.NONE,
@@ -110,6 +143,7 @@ class ScoreEventOutcomeTests(TestCase):
         outcome = EventOutcome.objects.create(
             prediction_event=self.event,
             winning_option=self.lakers_option,
+            winning_generic_option=self.lakers_option_obj,
         )
 
         first_result = score_event_outcome(outcome)
@@ -128,6 +162,7 @@ class ScoreEventOutcomeTests(TestCase):
             tip_type=self.tip_type,
             prediction_event=self.event,
             prediction_option=self.lakers_option,
+            selected_option=self.lakers_option_obj,
             prediction="Los Angeles Lakers",
             is_locked=False,
             lock_status=UserTip.LockStatus.NONE,
@@ -135,6 +170,7 @@ class ScoreEventOutcomeTests(TestCase):
         outcome = EventOutcome.objects.create(
             prediction_event=self.event,
             winning_option=self.lakers_option,
+            winning_generic_option=self.lakers_option_obj,
         )
         score_event_outcome(outcome)
 
@@ -167,7 +203,7 @@ class ScoreEventOutcomeTests(TestCase):
         option = PredictionOption.objects.create(
             event=any_event,
             label="Los Angeles Lakers",
-            team=self.lakers,
+            option=self.lakers_option_obj,
             sort_order=1,
         )
         user = self.user_model.objects.create_user("any", "any@example.com", "password")
@@ -176,14 +212,14 @@ class ScoreEventOutcomeTests(TestCase):
             tip_type=self.tip_type,
             prediction_event=any_event,
             prediction_option=None,
-            selected_team=self.lakers,
+            selected_option=self.lakers_option_obj,
             prediction="Los Angeles Lakers",
             is_locked=False,
             lock_status=UserTip.LockStatus.NONE,
         )
         outcome = EventOutcome.objects.create(
             prediction_event=any_event,
-            winning_team=self.lakers,
+            winning_generic_option=self.lakers_option_obj,
         )
 
         result = score_event_outcome(outcome)
