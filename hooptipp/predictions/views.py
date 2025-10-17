@@ -13,6 +13,7 @@ from django.views.decorators.http import require_http_methods
 from .forms import UserPreferencesForm
 from .lock_service import LockLimitError, LockService
 from .models import (
+    EventOutcome,
     NbaPlayer,
     NbaTeam,
     Option,
@@ -434,6 +435,89 @@ def home(request):
         _apply_display_metadata(user, display_name_map)
     _apply_display_metadata(active_user, display_name_map)
 
+    # Fetch leaderboard data for dashboard
+    User = get_user_model()
+    bonus_event_points_expr = Case(
+        When(
+            usereventscore__prediction_event__is_bonus_event=True,
+            then=F('usereventscore__base_points'),
+        ),
+        default=0,
+        output_field=IntegerField(),
+    )
+    lock_bonus_points_expr = Case(
+        When(
+            usereventscore__is_lock_bonus=True,
+            then=F('usereventscore__points_awarded') - F('usereventscore__base_points'),
+        ),
+        default=0,
+        output_field=IntegerField(),
+    )
+
+    leaderboard_users = User.objects.filter(usereventscore__isnull=False).annotate(
+        total_points=Coalesce(Sum('usereventscore__points_awarded'), 0),
+        event_count=Coalesce(Count('usereventscore__prediction_event', distinct=True), 0),
+    ).order_by('-total_points', '-event_count', 'username')
+
+    leaderboard_rows = list(leaderboard_users)
+    leaderboard_user_ids = [row.id for row in leaderboard_rows]
+    leaderboard_display_name_map = _build_display_name_map(leaderboard_user_ids)
+
+    for index, row in enumerate(leaderboard_rows, start=1):
+        row.display_name = leaderboard_display_name_map.get(row.id, row.username)
+        row.total_points = int(row.total_points)
+        row.event_count = int(row.event_count)
+        row.rank = index
+
+    # Fetch recently resolved predictions (last 5)
+    resolved_predictions = list(
+        EventOutcome.objects.select_related(
+            'prediction_event__tip_type',
+            'winning_option__option',
+            'winning_generic_option',
+        )
+        .prefetch_related('prediction_event__options__option')
+        .order_by('-resolved_at')[:5]
+    )
+
+    # For each resolved prediction, get user tips if active user exists
+    resolved_predictions_data = []
+    if resolved_predictions:
+        for outcome in resolved_predictions:
+            outcome_data = {
+                'outcome': outcome,
+                'user_tip': None,
+                'is_correct': False,
+            }
+            if active_user:
+                try:
+                    user_tip = UserTip.objects.get(
+                        user=active_user,
+                        prediction_event=outcome.prediction_event
+                    )
+                    outcome_data['user_tip'] = user_tip
+                    # Check if the user's prediction was correct
+                    if outcome.winning_option and user_tip.prediction_option:
+                        outcome_data['is_correct'] = (user_tip.prediction_option.id == outcome.winning_option.id)
+                    elif outcome.winning_generic_option and user_tip.selected_option:
+                        outcome_data['is_correct'] = (user_tip.selected_option.id == outcome.winning_generic_option.id)
+                except UserTip.DoesNotExist:
+                    pass
+            resolved_predictions_data.append(outcome_data)
+
+    # Get all open predictions ordered by deadline
+    open_predictions = list(
+        PredictionEvent.objects.filter(
+            is_active=True,
+            opens_at__lte=now,
+            deadline__gte=now,
+        )
+        .exclude(outcome__isnull=False)  # Exclude events that have outcomes
+        .select_related('scheduled_game', 'tip_type')
+        .prefetch_related('options__option__category')
+        .order_by('deadline', 'sort_order', 'name')
+    )
+
     context = {
         'active_user': active_user,
         'users': all_users,
@@ -452,6 +536,9 @@ def home(request):
         'scoreboard_summary': scoreboard_summary,
         'recent_scores': recent_scores,
         'active_theme_palette': active_theme_palette,
+        'leaderboard_rows': leaderboard_rows,
+        'resolved_predictions': resolved_predictions_data,
+        'open_predictions': open_predictions,
     }
     return render(request, 'predictions/home.html', context)
 

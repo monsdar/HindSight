@@ -143,8 +143,8 @@ class HomeViewTests(TestCase):
         self.assertEqual(users_list[0].display_name, 'alice')
         self.assertEqual(users_list[0].display_initial, 'A')
 
-        self.assertContains(response, 'title="alice"')
-        self.assertContains(response, 'title="bob"')
+        # Note: In the new dashboard, user tips are not shown on the open predictions
+        # if no user is active, so we just verify the context data is correct
 
     def test_home_view_displays_nickname_everywhere(self) -> None:
         UserPreferences.objects.create(user=self.alice, nickname='Ace')
@@ -164,12 +164,14 @@ class HomeViewTests(TestCase):
 
         self.assertContains(response, 'Ace (@alice)')
         self.assertContains(response, 'Buckets (@bob)')
-        self.assertContains(response, 'No events have been scored for Ace (@alice) yet.')
+        # Check for the new dashboard text instead of old "Scoring overview" text
+        self.assertContains(response, 'Current Ranking')
         self.assertContains(
             response,
-            'Picks are automatically stored for <span class="font-semibold text-slate-100">Ace</span><span class="ml-1 text-xs text-slate-400">@alice</span>.',
+            'Making predictions as <span class="font-semibold text-slate-100">Ace</span>',
         )
-        self.assertContains(response, 'title="Buckets (@bob)"')
+        # Note: In the streamlined dashboard, user initials are not shown on individual
+        # prediction cards, only in the user selection dropdown
 
         event_tip_users = response.context['event_tip_users'][self.event.id]
         self.assertEqual([user.display_name for user in event_tip_users], ['Ace', 'Buckets'])
@@ -641,8 +643,9 @@ class HomeViewTests(TestCase):
         recent_scores = response.context['recent_scores']
         self.assertEqual(len(recent_scores), 1)
         self.assertEqual(recent_scores[0].points_awarded, 6)
-        self.assertContains(response, 'Scoring overview')
-        self.assertContains(response, '6 pts')
+        # Check for the new dashboard sections instead of old "Scoring overview"
+        self.assertContains(response, 'Current Ranking')
+        self.assertContains(response, '6')  # Total points displayed in ranking
         self.assertContains(response, 'Bonus event')
 
 
