@@ -428,15 +428,60 @@ class UserEventScore(models.Model):
         return f"{self.user} - {self.prediction_event}: {self.points_awarded} pts"
 
 
+class UserFavorite(models.Model):
+    """
+    Generic favorites system - allows users to favorite any Option.
+
+    Examples:
+    - favorite_type='nba-team', option=Lakers
+    - favorite_type='nba-player', option=LeBron James  
+    - favorite_type='olympic-country', option=USA
+    - favorite_type='olympic-sport', option=Swimming
+    """
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='favorites',
+    )
+    favorite_type = models.CharField(
+        max_length=50,
+        help_text="Type of favorite (e.g., 'nba-team', 'olympic-country')",
+    )
+    option = models.ForeignKey(
+        Option,
+        on_delete=models.CASCADE,
+        related_name='favorited_by',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('user', 'favorite_type')
+        ordering = ['favorite_type', 'created_at']
+        verbose_name = 'User favorite'
+        verbose_name_plural = 'User favorites'
+        indexes = [
+            models.Index(fields=['user', 'favorite_type']),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.user} - {self.favorite_type}: {self.option}"
+
+
 class UserPreferences(models.Model):
+    """
+    Core user preferences - only truly generic settings.
+    
+    Sport/domain-specific preferences should be in separate models
+    in their respective apps (e.g., NbaUserPreferences in nba app).
+    """
+
     user = models.OneToOneField(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
         related_name="preferences",
     )
     nickname = models.CharField(max_length=50, blank=True)
-    favorite_team_id = models.PositiveIntegerField(blank=True, null=True)
-    favorite_player_id = models.PositiveIntegerField(blank=True, null=True)
     theme = models.CharField(
         max_length=32,
         choices=THEME_CHOICES,
@@ -451,34 +496,6 @@ class UserPreferences(models.Model):
 
     def __str__(self) -> str:
         return f"Preferences for {self.user}"
-
-    def favorite_team_display(self) -> str:
-        if not self.favorite_team_id:
-            return ""
-        try:
-            from .services import get_team_choices
-        except Exception:  # pragma: no cover - defensive import guard
-            return ""
-        team_lookup = {
-            int(value): label
-            for value, label in get_team_choices()
-            if value and value.isdigit()
-        }
-        return team_lookup.get(self.favorite_team_id, "")
-
-    def favorite_player_display(self) -> str:
-        if not self.favorite_player_id:
-            return ""
-        try:
-            from .services import get_player_choices
-        except Exception:  # pragma: no cover - defensive import guard
-            return ""
-        player_lookup = {
-            int(value): label
-            for value, label in get_player_choices()
-            if value and value.isdigit()
-        }
-        return player_lookup.get(self.favorite_player_id, "")
 
     def theme_palette(self) -> dict[str, str]:
         return get_theme_palette(self.theme)
