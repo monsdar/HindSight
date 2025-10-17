@@ -1,105 +1,291 @@
-# 🏀 HoopTipp
+# 🎯 HoopTipp - Flexible Prediction Platform
 
-**HoopTipp** is a simple, private and self-hosted, family-friendly NBA prediction app. It was created to have a way for predicting the upcoming NBA season with my son — without spreadsheets, complicated fantasy rules, or cluttered interfaces.
+**HoopTipp** is a self-hosted, extensible prediction platform. While it started as a family-friendly NBA prediction app, it has evolved into a **general-purpose prediction system** that can track any type of predictable event.
 
----
-
-## 🎯 Vision
-
-> **Sunday night = Prediction night.**
-> Pick the biggest games of the upcoming week, guess player of the match, make season predictions for All-Stars, MVP and other individual honors, and find out who’s the true NBA Tip Master by the end of the year.
-
-HoopTipp is designed for families and fans who want a **lightweight, engaging way** to experience the NBA season together.
+Predict NBA games, elections, Olympic outcomes, personal goals, or create your own custom prediction events!
 
 ---
 
-## 👥 Target Audience
+## 🌟 What Makes HoopTipp Special
 
-- 🧒 Kids and young NBA fans, moderated by family members
-- 👨‍👩‍👧‍👦 Families who want a fun, recurring NBA activity
-- 🏀 Casual or dedicated fans who enjoy predictions without the complexity of fantasy leagues
+### Universal Prediction System
+- 📊 **Any Event Type**: Sports, politics, personal goals, world events
+- 🔌 **Extensible Sources**: Automatic imports from external APIs
+- 🎨 **Beautiful UI**: Clean, modern interface with Tailwind CSS
+- 👥 **Family-Friendly**: Simple user activation without complex authentication
+- 🏆 **Smart Scoring**: Configurable points, lock bonuses, and leaderboards
 
----
-
-## 🧩 Core Features
-
-### 1. 🗓 Weekly Game Picks
-- Every Sunday, **5–7 highlight games** for the upcoming week are published.
-- Users pick **home or away winners**, with an optional **lock game** option for games where users are very confident.
-- Picks lock automatically before the first game starts.
-- **Scoring:** 2 points per correct pick + lock bonus.
-
----
-
-### 2. 📅 Monthly Picks
-- At the start of each month, users predict:
-  - **Players of the Month (East, West)**
-  - **Teams of the month (East, West)**
-- Points are awarded at the end of the month:
-  - 5 points for correctly predicting Players of the Month
-  - 3 points if the selected team finishes in the top 3 for wins
+### Built-in NBA Support
+HoopTipp comes with full NBA integration:
+- Automatic game imports from BallDontLie API
+- 30 NBA teams and active player database
+- Weekly game predictions
+- Custom season events (MVP, All-Stars, etc.)
 
 ---
 
-### 3. 🏆 Season Awards & All-Stars
-- Before Christmas, users can predict:
-  - **All-Stars**, **MVP**, **Rookie of the Year**, **DPOY**, **MIP**, etc.
-- Points are awarded once official results are known.
+## 🎯 Core Concepts
+
+### Prediction Events
+Any binary outcome you want to predict:
+- **Active Timeframe**: Events have opening times and deadlines
+- **Multiple Options**: Choose from teams, players, countries, or custom choices
+- **Point Values**: Configurable scoring for each event type
+- **Lock System**: Commit to high-confidence picks for bonus points
+
+### Event Sources
+Automatic prediction importers:
+- **NBA Source**: Imports upcoming games automatically
+- **Manual Events**: Create any custom prediction via admin
+- **Custom Sources**: Easy to add new integrations (see `docs/generic_prediction_system_design.md`)
+
+### Option Categories
+Flexible organization system:
+- **NBA Teams**: All 30 teams with metadata
+- **NBA Players**: Active players with team/position info
+- **Countries**: For international predictions
+- **Custom Categories**: Create any category you need
 
 ---
 
-### 4. 🌳 Playoff Bracket
-- Once the playoff bracket is set, users predict the **entire playoffs**.
-- Points increase by round, adding extra excitement for the postseason.
+## 🧩 Example Use Cases
+
+### 🏀 Sports Predictions
+- NBA games, standings, awards
+- Olympic medal counts
+- Tournament winners
+
+### 🗳️ Political Predictions
+- Election results
+- Cabinet appointments
+- Policy outcomes
+
+### 🌍 World Events
+- "Which country names the next Pope?"
+- "Which country wins 30+ Olympic medals first?"
+- Climate milestone predictions
+
+### 🚴 Personal Tracking
+- "Will I bike to work 10+ times this month?"
+- Habit formation goals
+- Personal achievement predictions
 
 ---
 
-### 5. 📊 Scoreboard & Badges
-- A **live leaderboard** tracks total points throughout the season.
-- Users can earn **achievement badges** for milestones (e.g. “Perfect Week”, “Upset King”).
+## 🚀 Getting Started
 
----
+### Prerequisites
+- Python 3.12+
+- PostgreSQL (or SQLite for development)
+- Optional: BallDontLie API token for NBA features
 
-## 🚀 Predicting
-
-To support multiple users the game works with a simplified user-activation: 
-
-* All users are created via the admin panel
-* By default no user is selected in the UI. Upcoming predictions are visible, along with users that already predicted an outcome.
-* A user can be activated within the UI. There's is no complex authentication needed.
-* When activated a user can predict the outcome of the available tipps.
-* After predictions the user simply deactivates himself, the UI then returns to a neutral state
-
-## Development
 ### Local Setup
 
-1. Create a virtual environment and install dependencies:
-
+1. **Install dependencies:**
    ```bash
    python -m venv .venv
    source .venv/bin/activate
    pip install -r requirements.txt
    ```
 
-2. Prepare the database and create a superuser:
-
+2. **Set up the database:**
    ```bash
    python manage.py migrate
    python manage.py createsuperuser
    ```
 
-3. Run the Django unit tests:
+3. **Configure NBA integration (optional):**
+   ```bash
+   export BALLDONTLIE_API_TOKEN=your_api_token_here
+   ```
 
+4. **Run tests:**
    ```bash
    python manage.py test
    ```
 
-4. Start the development server:
-
+5. **Start the server:**
    ```bash
    python manage.py runserver
    ```
 
-5. Use `/admin` to create or manage users. On the homepage you can choose an active user whose picks are stored for the weekly games.
+6. **Access the app:**
+   - Homepage: http://localhost:8000
+   - Admin panel: http://localhost:8000/admin
 
-> Note: HoopTipp fetches NBA data from the BallDontLie API. Set the `BALLDONTLIE_API_TOKEN` environment variable with your API token before syncing games.
+### First Steps
+
+1. **Create Users** (via `/admin`):
+   - Go to the admin panel
+   - Add users who will make predictions
+   - No complex authentication needed!
+
+2. **Sync NBA Data** (optional):
+   - In admin, go to "NBA Teams" and click "Sync Teams"
+   - Go to "NBA Players" and click "Sync Players"
+   - This imports all teams and active players
+
+3. **Import Games**:
+   - NBA games are automatically synced when you visit the homepage
+   - Or manually trigger sync in admin under "Event Sources"
+
+4. **Make Predictions**:
+   - On the homepage, select a user
+   - View upcoming events and make your picks
+   - Optionally "lock" picks you're confident in
+   - Save and switch users!
+
+---
+
+## 🎮 How Predictions Work
+
+### User Activation Model
+Simple, family-friendly approach:
+1. **No authentication required** on the main page
+2. Select a user from the dropdown
+3. Make predictions
+4. "Finish Round" to clear selection
+5. Next user can then select themselves
+
+### Lock System
+- Each user has a limited number of "locks" (default: 1)
+- Locked picks multiply points if correct
+- Locks return after the event deadline
+- Forfeited locks return after a penalty period
+
+### Scoring
+- **Base Points**: Configurable per event type
+- **Lock Multiplier**: 2x or 3x for locked picks
+- **Bonus Events**: Special high-value predictions
+- **Leaderboard**: Real-time standings with detailed breakdowns
+
+---
+
+## 🛠️ Creating Custom Predictions
+
+### Manual Prediction Events
+
+Via the admin panel:
+1. Create or select a **Tip Type** (e.g., "Special Events")
+2. Create a **Prediction Event**:
+   - Set name, description, and timeframe
+   - Configure points and target kind
+3. Add **Prediction Options**:
+   - Use existing options from any category
+   - Or create new options for your category
+4. Publish and let users predict!
+
+### Custom Event Sources
+
+Create automatic importers for any external system:
+
+```python
+# hooptipp/predictions/event_sources/my_source.py
+from .base import EventSource, EventSourceResult
+
+class MyEventSource(EventSource):
+    @property
+    def source_id(self) -> str:
+        return "my-source"
+    
+    @property
+    def source_name(self) -> str:
+        return "My Prediction Source"
+    
+    @property
+    def category_slugs(self) -> list[str]:
+        return ["my-category"]
+    
+    def sync_options(self) -> EventSourceResult:
+        # Import your options (teams, players, etc.)
+        result = EventSourceResult()
+        # ... your implementation ...
+        return result
+    
+    def sync_events(self) -> EventSourceResult:
+        # Import your prediction events
+        result = EventSourceResult()
+        # ... your implementation ...
+        return result
+```
+
+Register your source in `event_sources/__init__.py`:
+```python
+from .my_source import MyEventSource
+registry.register(MyEventSource)
+```
+
+See `docs/generic_prediction_system_design.md` for complete documentation.
+
+---
+
+## 📚 Documentation
+
+- **Architecture Guide**: `docs/generic_prediction_system_design.md`
+- **Scoring System**: `docs/scoring_plan.md`
+- **Lock System**: `docs/prediction_locks_plan.md`
+- **Agent Instructions**: `AGENTS.md`
+
+---
+
+## 🚢 Production Deployment
+
+HoopTipp is designed for Railway deployment:
+
+1. **Environment Variables:**
+   ```bash
+   BALLDONTLIE_API_TOKEN=your_token
+   DATABASE_URL=postgresql://...
+   SECRET_KEY=your_secret_key
+   ALLOWED_HOSTS=yourdomain.com
+   CSRF_TRUSTED_ORIGINS=https://yourdomain.com
+   ```
+
+2. **Deploy to Railway:**
+   - Connect your repository
+   - Set environment variables
+   - Deploy!
+
+The included `Dockerfile` and `docker-entrypoint.sh` handle the setup automatically.
+
+---
+
+## 🤝 Contributing
+
+This is a personal family project, but suggestions and improvements are welcome!
+
+- Architecture is designed for extensibility
+- Event sources are pluggable
+- Tests cover core functionality
+- Follow existing code style
+
+---
+
+## 📄 License
+
+See [LICENSE](LICENSE) file for details.
+
+---
+
+## 🎯 Roadmap Ideas
+
+- [ ] More event source integrations (Olympics, Elections, etc.)
+- [ ] Public/private prediction modes
+- [ ] Mobile app
+- [ ] Badges and achievements system
+- [ ] Group competitions
+- [ ] Export predictions to CSV
+- [ ] Integration with Discord/Slack
+
+---
+
+## 🙏 Acknowledgments
+
+- Built with Django and Tailwind CSS
+- NBA data from [BallDontLie API](https://balldontlie.io)
+- Originally created for family NBA predictions
+- Evolved into a general-purpose prediction platform
+
+---
+
+**Enjoy predicting! 🎯**

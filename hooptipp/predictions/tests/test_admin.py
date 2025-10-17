@@ -12,6 +12,8 @@ from hooptipp.predictions import services
 from hooptipp.predictions.models import (
     EventOutcome,
     NbaTeam,
+    Option,
+    OptionCategory,
     PredictionEvent,
     PredictionOption,
     TipType,
@@ -89,6 +91,21 @@ class EventOutcomeAdminScoreTests(TestCase):
         self.client.force_login(self.user)
 
         now = timezone.now()
+        
+        # Create option category and option
+        teams_cat = OptionCategory.objects.create(
+            slug='test-teams',
+            name='Test Teams'
+        )
+        self.team = NbaTeam.objects.create(name='Metropolis Meteors', abbreviation='MM')
+        self.team_option = Option.objects.create(
+            category=teams_cat,
+            slug='mm',
+            name='Metropolis Meteors',
+            short_name='MM',
+            metadata={'nba_team_id': self.team.id}
+        )
+        
         self.tip_type = TipType.objects.create(
             name='Daily Picks',
             slug='daily-picks',
@@ -102,15 +119,15 @@ class EventOutcomeAdminScoreTests(TestCase):
             opens_at=now - timedelta(days=2),
             deadline=now - timedelta(days=1),
         )
-        self.team = NbaTeam.objects.create(name='Metropolis Meteors', abbreviation='MM')
         self.option = PredictionOption.objects.create(
             event=self.event,
             label='Metropolis Meteors',
-            team=self.team,
+            option=self.team_option,
         )
         self.outcome = EventOutcome.objects.create(
             prediction_event=self.event,
             winning_option=self.option,
+            winning_generic_option=self.team_option,
         )
 
         UserTip.objects.create(
@@ -118,6 +135,7 @@ class EventOutcomeAdminScoreTests(TestCase):
             tip_type=self.tip_type,
             prediction_event=self.event,
             prediction_option=self.option,
+            selected_option=self.team_option,
             prediction='Metropolis Meteors',
         )
 

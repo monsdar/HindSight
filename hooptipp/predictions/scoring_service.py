@@ -83,7 +83,7 @@ def score_event_outcome(outcome: EventOutcome, *, force: bool = False) -> ScoreE
 
         tips = list(
             UserTip.objects.filter(prediction_event=event)
-            .select_related('user', 'prediction_option', 'selected_team', 'selected_player')
+            .select_related('user', 'prediction_option', 'selected_option')
         )
 
         for tip in tips:
@@ -116,44 +116,24 @@ def score_event_outcome(outcome: EventOutcome, *, force: bool = False) -> ScoreE
 
 
 def _outcome_has_selection(outcome: EventOutcome) -> bool:
-    return any((outcome.winning_option_id, outcome.winning_team_id, outcome.winning_player_id))
+    return any((outcome.winning_option_id, outcome.winning_generic_option_id))
 
 
 def _tip_matches_outcome(tip: UserTip, outcome: EventOutcome) -> bool:
+    # Check if tip matches via PredictionOption
     if outcome.winning_option_id:
         if tip.prediction_option_id == outcome.winning_option_id:
             return True
-        if tip.selected_team_id and outcome.winning_option and outcome.winning_option.team_id:
-            return tip.selected_team_id == outcome.winning_option.team_id
-        if tip.selected_player_id and outcome.winning_option and outcome.winning_option.player_id:
-            return tip.selected_player_id == outcome.winning_option.player_id
+        # Check if the user's selected option matches the winning option's option
+        if tip.selected_option_id and outcome.winning_option and outcome.winning_option.option_id:
+            return tip.selected_option_id == outcome.winning_option.option_id
         return False
 
-    if outcome.winning_team_id:
-        selected_team_id = _selected_team_id_for_tip(tip)
-        return selected_team_id == outcome.winning_team_id
-
-    if outcome.winning_player_id:
-        selected_player_id = _selected_player_id_for_tip(tip)
-        return selected_player_id == outcome.winning_player_id
+    # Check if tip matches via generic Option
+    if outcome.winning_generic_option_id:
+        return tip.selected_option_id == outcome.winning_generic_option_id
 
     return False
-
-
-def _selected_team_id_for_tip(tip: UserTip) -> Optional[int]:
-    if tip.selected_team_id:
-        return tip.selected_team_id
-    if tip.prediction_option and tip.prediction_option.team_id:
-        return tip.prediction_option.team_id
-    return None
-
-
-def _selected_player_id_for_tip(tip: UserTip) -> Optional[int]:
-    if tip.selected_player_id:
-        return tip.selected_player_id
-    if tip.prediction_option and tip.prediction_option.player_id:
-        return tip.prediction_option.player_id
-    return None
 
 
 def _calculate_lock_multiplier(tip: UserTip) -> int:

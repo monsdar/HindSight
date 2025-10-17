@@ -1,0 +1,93 @@
+{% extends "admin/change_list.html" %}
+{% load i18n admin_urls static %}
+
+{% block content %}
+<div id="content-main">
+  <div class="module" id="changelist">
+    <div class="results">
+      <p class="paginator">{% blocktrans count counter=sources|length %}{{ counter }} event source{% plural %}{{ counter }} event sources{% endblocktrans %}</p>
+      
+      {% if sources %}
+        <table id="result_list">
+          <thead>
+            <tr>
+              <th scope="col">
+                <div class="text">Name</div>
+              </th>
+              <th scope="col">
+                <div class="text">Source ID</div>
+              </th>
+              <th scope="col">
+                <div class="text">Categories</div>
+              </th>
+              <th scope="col">
+                <div class="text">Status</div>
+              </th>
+              <th scope="col">
+                <div class="text">Actions</div>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for source in sources %}
+              <tr class="{% cycle 'row1' 'row2' %}">
+                <td>
+                  <strong>{{ source.name }}</strong>
+                </td>
+                <td>
+                  <code>{{ source.id }}</code>
+                </td>
+                <td>
+                  {{ source.categories }}
+                </td>
+                <td>
+                  {% if source.configured %}
+                    <span style="color: green;">✓ Configured</span>
+                  {% else %}
+                    <span style="color: orange;">⚠ Not Configured</span>
+                    <br>
+                    <small style="color: #666;">{{ source.config_help }}</small>
+                  {% endif %}
+                </td>
+                <td>
+                  {% if source.configured %}
+                    <form method="post" action="{% url 'admin:predictions_eventsource_sync_options' source.id %}" style="display: inline;">
+                      {% csrf_token %}
+                      <button type="submit" class="button" title="Sync options (teams, players, etc.)">
+                        Sync Options
+                      </button>
+                    </form>
+                    <form method="post" action="{% url 'admin:predictions_eventsource_sync_events' source.id %}" style="display: inline;">
+                      {% csrf_token %}
+                      <button type="submit" class="button" title="Sync prediction events">
+                        Sync Events
+                      </button>
+                    </form>
+                  {% else %}
+                    <span style="color: #999;">Configure source first</span>
+                  {% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% else %}
+        <p>No event sources are registered.</p>
+      {% endif %}
+    </div>
+  </div>
+  
+  <div class="module" style="margin-top: 20px;">
+    <h2>About Event Sources</h2>
+    <p>
+      Event sources automatically import prediction events from external systems.
+      Each source can provide options (like teams or players) and create prediction events.
+    </p>
+    <p>
+      <strong>Sync Options:</strong> Import or update selectable options (teams, players, countries, etc.)
+      <br>
+      <strong>Sync Events:</strong> Import or update prediction events
+    </p>
+  </div>
+</div>
+{% endblock %}

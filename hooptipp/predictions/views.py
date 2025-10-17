@@ -15,6 +15,8 @@ from .lock_service import LockLimitError, LockService
 from .models import (
     NbaPlayer,
     NbaTeam,
+    Option,
+    OptionCategory,
     PredictionEvent,
     TipType,
     UserPreferences,
@@ -82,7 +84,7 @@ def home(request):
             )
             .exclude(deadline__lt=now)
             .select_related('scheduled_game')
-            .prefetch_related('options__team', 'options__player')
+            .prefetch_related('options__option__category')
             .order_by('deadline', 'sort_order', 'name')
         )
         if not events:
@@ -186,13 +188,11 @@ def home(request):
                     if existing_tip is None:
                         continue
                     option = existing_tip.prediction_option
-                    selected_team = existing_tip.selected_team
-                    selected_player = existing_tip.selected_player
+                    selected_option = existing_tip.selected_option
                     prediction_label = existing_tip.prediction
                 else:
                     option = None
-                    selected_team = None
-                    selected_player = None
+                    selected_option = None
                     prediction_label = ''
 
                     if event.selection_mode == PredictionEvent.SelectionMode.CURATED:
@@ -210,10 +210,11 @@ def home(request):
                         )
                         if not option:
                             continue
-                        selected_team = option.team
-                        selected_player = option.player
+                        # Get the underlying generic option
+                        selected_option = option.option
                         prediction_label = option.label
                     else:
+                        # ANY selection mode - select from available options
                         if event.target_kind == PredictionEvent.TargetKind.TEAM:
                             try:
                                 team_id = int(submitted_value)
@@ -226,7 +227,12 @@ def home(request):
                             if not selected_team:
                                 continue
                             prediction_label = selected_team.name
-                        else:
+                            # Find or create the Option for this team
+                            selected_option = Option.objects.filter(
+                                category__slug='nba-teams',
+                                metadata__nba_team_id=selected_team.id
+                            ).first()
+                        elif event.target_kind == PredictionEvent.TargetKind.PLAYER:
                             try:
                                 player_id = int(submitted_value)
                             except (TypeError, ValueError):
@@ -238,6 +244,23 @@ def home(request):
                             if not selected_player:
                                 continue
                             prediction_label = selected_player.display_name
+                            # Find or create the Option for this player
+                            selected_option = Option.objects.filter(
+                                category__slug='nba-players',
+                                metadata__nba_player_id=selected_player.id
+                            ).first()
+                        else:
+                            # Generic option selection
+                            try:
+                                generic_option_id = int(submitted_value)
+                            except (TypeError, ValueError):
+                                continue
+                            selected_option = Option.objects.filter(
+                                id=generic_option_id
+                            ).first()
+                            if not selected_option:
+                                continue
+                            prediction_label = selected_option.name
 
                 tip = user_tips.get(event.id)
                 if tip is None:
@@ -246,11 +269,9 @@ def home(request):
                         prediction_event=event,
                     )
                 tip.tip_type = event.tip_type
-                tip.scheduled_game = event.scheduled_game
                 tip.prediction = prediction_label
                 tip.prediction_option = option
-                tip.selected_team = selected_team
-                tip.selected_player = selected_player
+                tip.selected_option = selected_option
                 tip.save()
                 user_tips[event.id] = tip
                 saved += 1

@@ -569,6 +569,8 @@ def fetch_upcoming_week_games(limit: int = 7) -> Tuple[Optional[date], List[dict
 
 
 def _upsert_team(team_data: dict) -> Optional[NbaTeam]:
+    from .models import Option, OptionCategory
+    
     team_id = team_data.get('id')
 
     defaults = {
@@ -589,26 +591,51 @@ def _upsert_team(team_data: dict) -> Optional[NbaTeam]:
             balldontlie_id=int(team_id),
             defaults=defaults,
         )
-        return team
-
-    abbreviation = defaults['abbreviation']
-    candidates = NbaTeam.objects.all()
-    if abbreviation:
-        team = candidates.filter(abbreviation__iexact=abbreviation).first()
-        if team:
-            for field, value in defaults.items():
-                setattr(team, field, value)
-            team.save()
-            return team
-
-    team = candidates.filter(name__iexact=name).first()
-    if team:
-        for field, value in defaults.items():
-            setattr(team, field, value)
-        team.save()
-        return team
-
-    team = NbaTeam.objects.create(**defaults)
+    else:
+        abbreviation = defaults['abbreviation']
+        candidates = NbaTeam.objects.all()
+        if abbreviation:
+            team = candidates.filter(abbreviation__iexact=abbreviation).first()
+            if team:
+                for field, value in defaults.items():
+                    setattr(team, field, value)
+                team.save()
+            else:
+                team = NbaTeam.objects.create(**defaults)
+        else:
+            team = candidates.filter(name__iexact=name).first()
+            if team:
+                for field, value in defaults.items():
+                    setattr(team, field, value)
+                team.save()
+            else:
+                team = NbaTeam.objects.create(**defaults)
+    
+    # Also create/update the generic Option for this team
+    teams_cat, _ = OptionCategory.objects.get_or_create(
+        slug='nba-teams',
+        defaults={'name': 'NBA Teams', 'icon': 'basketball'}
+    )
+    
+    Option.objects.update_or_create(
+        category=teams_cat,
+        metadata__nba_team_id=team.id,
+        defaults={
+            'slug': (defaults['abbreviation'] or name).lower().replace(' ', '-'),
+            'name': name,
+            'short_name': defaults['abbreviation'],
+            'description': f"{defaults['city']} - {defaults['conference']} Conference" if defaults['conference'] else defaults['city'],
+            'metadata': {
+                'nba_team_id': team.id,
+                'city': defaults['city'],
+                'conference': defaults['conference'],
+                'division': defaults['division'],
+            },
+            'external_id': str(team_id) if team_id else '',
+            'is_active': True,
+        }
+    )
+    
     return team
 
 
@@ -623,31 +650,53 @@ def _update_event_options(
     home_team: Optional[NbaTeam],
     away_team: Optional[NbaTeam],
 ) -> None:
+    from .models import Option, OptionCategory
+    
+    teams_cat = OptionCategory.objects.filter(slug='nba-teams').first()
+    if not teams_cat:
+        return
+    
+    valid_options = []
+    
     if home_team:
-        PredictionOption.objects.update_or_create(
-            event=event,
-            team=home_team,
-            defaults={
-                'label': home_team.name,
-                'sort_order': 2,
-                'is_active': True,
-            },
-        )
+        home_option = Option.objects.filter(
+            category=teams_cat,
+            metadata__nba_team_id=home_team.id
+        ).first()
+        if home_option:
+            PredictionOption.objects.update_or_create(
+                event=event,
+                option=home_option,
+                defaults={
+                    'label': home_option.name,
+                    'sort_order': 2,
+                    'is_active': True,
+                },
+            )
+            valid_options.append(home_option)
+    
     if away_team:
-        PredictionOption.objects.update_or_create(
-            event=event,
-            team=away_team,
-            defaults={
-                'label': away_team.name,
-                'sort_order': 1,
-                'is_active': True,
-            },
-        )
+        away_option = Option.objects.filter(
+            category=teams_cat,
+            metadata__nba_team_id=away_team.id
+        ).first()
+        if away_option:
+            PredictionOption.objects.update_or_create(
+                event=event,
+                option=away_option,
+                defaults={
+                    'label': away_option.name,
+                    'sort_order': 1,
+                    'is_active': True,
+                },
+            )
+            valid_options.append(away_option)
 
-    (PredictionOption.objects
-        .filter(event=event)
-        .exclude(team__in=[team for team in [home_team, away_team] if team])
-        .delete())
+    if valid_options:
+        (PredictionOption.objects
+            .filter(event=event)
+            .exclude(option__in=valid_options)
+            .delete())
 
 
 def _ensure_manual_events(
@@ -707,6 +756,45 @@ def _ensure_manual_events(
         _update_event_options(event, home_team, away_team)
 
     return event_ids
+
+
+def sync_weekly_games_via_source(limit: int = 7) -> Tuple[Optional[TipType], List[PredictionEvent], Optional[date]]:
+    """
+    Sync weekly games using the NBA event source.
+    
+    This is the new recommended way to sync games using the event source system.
+    """
+    from .event_sources import get_source
+    
+    try:
+        nba_source = get_source('nba-balldontlie')
+        if nba_source.is_configured():
+            nba_source.sync_options()  # Sync teams/players first
+            nba_source.sync_events(limit=limit)  # Then sync events
+    except Exception:
+        logger.exception("Failed to sync via NBA event source")
+    
+    # Return current state
+    tip_type = TipType.objects.filter(slug='weekly-games').first()
+    if not tip_type:
+        return None, [], None
+    
+    events = list(
+        PredictionEvent.objects.filter(
+            tip_type=tip_type,
+            is_active=True,
+        ).order_by('deadline', 'sort_order')
+    )
+    
+    week_start = None
+    if events:
+        earliest = events[0].deadline
+        week_start = timezone.localdate(earliest)
+        if tip_type.deadline != earliest:
+            TipType.objects.filter(pk=tip_type.pk).update(deadline=earliest)
+            tip_type.deadline = earliest
+    
+    return tip_type, events, week_start
 
 
 def sync_weekly_games(limit: int = 7) -> Tuple[Optional[TipType], List[PredictionEvent], Optional[date]]:
