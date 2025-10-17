@@ -8,12 +8,6 @@ prediction events from external sources.
 from .base import EventSource, EventSourceResult
 from .registry import registry, get_source, list_sources, list_configured_sources
 
-# Import and register all event sources
-from .nba import NbaEventSource
-
-# Register sources
-registry.register(NbaEventSource)
-
 __all__ = [
     'EventSource',
     'EventSourceResult',
@@ -21,5 +15,4 @@ __all__ = [
     'get_source',
     'list_sources',
     'list_configured_sources',
-    'NbaEventSource',
 ]

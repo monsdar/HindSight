@@ -24,17 +24,18 @@ class UserPreferencesModelTests(TestCase):
         self.assertEqual(str(preferences), f'Preferences for {self.user}')
         self.assertEqual(preferences.theme, DEFAULT_THEME_KEY)
 
-    def test_display_helpers_resolve_labels(self) -> None:
+    def test_preferences_basic_fields(self) -> None:
+        """Test that UserPreferences stores core fields (no NBA-specific fields)."""
         preferences = UserPreferences.objects.create(
             user=self.user,
-            favorite_team_id=14,
-            favorite_player_id=23,
+            nickname='TestNick',
+            theme='golden-state-warriors',
         )
 
-        with mock.patch('hooptipp.predictions.services.get_team_choices', return_value=[('14', 'Los Angeles Lakers')]), \
-                mock.patch('hooptipp.predictions.services.get_player_choices', return_value=[('23', 'LeBron James')]):
-            self.assertEqual(preferences.favorite_team_display(), 'Los Angeles Lakers')
-            self.assertEqual(preferences.favorite_player_display(), 'LeBron James')
+        self.assertEqual(preferences.nickname, 'TestNick')
+        self.assertEqual(preferences.theme, 'golden-state-warriors')
+        self.assertIsNotNone(preferences.created_at)
+        self.assertIsNotNone(preferences.updated_at)
 
 
 class UserPreferencesFormTests(TestCase):
@@ -47,35 +48,27 @@ class UserPreferencesFormTests(TestCase):
         self.preferences = UserPreferences.objects.create(user=self.user)
 
     def test_form_persists_preferences(self) -> None:
+        """Test that form saves core preference fields."""
         data = {
             'nickname': 'Ace',
-            'favorite_team_id': '5',
-            'favorite_player_id': '7',
             'theme': 'boston-celtics',
         }
 
-        with mock.patch('hooptipp.predictions.forms.get_team_choices', return_value=[('5', 'Boston Celtics')]), \
-                mock.patch('hooptipp.predictions.forms.get_player_choices', return_value=[('7', 'Jaylen Brown')]):
-            form = UserPreferencesForm(data=data, instance=self.preferences)
-            self.assertTrue(form.is_valid())
-            preferences = form.save()
+        form = UserPreferencesForm(data=data, instance=self.preferences)
+        self.assertTrue(form.is_valid())
+        preferences = form.save()
 
         self.assertEqual(preferences.nickname, 'Ace')
-        self.assertEqual(preferences.favorite_team_id, 5)
-        self.assertEqual(preferences.favorite_player_id, 7)
         self.assertEqual(preferences.theme, 'boston-celtics')
         self.assertEqual(preferences.theme_palette(), get_theme_palette('boston-celtics'))
 
     def test_form_rejects_invalid_theme(self) -> None:
+        """Test that form validates theme choices."""
         data = {
             'nickname': 'Ace',
-            'favorite_team_id': '',
-            'favorite_player_id': '',
             'theme': 'invalid-theme',
         }
 
-        with mock.patch('hooptipp.predictions.forms.get_team_choices', return_value=[]), \
-                mock.patch('hooptipp.predictions.forms.get_player_choices', return_value=[]):
-            form = UserPreferencesForm(data=data, instance=self.preferences)
-            self.assertFalse(form.is_valid())
-            self.assertIn('theme', form.errors)
+        form = UserPreferencesForm(data=data, instance=self.preferences)
+        self.assertFalse(form.is_valid())
+        self.assertIn('theme', form.errors)

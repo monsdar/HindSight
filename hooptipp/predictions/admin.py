@@ -5,7 +5,7 @@ from django.urls import path, reverse
 from django.utils.html import format_html
 from django.utils.translation import gettext_lazy as _
 
-from . import scoring_service, services
+from . import scoring_service
 from .event_sources import list_sources, get_source
 from .models import (
     EventOutcome,
@@ -18,6 +18,8 @@ from .models import (
     ScheduledGame,
     TipType,
     UserEventScore,
+    UserFavorite,
+    UserPreferences,
     UserTip,
 )
 
@@ -84,6 +86,7 @@ class ScheduledGameAdmin(admin.ModelAdmin):
     )
     list_filter = ('tip_type', 'is_manual')
     search_fields = ('nba_game_id', 'home_team', 'away_team')
+    autocomplete_fields = ('tip_type',)
 
 
 @admin.register(NbaTeam)
@@ -604,3 +607,40 @@ class UserTipAdmin(admin.ModelAdmin):
         return '-'
     
     option_display.short_description = 'Selected'
+
+
+@admin.register(UserFavorite)
+class UserFavoriteAdmin(admin.ModelAdmin):
+    list_display = ('user', 'favorite_type', 'option', 'created_at')
+    list_filter = ('favorite_type', 'option__category')
+    search_fields = ('user__username', 'option__name')
+    autocomplete_fields = ('user', 'option')
+    
+    fieldsets = (
+        (None, {
+            'fields': ('user', 'favorite_type', 'option')
+        }),
+        ('Info', {
+            'fields': ('created_at',),
+            'classes': ('collapse',),
+        }),
+    )
+    readonly_fields = ('created_at',)
+
+
+@admin.register(UserPreferences)
+class UserPreferencesAdmin(admin.ModelAdmin):
+    list_display = ('user', 'nickname', 'theme', 'updated_at')
+    search_fields = ('user__username', 'nickname')
+    autocomplete_fields = ('user',)
+    
+    fieldsets = (
+        (None, {
+            'fields': ('user', 'nickname', 'theme')
+        }),
+        ('Timestamps', {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',),
+        }),
+    )
+    readonly_fields = ('created_at', 'updated_at')
