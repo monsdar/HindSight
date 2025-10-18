@@ -13,14 +13,12 @@ from typing import Any
 
 from django.utils import timezone
 
+from hooptipp.nba.models import NbaPlayer, NbaTeam, ScheduledGame
 from ..models import (
-    NbaPlayer,
-    NbaTeam,
     Option,
     OptionCategory,
     PredictionEvent,
     PredictionOption,
-    ScheduledGame,
     TipType,
 )
 from ..services import (

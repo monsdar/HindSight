@@ -9,9 +9,9 @@ from django.urls import reverse
 from django.utils import timezone
 
 from hooptipp.predictions import services
+from hooptipp.nba.models import NbaTeam
 from hooptipp.predictions.models import (
     EventOutcome,
-    NbaTeam,
     Option,
     OptionCategory,
     PredictionEvent,

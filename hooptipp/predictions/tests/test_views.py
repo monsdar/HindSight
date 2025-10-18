@@ -6,13 +6,12 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
+from hooptipp.nba.models import NbaTeam, ScheduledGame
 from hooptipp.predictions.models import (
-    NbaTeam,
     Option,
     OptionCategory,
     PredictionEvent,
     PredictionOption,
-    ScheduledGame,
     TipType,
     UserPreferences,
     UserEventScore,
@@ -121,11 +120,7 @@ class HomeViewTests(TestCase):
         super().setUp()
 
     def test_home_view_exposes_event_tip_users(self) -> None:
-        with mock.patch(
-            'hooptipp.predictions.views.sync_weekly_games',
-            return_value=(self.tip_type, [self.event], self.game.game_date.date()),
-        ):
-            response = self.client.get(reverse('predictions:home'))
+        response = self.client.get(reverse('predictions:home'))
 
         self.assertEqual(response.status_code, 200)
         self.assertIn('event_tip_users', response.context)
@@ -154,11 +149,7 @@ class HomeViewTests(TestCase):
         session['active_user_id'] = self.alice.id
         session.save()
 
-        with mock.patch(
-            'hooptipp.predictions.views.sync_weekly_games',
-            return_value=(self.tip_type, [self.event], self.game.game_date.date()),
-        ):
-            response = self.client.get(reverse('predictions:home'))
+        response = self.client.get(reverse('predictions:home'))
 
         self.assertEqual(response.status_code, 200)
 
@@ -186,11 +177,7 @@ class HomeViewTests(TestCase):
         session['active_user_id'] = self.alice.id
         session.save()
 
-        with mock.patch(
-            'hooptipp.predictions.views.sync_weekly_games',
-            return_value=(self.tip_type, [self.event], self.game.game_date.date()),
-        ):
-            response = self.client.get(reverse('predictions:home'))
+        response = self.client.get(reverse('predictions:home'))
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Last updated:')
@@ -252,11 +239,7 @@ class HomeViewTests(TestCase):
             sort_order=2,
         )
 
-        with mock.patch(
-            'hooptipp.predictions.views.sync_weekly_games',
-            return_value=(self.tip_type, [self.event, additional_event], self.game.game_date.date()),
-        ):
-            response = self.client.get(reverse('predictions:home'))
+        response = self.client.get(reverse('predictions:home'))
 
         self.assertEqual(response.status_code, 200)
         weekday_slots = response.context['weekday_slots']
@@ -293,11 +276,7 @@ class HomeViewTests(TestCase):
             sort_order=1,
         )
 
-        with mock.patch(
-            'hooptipp.predictions.views.sync_weekly_games',
-            return_value=(self.tip_type, [self.event], self.game.game_date.date()),
-        ):
-            response = self.client.get(reverse('predictions:home'))
+        response = self.client.get(reverse('predictions:home'))
 
         self.assertEqual(response.status_code, 200)
         weekday_slots = response.context['weekday_slots']
@@ -309,11 +288,7 @@ class HomeViewTests(TestCase):
         session['active_user_id'] = self.alice.id
         session.save()
 
-        with mock.patch(
-            'hooptipp.predictions.views.sync_weekly_games',
-            return_value=(self.tip_type, [self.event], self.game.game_date.date()),
-        ):
-            response = self.client.post(
+        response = self.client.post(
                 reverse('predictions:home'),
                 {
                     'update_preferences': '1',
@@ -332,11 +307,7 @@ class HomeViewTests(TestCase):
         session['active_user_id'] = self.alice.id
         session.save()
 
-        with mock.patch(
-            'hooptipp.predictions.views.sync_weekly_games',
-            return_value=(self.tip_type, [self.event], self.game.game_date.date()),
-        ):
-            response = self.client.post(
+        response = self.client.post(
                 reverse('predictions:home'),
                 {
                     'update_preferences': '1',
@@ -372,44 +343,19 @@ class HomeViewTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertIsNone(self.client.session.get('active_user_id'))
 
-    def test_finish_round_allows_switching_users(self) -> None:
-        session = self.client.session
-        session['active_user_id'] = self.alice.id
-        session.save()
-
-        with mock.patch(
-            'hooptipp.predictions.views.sync_weekly_games',
-            return_value=(self.tip_type, [self.event], self.game.game_date.date()),
-        ):
-            response = self.client.post(
-                reverse('predictions:home'),
-                {
-                    'set_active_user': '1',
-                    'user_id': str(self.bob.id),
-                    'active_user_action': 'finish',
-                },
-            )
-
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(self.client.session.get('active_user_id'), self.bob.id)
-
     def test_finish_round_clears_active_user(self) -> None:
         session = self.client.session
         session['active_user_id'] = self.alice.id
         session.save()
 
-        with mock.patch(
-            'hooptipp.predictions.views.sync_weekly_games',
-            return_value=(self.tip_type, [self.event], self.game.game_date.date()),
-        ):
-            response = self.client.post(
-                reverse('predictions:home'),
-                {
-                    'set_active_user': '1',
-                    'user_id': str(self.alice.id),
-                    'active_user_action': 'finish',
-                },
-            )
+        response = self.client.post(
+            reverse('predictions:home'),
+            {
+                'set_active_user': '1',
+                'user_id': str(self.alice.id),
+                'active_user_action': 'finish',
+            },
+        )
 
         self.assertEqual(response.status_code, 302)
         self.assertIsNone(self.client.session.get('active_user_id'))
@@ -419,18 +365,14 @@ class HomeViewTests(TestCase):
         session['active_user_id'] = self.alice.id
         session.save()
 
-        with mock.patch(
-            'hooptipp.predictions.views.sync_weekly_games',
-            return_value=(self.tip_type, [self.event], self.game.game_date.date()),
-        ):
-            response = self.client.post(
-                reverse('predictions:home'),
-                {
-                    'set_active_user': '1',
-                    'user_id': str(self.bob.id),
-                    'active_user_action': 'finish',
-                },
-            )
+        response = self.client.post(
+            reverse('predictions:home'),
+            {
+                'set_active_user': '1',
+                'user_id': str(self.bob.id),
+                'active_user_action': 'finish',
+            },
+        )
 
         self.assertEqual(response.status_code, 302)
         self.assertEqual(self.client.session.get('active_user_id'), self.bob.id)
@@ -440,11 +382,7 @@ class HomeViewTests(TestCase):
         session['active_user_id'] = self.alice.id
         session.save()
 
-        with mock.patch(
-            'hooptipp.predictions.views.sync_weekly_games',
-            return_value=(self.tip_type, [self.event], self.game.game_date.date()),
-        ):
-            response = self.client.post(
+        response = self.client.post(
                 reverse('predictions:home'),
                 {
                     'save_tips': '1',
@@ -534,11 +472,7 @@ class HomeViewTests(TestCase):
         ):
             post_data[f'lock_{event.id}'] = '1'
 
-        with mock.patch(
-            'hooptipp.predictions.views.sync_weekly_games',
-            return_value=(self.tip_type, [self.event, extra_event], self.game.game_date.date()),
-        ):
-            response = self.client.post(
+        response = self.client.post(
                 reverse('predictions:home'),
                 post_data,
                 follow=True,
@@ -561,11 +495,7 @@ class HomeViewTests(TestCase):
         session['active_user_id'] = self.alice.id
         session.save()
 
-        with mock.patch(
-            'hooptipp.predictions.views.sync_weekly_games',
-            return_value=(self.tip_type, [self.event], self.game.game_date.date()),
-        ):
-            response = self.client.post(
+        response = self.client.post(
                 reverse('predictions:home'),
                 {
                     'save_tips': '1',
@@ -597,11 +527,7 @@ class HomeViewTests(TestCase):
             is_lock_bonus=True,
         )
 
-        with mock.patch(
-            'hooptipp.predictions.views.sync_weekly_games',
-            return_value=(self.tip_type, [self.event], self.game.game_date.date()),
-        ):
-            response = self.client.get(reverse('predictions:home'))
+        response = self.client.get(reverse('predictions:home'))
 
         self.assertEqual(response.status_code, 200)
         scoreboard = response.context['scoreboard_summary']

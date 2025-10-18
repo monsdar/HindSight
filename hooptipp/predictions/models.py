@@ -120,69 +120,6 @@ class TipType(models.Model):
         return self.name
 
 
-class ScheduledGame(models.Model):
-    tip_type = models.ForeignKey(
-        TipType,
-        on_delete=models.CASCADE,
-        related_name='games'
-    )
-    nba_game_id = models.CharField(max_length=20, unique=True)
-    game_date = models.DateTimeField()
-    home_team = models.CharField(max_length=100)
-    home_team_tricode = models.CharField(max_length=5)
-    away_team = models.CharField(max_length=100)
-    away_team_tricode = models.CharField(max_length=5)
-    venue = models.CharField(max_length=150, blank=True)
-    is_manual = models.BooleanField(
-        default=False,
-        help_text='Indicates that the game was added manually rather than via the BallDontLie sync.',
-    )
-
-    class Meta:
-        ordering = ['game_date']
-        verbose_name = 'Scheduled game'
-        verbose_name_plural = 'Scheduled games'
-
-    def __str__(self) -> str:
-        return f"{self.away_team} @ {self.home_team}"
-
-
-class NbaTeam(models.Model):
-    balldontlie_id = models.PositiveIntegerField(unique=True, null=True, blank=True)
-    name = models.CharField(max_length=150)
-    abbreviation = models.CharField(max_length=5, blank=True)
-    city = models.CharField(max_length=100, blank=True)
-    conference = models.CharField(max_length=30, blank=True)
-    division = models.CharField(max_length=30, blank=True)
-
-    class Meta:
-        ordering = ["name"]
-
-    def __str__(self) -> str:
-        return self.name
-
-
-class NbaPlayer(models.Model):
-    balldontlie_id = models.PositiveIntegerField(unique=True, null=True, blank=True)
-    first_name = models.CharField(max_length=80)
-    last_name = models.CharField(max_length=80)
-    display_name = models.CharField(max_length=160)
-    position = models.CharField(max_length=10, blank=True)
-    team = models.ForeignKey(
-        NbaTeam,
-        on_delete=models.SET_NULL,
-        related_name="players",
-        null=True,
-        blank=True,
-    )
-
-    class Meta:
-        ordering = ["display_name"]
-
-    def __str__(self) -> str:
-        return self.display_name
-
-
 class PredictionEvent(models.Model):
     class TargetKind(models.TextChoices):
         TEAM = "team", "Team"
@@ -244,7 +181,7 @@ class PredictionEvent(models.Model):
     is_active = models.BooleanField(default=True)
     # Legacy NBA-specific field - kept for backward compatibility
     scheduled_game = models.OneToOneField(
-        "ScheduledGame",
+        "nba.ScheduledGame",
         on_delete=models.CASCADE,
         related_name="prediction_event",
         null=True,

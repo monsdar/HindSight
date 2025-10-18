@@ -4,9 +4,9 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.utils import timezone
 
+from hooptipp.nba.models import NbaTeam
 from hooptipp.predictions.models import (
     EventOutcome,
-    NbaTeam,
     Option,
     OptionCategory,
     PredictionEvent,

@@ -18,9 +18,9 @@ from hooptipp.predictions.models import (
     OptionCategory,
     PredictionEvent,
     PredictionOption,
-    ScheduledGame,
     TipType,
 )
+from .models import ScheduledGame
 
 from .managers import NbaPlayerManager, NbaTeamManager
 

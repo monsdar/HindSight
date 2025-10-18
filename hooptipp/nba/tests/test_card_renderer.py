@@ -8,13 +8,13 @@ from django.test import TestCase
 from django.utils import timezone
 
 from hooptipp.nba.card_renderer import NbaCardRenderer
+from hooptipp.nba.models import ScheduledGame
 from hooptipp.predictions.models import (
     EventOutcome,
     Option,
     OptionCategory,
     PredictionEvent,
     PredictionOption,
-    ScheduledGame,
     TipType,
 )
 

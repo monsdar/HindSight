@@ -7,11 +7,11 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
+from hooptipp.nba.models import ScheduledGame
 from hooptipp.predictions.models import (
     OptionCategory,
     PredictionEvent,
     PredictionOption,
-    ScheduledGame,
     TipType,
 )
 
@@ -118,7 +118,7 @@ class AddNbaGamesAdminViewTest(TestCase):
         )
         
         # Mock team creation
-        from hooptipp.predictions.models import NbaTeam
+        from hooptipp.nba.models import NbaTeam
         mock_home_team = NbaTeam(id=1, name='Lakers', abbreviation='LAL')
         mock_away_team = NbaTeam(id=2, name='Celtics', abbreviation='BOS')
         mock_upsert_team.side_effect = [mock_home_team, mock_away_team]
