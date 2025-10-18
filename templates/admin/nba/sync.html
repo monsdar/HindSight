@@ -1,0 +1,236 @@
+{% extends "admin/base_site.html" %}
+{% load i18n admin_urls static %}
+
+{% block extrahead %}
+{{ block.super }}
+<style>
+  .sync-container {
+    max-width: 900px;
+    margin: 20px auto;
+  }
+  
+  .info-box {
+    padding: 20px;
+    background-color: #e7f3ff;
+    border-left: 4px solid #2196F3;
+    margin-bottom: 30px;
+    border-radius: 4px;
+  }
+  
+  .info-box h3 {
+    margin-top: 0;
+    color: #1976D2;
+    font-size: 16px;
+  }
+  
+  .info-box p {
+    margin: 8px 0;
+    line-height: 1.6;
+  }
+  
+  .info-box ul {
+    margin: 10px 0;
+    padding-left: 20px;
+  }
+  
+  .info-box li {
+    margin: 5px 0;
+  }
+  
+  .sync-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    margin-bottom: 30px;
+  }
+  
+  .sync-card {
+    background: white;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 25px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    transition: box-shadow 0.3s ease;
+  }
+  
+  .sync-card:hover {
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+  }
+  
+  .sync-card h2 {
+    margin-top: 0;
+    color: #333;
+    font-size: 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  
+  .sync-card .icon {
+    font-size: 28px;
+  }
+  
+  .sync-card p {
+    color: #666;
+    line-height: 1.6;
+    margin: 15px 0;
+  }
+  
+  .sync-card ul {
+    color: #666;
+    line-height: 1.6;
+    margin: 15px 0;
+    padding-left: 20px;
+  }
+  
+  .sync-card li {
+    margin: 5px 0;
+  }
+  
+  .sync-button {
+    background-color: #417690;
+    color: white;
+    padding: 12px 24px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 15px;
+    font-weight: bold;
+    width: 100%;
+    transition: background-color 0.3s ease;
+  }
+  
+  .sync-button:hover {
+    background-color: #2e5468;
+  }
+  
+  .sync-button:active {
+    transform: translateY(1px);
+  }
+  
+  .warning-box {
+    padding: 15px;
+    background-color: #fff3cd;
+    border-left: 4px solid #ffc107;
+    margin: 15px 0;
+    border-radius: 4px;
+  }
+  
+  .warning-box strong {
+    color: #856404;
+  }
+  
+  .warning-box p {
+    color: #856404;
+    margin: 5px 0;
+  }
+  
+  .back-link {
+    display: inline-block;
+    margin-top: 20px;
+    color: #417690;
+    text-decoration: none;
+    font-weight: bold;
+  }
+  
+  .back-link:hover {
+    text-decoration: underline;
+  }
+  
+  @media (max-width: 768px) {
+    .sync-actions {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
+{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
+  &rsaquo; <a href="{% url 'admin:app_list' app_label='nba' %}">NBA</a>
+  &rsaquo; {% trans 'Data Synchronization' %}
+</div>
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+  <div class="sync-container">
+    <h1>{% trans 'NBA Data Synchronization' %}</h1>
+    
+    <div class="info-box">
+      <h3>ℹ️ {% trans 'About NBA Data Sync' %}</h3>
+      <p>
+        {% trans 'This page allows you to synchronize NBA teams and players from the BallDontLie API into the system.' %}
+      </p>
+      <p>
+        {% trans 'The data is stored as Options in the generic prediction system, which allows for flexible categorization and management.' %}
+      </p>
+      <ul>
+        <li>{% trans 'Teams are stored in the "nba-teams" category' %}</li>
+        <li>{% trans 'Players are stored in the "nba-players" category' %}</li>
+        <li>{% trans 'Existing records are updated with latest data' %}</li>
+        <li>{% trans 'Records no longer in the API are removed' %}</li>
+      </ul>
+    </div>
+    
+    <div class="sync-actions">
+      <div class="sync-card">
+        <h2>
+          <span class="icon">🏀</span>
+          {% trans 'Sync Teams' %}
+        </h2>
+        <p>
+          {% trans 'Synchronize all NBA teams from the BallDontLie API. This includes team names, abbreviations, conferences, and divisions.' %}
+        </p>
+        <p>
+          <strong>{% trans 'Processing time:' %}</strong> {% trans '~10 seconds' %}
+        </p>
+        <form method="post" action="{% url 'admin:nba_sync_teams' %}" onsubmit="return confirm('{% trans 'Start team synchronization?' %}');">
+          {% csrf_token %}
+          <button type="submit" class="sync-button">
+            🔄 {% trans 'Sync Teams Now' %}
+          </button>
+        </form>
+      </div>
+      
+      <div class="sync-card">
+        <h2>
+          <span class="icon">👤</span>
+          {% trans 'Sync Players' %}
+        </h2>
+        <p>
+          {% trans 'Synchronize all active NBA players from the BallDontLie API. This includes player names, positions, and current team assignments.' %}
+        </p>
+        <div class="warning-box">
+          <strong>⚠️ {% trans 'Note:' %}</strong>
+          <p>
+            {% trans 'Player sync may take several minutes due to API rate limits (5 requests per minute). You can continue working while the sync runs in the background.' %}
+          </p>
+        </div>
+        <form method="post" action="{% url 'admin:nba_sync_players' %}" onsubmit="return confirm('{% trans 'Start player synchronization? This may take several minutes.' %}');">
+          {% csrf_token %}
+          <button type="submit" class="sync-button">
+            🔄 {% trans 'Sync Players Now' %}
+          </button>
+        </form>
+      </div>
+    </div>
+    
+    <div class="info-box">
+      <h3>📝 {% trans 'After Synchronization' %}</h3>
+      <p>{% trans 'Once synchronized, you can:' %}</p>
+      <ul>
+        <li>{% trans 'View teams at' %} <a href="{% url 'admin:predictions_option_changelist' %}?category__slug=nba-teams">{% trans 'Predictions › Options (NBA Teams)' %}</a></li>
+        <li>{% trans 'View players at' %} <a href="{% url 'admin:predictions_option_changelist' %}?category__slug=nba-players">{% trans 'Predictions › Options (NBA Players)' %}</a></li>
+        <li>{% trans 'Use the teams and players in prediction events' %}</li>
+        <li>{% trans 'Allow users to select favorite teams and players' %}</li>
+      </ul>
+    </div>
+    
+    <a href="{% url 'admin:app_list' app_label='nba' %}" class="back-link">
+      ← {% trans 'Back to NBA Admin' %}
+    </a>
+  </div>
+</div>
+{% endblock %}
