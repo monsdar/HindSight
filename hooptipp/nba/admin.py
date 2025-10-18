@@ -486,6 +486,7 @@ class CustomNbaAdmin:
 # Hook into admin site URLs
 from django.contrib.admin import sites
 
+# Save the original get_urls method
 _original_get_urls = sites.AdminSite.get_urls
 
 def _get_urls_with_nba(self):
@@ -495,4 +496,6 @@ def _get_urls_with_nba(self):
     return nba_urls + urls
 
 # Monkey patch the admin site's get_urls method
+# Mark it so other apps (like demo) know it's been patched
+_get_urls_with_nba._nba_patched = True
 sites.AdminSite.get_urls = _get_urls_with_nba

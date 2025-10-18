@@ -389,15 +389,17 @@ class CustomDemoAdmin:
 # Hook into admin site URLs
 from django.contrib.admin import sites
 
-_original_get_urls = sites.AdminSite.get_urls
+# Save the current get_urls method (which may already be patched by NBA)
+_current_get_urls = sites.AdminSite.get_urls
 
 def _get_urls_with_demo(self):
     """Get admin URLs including demo custom views."""
-    urls = _original_get_urls(self)
+    # Call whatever get_urls is currently set (NBA-patched or original)
+    urls = _current_get_urls(self)
     demo_urls = CustomDemoAdmin.get_urls()
     return demo_urls + urls
 
-# Only patch if not already patched by NBA
+# Only patch if not already patched by demo
 if not hasattr(sites.AdminSite.get_urls, '_demo_patched'):
+    _get_urls_with_demo._demo_patched = True
     sites.AdminSite.get_urls = _get_urls_with_demo
-    sites.AdminSite.get_urls._demo_patched = True
