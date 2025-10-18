@@ -547,3 +547,23 @@ class UserPreferencesAdmin(admin.ModelAdmin):
         }),
     )
     readonly_fields = ('created_at', 'updated_at')
+
+
+# Register the EventSourceAdmin manually
+# EventSource is not a real model, so we register it specially
+from django.db import models
+
+class EventSourcePseudoModel(models.Model):
+    """Pseudo-model for EventSource admin registration."""
+    
+    class Meta:
+        app_label = 'predictions'
+        verbose_name = 'Event Source'
+        verbose_name_plural = 'Event Sources'
+        # This is not a real database model
+        managed = False
+        # Use a fake table name that won't conflict
+        db_table = '_predictions_eventsource_pseudo'
+
+# Register the EventSourceAdmin with the pseudo-model
+admin.site.register(EventSourcePseudoModel, EventSourceAdmin)
