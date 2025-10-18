@@ -7,6 +7,7 @@ from django.test import TestCase, Client
 from django.urls import reverse
 from django.utils import timezone
 
+from hooptipp.demo.admin import DemoPseudoModel
 from hooptipp.predictions.models import (
     Option,
     OptionCategory,
@@ -234,3 +235,47 @@ class DemoAdminTestCase(TestCase):
             PredictionEvent.objects.filter(source_id='demo').count(),
             0
         )
+
+    def test_demo_admin_registered(self):
+        """Test that demo pseudo-model is registered in admin."""
+        from django.contrib import admin
+        
+        # Check that DemoPseudoModel is registered
+        self.assertIn(DemoPseudoModel, admin.site._registry)
+        
+        # Get the admin class
+        demo_admin = admin.site._registry[DemoPseudoModel]
+        self.assertEqual(demo_admin.change_list_template, 'admin/demo/demo_index.html')
+
+    def test_demo_changelist_view(self):
+        """Test demo admin changelist view."""
+        url = reverse('admin:demo_demopseudomodel_changelist')
+        response = self.client.get(url)
+        
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Demo Events Management')
+        self.assertContains(response, 'Create Demo Events')
+        self.assertContains(response, 'Current Demo Events')
+        
+    def test_demo_changelist_shows_event_count(self):
+        """Test that changelist displays correct event count."""
+        # Create some demo events
+        create_url = reverse('admin:demo_add_demo_events')
+        self.client.post(create_url)
+        
+        # Visit changelist
+        list_url = reverse('admin:demo_demopseudomodel_changelist')
+        response = self.client.get(list_url)
+        
+        self.assertEqual(response.status_code, 200)
+        # Should show 4 demo events
+        self.assertContains(response, '4')
+        
+    def test_demo_appears_in_admin_index(self):
+        """Test that demo app appears in admin index."""
+        url = reverse('admin:index')
+        response = self.client.get(url)
+        
+        self.assertEqual(response.status_code, 200)
+        # Should contain Demo app section
+        self.assertContains(response, 'Demo')
