@@ -151,6 +151,8 @@ The NBA app demonstrates the complete implementation:
 
 ### Files Created
 
+- `hooptipp/predictions/templates/predictions/cards/default.html` - Generic event card
+- `hooptipp/predictions/templates/predictions/cards/default_result.html` - Generic result card
 - `hooptipp/nba/card_renderer.py` - NBA card renderer
 - `hooptipp/nba/templates/nba/cards/game.html` - NBA game prediction card
 - `hooptipp/nba/templates/nba/cards/game_result.html` - NBA game result card

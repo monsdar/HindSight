@@ -104,8 +104,8 @@ class CardRendererBaseTests(TestCase):
         context = renderer.get_event_context(event)
         self.assertEqual(context, {})
 
-    def test_result_template_defaults_to_event_template(self):
-        """Result template should default to event template."""
+    def test_result_template_can_differ_from_event_template(self):
+        """Result template can be different from event template."""
         tip_type = TipType.objects.create(
             name="Test",
             slug="test",
@@ -140,6 +140,43 @@ class CardRendererBaseTests(TestCase):
         # Should be different in our mock implementation
         self.assertNotEqual(event_template, result_template)
         self.assertEqual(result_template, "mock/cards/result.html")
+    
+    def test_default_renderer_has_separate_result_template(self):
+        """DefaultCardRenderer should use separate template for results."""
+        tip_type = TipType.objects.create(
+            name="Test",
+            slug="test",
+            deadline=timezone.now(),
+        )
+        event = PredictionEvent.objects.create(
+            tip_type=tip_type,
+            name="Test Event",
+            opens_at=timezone.now(),
+            deadline=timezone.now(),
+        )
+        category = OptionCategory.objects.create(slug="test", name="Test")
+        option_obj = Option.objects.create(
+            category=category,
+            slug="test",
+            name="Test Option",
+        )
+        prediction_option = PredictionOption.objects.create(
+            event=event,
+            label="Test",
+            option=option_obj,
+        )
+        outcome = EventOutcome.objects.create(
+            prediction_event=event,
+            winning_option=prediction_option,
+        )
+
+        renderer = DefaultCardRenderer()
+        event_template = renderer.get_event_template(event)
+        result_template = renderer.get_result_template(outcome)
+
+        # Default renderer should use different templates
+        self.assertEqual(event_template, "predictions/cards/default.html")
+        self.assertEqual(result_template, "predictions/cards/default_result.html")
 
     def test_result_context_defaults_to_event_context(self):
         """Result context should default to event context by default."""

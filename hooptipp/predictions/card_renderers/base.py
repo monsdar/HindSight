@@ -67,6 +67,22 @@ class CardRenderer(ABC):
             Template path relative to templates directory
         """
         return self.get_event_template(outcome.prediction_event)
+    
+    def get_result_context(self, outcome: EventOutcome, user=None) -> dict:
+        """
+        Return additional context data for rendering the result card.
+
+        Override to provide result-specific data.
+        Defaults to using the same context as the event card.
+
+        Args:
+            outcome: EventOutcome instance
+            user: Optional active user for personalization
+
+        Returns:
+            Dictionary of context variables for the template
+        """
+        return self.get_event_context(outcome.prediction_event, user)
 
     def get_event_context(self, event: PredictionEvent, user=None) -> dict:
         """
@@ -123,6 +139,10 @@ class DefaultCardRenderer(CardRenderer):
     def get_event_template(self, event: PredictionEvent) -> str:
         """Use the default generic card template."""
         return "predictions/cards/default.html"
+    
+    def get_result_template(self, outcome: EventOutcome) -> str:
+        """Use the default generic result card template."""
+        return "predictions/cards/default_result.html"
 
     @property
     def priority(self) -> int:

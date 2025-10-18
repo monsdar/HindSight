@@ -266,7 +266,7 @@ class NbaCardRendererTests(TestCase):
             option=lebron,
         )
 
-        with mock.patch("hooptipp.nba.card_renderer.get_player_card_data") as mock_get_player:
+        with mock.patch("hooptipp.nba.services.get_player_card_data") as mock_get_player:
             mock_get_player.return_value = {
                 "portrait_url": None,
                 "team": "Los Angeles Lakers",
@@ -307,7 +307,7 @@ class NbaCardRendererTests(TestCase):
             deadline=game_time,
         )
 
-        with mock.patch("hooptipp.nba.card_renderer.get_live_game_data") as mock_live:
+        with mock.patch("hooptipp.nba.services.get_live_game_data") as mock_live:
             mock_live.return_value = {
                 "away_score": 95,
                 "home_score": 98,
