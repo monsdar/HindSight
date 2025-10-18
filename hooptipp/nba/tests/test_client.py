@@ -24,13 +24,13 @@ class CachedGamesAPITests(TestCase):
         self.assertIs(first, response)
         self.mock_games_api.list.assert_called_once()
 
-        with mock.patch('hooptipp.predictions.balldontlie_client.timezone.now', return_value=self.fake_now + timedelta(hours=1)):
+        with mock.patch('hooptipp.nba.client.timezone.now', return_value=self.fake_now + timedelta(hours=1)):
             second = self.client.nba.games.list(start_date='2024-01-11')
 
         self.assertIs(second, response)
         self.mock_games_api.list.assert_called_once()
 
-        with mock.patch('hooptipp.predictions.balldontlie_client.timezone.now', return_value=self.fake_now + timedelta(hours=10)):
+        with mock.patch('hooptipp.nba.client.timezone.now', return_value=self.fake_now + timedelta(hours=10)):
             self.client.nba.games.list(start_date='2024-01-11')
 
         self.assertEqual(self.mock_games_api.list.call_count, 2)
@@ -46,7 +46,7 @@ class CachedGamesAPITests(TestCase):
         self.assertIs(first, response)
         self.mock_games_api.get.assert_called_once_with(99)
 
-        with mock.patch('hooptipp.predictions.balldontlie_client.timezone.now', return_value=self.fake_now + timedelta(days=7)):
+        with mock.patch('hooptipp.nba.client.timezone.now', return_value=self.fake_now + timedelta(days=7)):
             second = self.client.nba.games.get(99)
 
         self.assertIs(second, response)
@@ -62,12 +62,12 @@ class CachedGamesAPITests(TestCase):
 
         self.mock_games_api.get.assert_called_once_with(7)
 
-        with mock.patch('hooptipp.predictions.balldontlie_client.timezone.now', return_value=self.fake_now + timedelta(seconds=30)):
+        with mock.patch('hooptipp.nba.client.timezone.now', return_value=self.fake_now + timedelta(seconds=30)):
             self.client.nba.games.get(7)
 
         self.assertEqual(self.mock_games_api.get.call_count, 1)
 
-        with mock.patch('hooptipp.predictions.balldontlie_client.timezone.now', return_value=self.fake_now + timedelta(minutes=2)):
+        with mock.patch('hooptipp.nba.client.timezone.now', return_value=self.fake_now + timedelta(minutes=2)):
             self.client.nba.games.get(7)
 
         self.assertEqual(self.mock_games_api.get.call_count, 2)
