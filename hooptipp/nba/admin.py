@@ -1,6 +1,8 @@
 """NBA admin customizations."""
 
 import json
+import logging
+import threading
 from datetime import datetime, timedelta
 
 from django.contrib import admin, messages
@@ -25,6 +27,8 @@ from hooptipp.predictions.services import _build_bdl_client, _upsert_team
 
 from .models import NbaUserPreferences
 from .services import sync_players, sync_teams
+
+logger = logging.getLogger(__name__)
 
 # Note: ScheduledGame admin is in predictions.admin for now
 # It will be moved here when we fully migrate ScheduledGame to the nba app
@@ -507,26 +511,19 @@ def sync_teams_view(request: HttpRequest):
     return HttpResponseRedirect(reverse('admin:nba_sync'))
 
 
-def sync_players_view(request: HttpRequest):
-    """Sync NBA players from BallDontLie API."""
-    if request.method != 'POST':
-        return HttpResponseNotAllowed(['POST'])
+def _run_player_sync_background():
+    """
+    Background worker function for player sync.
     
-    if not request.user.has_perm('predictions.add_option'):
-        raise PermissionDenied
-    
+    Runs the sync and logs results. This function is executed in a separate thread
+    to avoid blocking the admin request.
+    """
     try:
-        # Note: Player sync can take several minutes due to API rate limiting
-        messages.info(
-            request,
-            'Player sync started. This may take several minutes due to API rate limits. '
-            'You can continue working and check back later.'
-        )
-        
+        logger.info('Starting background player sync...')
         result = sync_players()
         
         if not result.changed:
-            messages.info(request, 'Players sync completed with no changes.')
+            logger.info('Player sync completed with no changes.')
         else:
             message_parts = []
             if result.created:
@@ -536,12 +533,32 @@ def sync_players_view(request: HttpRequest):
             if result.removed:
                 message_parts.append(f'{result.removed} player(s) removed')
             
-            messages.success(
-                request,
-                f'Players synced successfully: {", ".join(message_parts)}.'
-            )
+            logger.info(f'Player sync completed successfully: {", ".join(message_parts)}.')
     except Exception as e:
-        messages.error(request, f'Failed to sync players: {str(e)}')
+        logger.exception(f'Background player sync failed: {str(e)}')
+
+
+def sync_players_view(request: HttpRequest):
+    """Sync NBA players from BallDontLie API in the background."""
+    if request.method != 'POST':
+        return HttpResponseNotAllowed(['POST'])
+    
+    if not request.user.has_perm('predictions.add_option'):
+        raise PermissionDenied
+    
+    # Start the sync in a background thread
+    sync_thread = threading.Thread(
+        target=_run_player_sync_background,
+        daemon=True,
+        name='nba-player-sync'
+    )
+    sync_thread.start()
+    
+    messages.info(
+        request,
+        'Player sync started in the background. This may take several minutes due to API rate limits. '
+        'Check the server logs for completion status. You can continue working normally.'
+    )
     
     return HttpResponseRedirect(reverse('admin:nba_sync'))
 

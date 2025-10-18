@@ -205,13 +205,13 @@
         <div class="warning-box">
           <strong>⚠️ {% trans 'Note:' %}</strong>
           <p>
-            {% trans 'Player sync may take several minutes due to API rate limits (5 requests per minute). You can continue working while the sync runs in the background.' %}
+            {% trans 'Player sync runs in the background and may take several minutes due to API rate limits (5 requests per minute). Check the server logs for completion status.' %}
           </p>
         </div>
-        <form method="post" action="{% url 'admin:nba_sync_players' %}" onsubmit="return confirm('{% trans 'Start player synchronization? This may take several minutes.' %}');">
+        <form method="post" action="{% url 'admin:nba_sync_players' %}" onsubmit="return confirm('{% trans 'Start background player synchronization? This will run asynchronously and may take several minutes. Check server logs for completion status.' %}');">
           {% csrf_token %}
           <button type="submit" class="sync-button">
-            🔄 {% trans 'Sync Players Now' %}
+            🔄 {% trans 'Sync Players (Background)' %}
           </button>
         </form>
       </div>

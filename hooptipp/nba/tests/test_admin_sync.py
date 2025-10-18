@@ -119,10 +119,11 @@ class NbaSyncViewTest(TestCase):
         self.assertIn('Failed to sync teams', str(messages[0]))
         self.assertIn('API connection failed', str(messages[0]))
 
-    @patch('hooptipp.nba.admin.sync_players')
-    def test_sync_players_success(self, mock_sync_players):
-        """Test successful player synchronization."""
-        mock_sync_players.return_value = SyncResult(created=50, updated=400, removed=10)
+    @patch('hooptipp.nba.admin.threading.Thread')
+    def test_sync_players_success(self, mock_thread_class):
+        """Test player synchronization starts in background thread."""
+        mock_thread = MagicMock()
+        mock_thread_class.return_value = mock_thread
         
         url = reverse('admin:nba_sync_players')
         response = self.client.post(url)
@@ -130,50 +131,56 @@ class NbaSyncViewTest(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response.url, reverse('admin:nba_sync'))
         
-        # Verify sync_players was called
-        mock_sync_players.assert_called_once()
+        # Verify thread was created and started
+        mock_thread_class.assert_called_once()
+        mock_thread.start.assert_called_once()
         
-        # Check messages
+        # Check that thread was created with correct parameters
+        call_kwargs = mock_thread_class.call_args[1]
+        self.assertTrue(call_kwargs.get('daemon'))
+        self.assertEqual(call_kwargs.get('name'), 'nba-player-sync')
+        
+        # Check messages - should indicate background sync started
         messages = list(response.wsgi_request._messages)
-        # Should have 2 messages: info about sync starting and success
-        self.assertGreaterEqual(len(messages), 1)
-        
-        # Check for success message
-        success_messages = [m for m in messages if 'successfully' in str(m).lower()]
-        self.assertGreater(len(success_messages), 0)
-        self.assertIn('50 player(s) created', str(success_messages[0]))
-        self.assertIn('400 player(s) updated', str(success_messages[0]))
-        self.assertIn('10 player(s) removed', str(success_messages[0]))
+        self.assertEqual(len(messages), 1)
+        self.assertIn('started in the background', str(messages[0]).lower())
 
-    @patch('hooptipp.nba.admin.sync_players')
-    def test_sync_players_no_changes(self, mock_sync_players):
-        """Test player sync with no changes."""
-        mock_sync_players.return_value = SyncResult(created=0, updated=0, removed=0)
+    @patch('hooptipp.nba.admin.threading.Thread')
+    def test_sync_players_no_changes(self, mock_thread_class):
+        """Test player sync starts in background."""
+        mock_thread = MagicMock()
+        mock_thread_class.return_value = mock_thread
         
         url = reverse('admin:nba_sync_players')
         response = self.client.post(url)
         
         self.assertEqual(response.status_code, 302)
         
+        # Verify thread was started
+        mock_thread.start.assert_called_once()
+        
         messages = list(response.wsgi_request._messages)
-        # Should have messages about starting and no changes
-        self.assertGreaterEqual(len(messages), 1)
+        self.assertEqual(len(messages), 1)
+        self.assertIn('started in the background', str(messages[0]).lower())
 
-    @patch('hooptipp.nba.admin.sync_players')
-    def test_sync_players_error(self, mock_sync_players):
-        """Test player sync with error."""
-        mock_sync_players.side_effect = Exception('Rate limit exceeded')
+    @patch('hooptipp.nba.admin.threading.Thread')
+    def test_sync_players_starts_thread(self, mock_thread_class):
+        """Test player sync starts background thread."""
+        mock_thread = MagicMock()
+        mock_thread_class.return_value = mock_thread
         
         url = reverse('admin:nba_sync_players')
         response = self.client.post(url)
         
         self.assertEqual(response.status_code, 302)
         
+        # Verify thread was created and started
+        mock_thread_class.assert_called_once()
+        mock_thread.start.assert_called_once()
+        
         messages = list(response.wsgi_request._messages)
-        # Find error message
-        error_messages = [m for m in messages if 'failed' in str(m).lower()]
-        self.assertGreater(len(error_messages), 0)
-        self.assertIn('Rate limit exceeded', str(error_messages[0]))
+        self.assertEqual(len(messages), 1)
+        self.assertIn('started in the background', str(messages[0]).lower())
 
     def test_sync_teams_get_not_allowed(self):
         """Test that GET requests to sync_teams are not allowed."""
@@ -235,19 +242,57 @@ class NbaSyncViewTest(TestCase):
         self.assertNotIn('updated', message_text.lower())
         self.assertNotIn('removed', message_text.lower())
 
-    @patch('hooptipp.nba.admin.sync_players')
-    def test_sync_players_partial_result(self, mock_sync_players):
-        """Test player sync with only updates."""
-        # Only updated, no creates or removals
-        mock_sync_players.return_value = SyncResult(created=0, updated=100, removed=0)
+    @patch('hooptipp.nba.admin.threading.Thread')
+    def test_sync_players_returns_immediately(self, mock_thread_class):
+        """Test player sync returns immediately without waiting for completion."""
+        mock_thread = MagicMock()
+        mock_thread_class.return_value = mock_thread
         
         url = reverse('admin:nba_sync_players')
         response = self.client.post(url)
         
-        messages = list(response.wsgi_request._messages)
-        success_messages = [m for m in messages if 'successfully' in str(m).lower()]
-        message_text = str(success_messages[0])
+        # Should return immediately (302) without waiting for sync to complete
+        self.assertEqual(response.status_code, 302)
         
-        self.assertIn('100 player(s) updated', message_text)
-        self.assertNotIn('created', message_text.lower())
-        self.assertNotIn('removed', message_text.lower())
+        # Thread should be started but we don't wait for it
+        mock_thread.start.assert_called_once()
+        
+        messages = list(response.wsgi_request._messages)
+        self.assertEqual(len(messages), 1)
+        self.assertIn('started in the background', str(messages[0]).lower())
+
+    @patch('hooptipp.nba.admin.sync_players')
+    @patch('hooptipp.nba.admin.logger')
+    def test_background_sync_logs_success(self, mock_logger, mock_sync_players):
+        """Test background sync function logs results."""
+        from hooptipp.nba.admin import _run_player_sync_background
+        
+        mock_sync_players.return_value = SyncResult(created=10, updated=20, removed=5)
+        
+        _run_player_sync_background()
+        
+        # Verify sync was called
+        mock_sync_players.assert_called_once()
+        
+        # Verify logging
+        mock_logger.info.assert_called()
+        log_calls = [str(call) for call in mock_logger.info.call_args_list]
+        log_text = ' '.join(log_calls)
+        self.assertIn('10 player(s) created', log_text)
+        self.assertIn('20 player(s) updated', log_text)
+        self.assertIn('5 player(s) removed', log_text)
+
+    @patch('hooptipp.nba.admin.sync_players')
+    @patch('hooptipp.nba.admin.logger')
+    def test_background_sync_logs_errors(self, mock_logger, mock_sync_players):
+        """Test background sync function logs errors."""
+        from hooptipp.nba.admin import _run_player_sync_background
+        
+        mock_sync_players.side_effect = Exception('API failed')
+        
+        _run_player_sync_background()
+        
+        # Verify error was logged
+        mock_logger.exception.assert_called_once()
+        log_call = str(mock_logger.exception.call_args)
+        self.assertIn('API failed', log_call)
