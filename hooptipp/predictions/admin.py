@@ -195,7 +195,7 @@ class EventSourceAdmin(admin.ModelAdmin):
             source = get_source(source_id)
         except ValueError as e:
             messages.error(request, str(e))
-            return HttpResponseRedirect(reverse('admin:predictions_eventsource_changelist'))
+            return HttpResponseRedirect(reverse('admin:predictions_eventsourcepseudomodel_changelist'))
         
         result = source.sync_options()
         
@@ -220,7 +220,7 @@ class EventSourceAdmin(admin.ModelAdmin):
             level = messages.INFO
         
         self.message_user(request, message, level=level)
-        return HttpResponseRedirect(reverse('admin:predictions_eventsource_changelist'))
+        return HttpResponseRedirect(reverse('admin:predictions_eventsourcepseudomodel_changelist'))
     
     def sync_events_view(self, request: HttpRequest, source_id: str):
         if request.method != 'POST':
@@ -233,7 +233,7 @@ class EventSourceAdmin(admin.ModelAdmin):
             source = get_source(source_id)
         except ValueError as e:
             messages.error(request, str(e))
-            return HttpResponseRedirect(reverse('admin:predictions_eventsource_changelist'))
+            return HttpResponseRedirect(reverse('admin:predictions_eventsourcepseudomodel_changelist'))
         
         result = source.sync_events()
         
@@ -258,7 +258,7 @@ class EventSourceAdmin(admin.ModelAdmin):
             level = messages.INFO
         
         self.message_user(request, message, level=level)
-        return HttpResponseRedirect(reverse('admin:predictions_eventsource_changelist'))
+        return HttpResponseRedirect(reverse('admin:predictions_eventsourcepseudomodel_changelist'))
 
 
 class PredictionOptionInline(admin.TabularInline):
