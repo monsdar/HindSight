@@ -140,8 +140,7 @@
 {% block breadcrumbs %}
 <div class="breadcrumbs">
   <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
-  &rsaquo; <a href="{% url 'admin:app_list' app_label=opts.app_label %}">{{ opts.app_config.verbose_name }}</a>
-  &rsaquo; <a href="{% url 'admin:predictions_predictionevent_changelist' %}">{{ opts.verbose_name_plural|capfirst }}</a>
+  &rsaquo; <a href="{% url 'admin:app_list' app_label='nba' %}">NBA</a>
   &rsaquo; {% trans 'Add Upcoming NBA Games' %}
 </div>
 {% endblock %}
@@ -153,7 +152,7 @@
   <div class="info-box">
     <p><strong>{% trans 'Instructions:' %}</strong></p>
     <p>{% trans 'Select the games you want to turn into prediction events. The admin has control over which games to include.' %}</p>
-    <p>{% trans 'Each selected game will become a PredictableEvent with:' %}</p>
+    <p>{% trans 'Each selected game will become a PredictionEvent with:' %}</p>
     <ul>
       <li>{% trans 'Active period starting 1 week before the game (or now, whichever is later)' %}</li>
       <li>{% trans 'Deadline at the exact game start time' %}</li>
@@ -161,7 +160,7 @@
     <p><strong>{% trans 'Found' %} {{ games_count }} {% trans 'upcoming games' %}</strong></p>
   </div>
   
-  <form method="post" action="{% url 'admin:predictions_predictionevent_create_nba_events' %}">
+  <form method="post" action="{% url 'admin:nba_create_events' %}">
     {% csrf_token %}
     
     <table class="games-table">
@@ -236,7 +235,7 @@
       <button type="submit" class="submit-button">
         {% trans 'Create Selected Events' %}
       </button>
-      <a href="{% url 'admin:predictions_predictionevent_changelist' %}" class="cancel-button">
+      <a href="{% url 'admin:index' %}" class="cancel-button">
         {% trans 'Cancel' %}
       </a>
     </div>

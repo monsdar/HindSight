@@ -1,4 +1,4 @@
-"""Tests for the admin NBA games functionality."""
+"""Tests for the NBA admin games functionality."""
 from datetime import datetime, timedelta
 from unittest.mock import MagicMock, patch
 
@@ -7,7 +7,7 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from ..models import (
+from hooptipp.predictions.models import (
     OptionCategory,
     PredictionEvent,
     PredictionOption,
@@ -41,19 +41,19 @@ class AddNbaGamesAdminViewTest(TestCase):
             },
         )
 
-    @patch('hooptipp.predictions.admin._build_bdl_client')
+    @patch('hooptipp.nba.admin._build_bdl_client')
     def test_add_nba_games_view_no_client(self, mock_build_client):
         """Test the view when BallDontLie client is not configured."""
         mock_build_client.return_value = None
         
-        url = reverse('admin:predictions_predictionevent_add_nba_games')
+        url = reverse('admin:nba_add_upcoming_games')
         response = self.client.get(url)
         
         self.assertEqual(response.status_code, 302)
         self.assertIn('balldontlie api is not configured', 
                       str(response.wsgi_request._messages._queued_messages[0].message).lower())
 
-    @patch('hooptipp.predictions.admin._build_bdl_client')
+    @patch('hooptipp.nba.admin._build_bdl_client')
     def test_add_nba_games_view_success(self, mock_build_client):
         """Test successful fetching of games."""
         # Mock the BallDontLie API response
@@ -93,7 +93,7 @@ class AddNbaGamesAdminViewTest(TestCase):
         mock_response.data = [mock_game]
         mock_client.nba.games.list.return_value = mock_response
         
-        url = reverse('admin:predictions_predictionevent_add_nba_games')
+        url = reverse('admin:nba_add_upcoming_games')
         response = self.client.get(url)
         
         self.assertEqual(response.status_code, 200)
@@ -101,8 +101,8 @@ class AddNbaGamesAdminViewTest(TestCase):
         self.assertIn(b'BOS @ LAL', response.content)
         self.assertContains(response, 'Boston Celtics at Los Angeles Lakers')
 
-    @patch('hooptipp.predictions.admin._build_bdl_client')
-    @patch('hooptipp.predictions.admin._upsert_team')
+    @patch('hooptipp.nba.admin._build_bdl_client')
+    @patch('hooptipp.nba.admin._upsert_team')
     def test_create_nba_events_view(self, mock_upsert_team, mock_build_client):
         """Test creating prediction events from selected games."""
         mock_client = MagicMock()
@@ -118,7 +118,7 @@ class AddNbaGamesAdminViewTest(TestCase):
         )
         
         # Mock team creation
-        from ..models import NbaTeam
+        from hooptipp.predictions.models import NbaTeam
         mock_home_team = NbaTeam(id=1, name='Lakers', abbreviation='LAL')
         mock_away_team = NbaTeam(id=2, name='Celtics', abbreviation='BOS')
         mock_upsert_team.side_effect = [mock_home_team, mock_away_team]
@@ -150,7 +150,7 @@ class AddNbaGamesAdminViewTest(TestCase):
         }
         
         import json
-        url = reverse('admin:predictions_predictionevent_create_nba_events')
+        url = reverse('admin:nba_create_events')
         response = self.client.post(url, {
             'selected_games': ['12345'],
             'game_data_12345': json.dumps(game_data),
@@ -173,23 +173,23 @@ class AddNbaGamesAdminViewTest(TestCase):
         time_diff = abs((event.opens_at - expected_opens_at).total_seconds())
         self.assertLess(time_diff, 60)  # Within 1 minute
 
-    @patch('hooptipp.predictions.admin._build_bdl_client')
+    @patch('hooptipp.nba.admin._build_bdl_client')
     def test_create_nba_events_no_games_selected(self, mock_build_client):
         """Test creating events with no games selected."""
         mock_client = MagicMock()
         mock_build_client.return_value = mock_client
         
-        url = reverse('admin:predictions_predictionevent_create_nba_events')
+        url = reverse('admin:nba_create_events')
         response = self.client.post(url, {
             'selected_games': [],
         })
         
         self.assertEqual(response.status_code, 302)
         # Should redirect back to the add games page
-        self.assertTrue(response.url.endswith('add-nba-games/'))
+        self.assertIn('add-upcoming', response.url)
 
-    @patch('hooptipp.predictions.admin._build_bdl_client')
-    @patch('hooptipp.predictions.admin._upsert_team')
+    @patch('hooptipp.nba.admin._build_bdl_client')
+    @patch('hooptipp.nba.admin._upsert_team')
     def test_create_nba_events_skip_existing(self, mock_upsert_team, mock_build_client):
         """Test that existing events are skipped."""
         mock_client = MagicMock()
@@ -233,7 +233,7 @@ class AddNbaGamesAdminViewTest(TestCase):
         }
         
         import json
-        url = reverse('admin:predictions_predictionevent_create_nba_events')
+        url = reverse('admin:nba_create_events')
         response = self.client.post(url, {
             'selected_games': ['12345'],
             'game_data_12345': json.dumps(game_data),
@@ -256,7 +256,7 @@ class AddNbaGamesAdminViewTest(TestCase):
         )
         self.client.force_login(regular_user)
         
-        url = reverse('admin:predictions_predictionevent_add_nba_games')
+        url = reverse('admin:nba_add_upcoming_games')
         response = self.client.get(url)
         
         # Should redirect to login or show permission denied
