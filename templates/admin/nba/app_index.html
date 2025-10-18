@@ -1,0 +1,26 @@
+{% extends "admin/app_index.html" %}
+{% load i18n %}
+
+{% block content %}
+<div id="content-main">
+  <div class="module">
+    <h2>{% trans 'NBA Admin Actions' %}</h2>
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="{% url 'admin:nba_add_upcoming_games' %}" class="addlink">
+              {% trans 'Add Upcoming NBA Games' %}
+            </a>
+          </td>
+          <td>
+            {% trans 'Fetch upcoming games from BallDontLie and select which ones to add as prediction events' %}
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  
+  {{ block.super }}
+</div>
+{% endblock %}

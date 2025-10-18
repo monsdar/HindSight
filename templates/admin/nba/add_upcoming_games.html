@@ -1,0 +1,244 @@
+{% extends "admin/base_site.html" %}
+{% load i18n admin_urls static %}
+
+{% block extrahead %}
+{{ block.super }}
+<style>
+  .games-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 20px;
+  }
+  
+  .games-table th {
+    background-color: #417690;
+    color: white;
+    padding: 12px;
+    text-align: left;
+    font-weight: bold;
+  }
+  
+  .games-table td {
+    padding: 10px 12px;
+    border-bottom: 1px solid #ddd;
+  }
+  
+  .games-table tr:hover {
+    background-color: #f5f5f5;
+  }
+  
+  .games-table tr.existing-event {
+    background-color: #fff3cd;
+  }
+  
+  .games-table tr.existing-event td {
+    color: #856404;
+  }
+  
+  .game-teams {
+    font-weight: bold;
+    font-size: 14px;
+  }
+  
+  .game-time {
+    color: #666;
+    font-size: 13px;
+  }
+  
+  .game-arena {
+    color: #999;
+    font-size: 12px;
+  }
+  
+  .existing-badge {
+    display: inline-block;
+    padding: 3px 8px;
+    background-color: #ffc107;
+    color: #000;
+    border-radius: 3px;
+    font-size: 11px;
+    font-weight: bold;
+    margin-left: 10px;
+  }
+  
+  .checkbox-cell {
+    text-align: center;
+    width: 50px;
+  }
+  
+  .select-all-row {
+    background-color: #f9f9f9;
+    border-bottom: 2px solid #417690;
+  }
+  
+  .select-all-row td {
+    padding: 8px 12px;
+    font-weight: bold;
+  }
+  
+  .action-buttons {
+    margin-top: 20px;
+    padding: 15px;
+    background-color: #f9f9f9;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+  }
+  
+  .submit-button {
+    background-color: #417690;
+    color: white;
+    padding: 10px 20px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: bold;
+  }
+  
+  .submit-button:hover {
+    background-color: #2e5468;
+  }
+  
+  .cancel-button {
+    background-color: #6c757d;
+    color: white;
+    padding: 10px 20px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    text-decoration: none;
+    display: inline-block;
+    margin-left: 10px;
+  }
+  
+  .cancel-button:hover {
+    background-color: #5a6268;
+  }
+  
+  .info-box {
+    padding: 15px;
+    background-color: #e7f3ff;
+    border-left: 4px solid #2196F3;
+    margin-bottom: 20px;
+  }
+  
+  .info-box p {
+    margin: 5px 0;
+  }
+</style>
+<script>
+  function toggleAll(source) {
+    const checkboxes = document.querySelectorAll('input[name="selected_games"]:not(:disabled)');
+    for (const checkbox of checkboxes) {
+      checkbox.checked = source.checked;
+    }
+  }
+</script>
+{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
+  &rsaquo; <a href="{% url 'admin:app_list' app_label='nba' %}">NBA</a>
+  &rsaquo; {% trans 'Add Upcoming NBA Games' %}
+</div>
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+  <h1>{% trans 'Add Upcoming NBA Games' %}</h1>
+  
+  <div class="info-box">
+    <p><strong>{% trans 'Instructions:' %}</strong></p>
+    <p>{% trans 'Select the games you want to turn into prediction events. The admin has control over which games to include.' %}</p>
+    <p>{% trans 'Each selected game will become a PredictionEvent with:' %}</p>
+    <ul>
+      <li>{% trans 'Active period starting 1 week before the game (or now, whichever is later)' %}</li>
+      <li>{% trans 'Deadline at the exact game start time' %}</li>
+    </ul>
+    <p><strong>{% trans 'Found' %} {{ games_count }} {% trans 'upcoming games' %}</strong></p>
+  </div>
+  
+  <form method="post" action="{% url 'admin:nba_create_events' %}">
+    {% csrf_token %}
+    
+    <table class="games-table">
+      <thead>
+        <tr>
+          <th class="checkbox-cell">
+            <input type="checkbox" id="select-all" onchange="toggleAll(this)" />
+          </th>
+          <th>{% trans 'Game' %}</th>
+          <th>{% trans 'Date & Time' %}</th>
+          <th>{% trans 'Arena' %}</th>
+          <th>{% trans 'Status' %}</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr class="select-all-row">
+          <td class="checkbox-cell">
+            <label for="select-all" style="cursor: pointer; display: block;">
+              {% trans 'All' %}
+            </label>
+          </td>
+          <td colspan="4">
+            {% trans 'Select/deselect all games' %}
+          </td>
+        </tr>
+        {% for game in games %}
+        <tr {% if game.already_exists %}class="existing-event"{% endif %}>
+          <td class="checkbox-cell">
+            {% if game.already_exists %}
+              <input type="checkbox" disabled title="{% trans 'This game already exists as a prediction event' %}" />
+            {% else %}
+              <input type="checkbox" name="selected_games" value="{{ game.game_id }}" />
+              <input type="hidden" name="game_data_{{ game.game_id }}" value="{{ game.json_data }}" />
+            {% endif %}
+          </td>
+          <td>
+            <div class="game-teams">
+              {{ game.away_team.abbreviation }} @ {{ game.home_team.abbreviation }}
+            </div>
+            <div style="color: #666; font-size: 12px; margin-top: 3px;">
+              {{ game.away_team.full_name }} at {{ game.home_team.full_name }}
+            </div>
+          </td>
+          <td>
+            <div class="game-time">
+              {{ game.game_time|date:"N j, Y" }}<br>
+              {{ game.game_time|date:"g:i A T" }}
+            </div>
+          </td>
+          <td>
+            <div class="game-arena">
+              {{ game.arena|default:"TBD" }}
+            </div>
+          </td>
+          <td>
+            {% if game.already_exists %}
+              <span class="existing-badge">{% trans 'Already Exists' %}</span>
+              <br>
+              <a href="{% url 'admin:predictions_predictionevent_change' game.existing_event_id %}" target="_blank" style="font-size: 11px;">
+                {% trans 'View Event' %}
+              </a>
+            {% else %}
+              <span style="color: green; font-weight: bold;">✓ {% trans 'Available' %}</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    
+    <div class="action-buttons">
+      <button type="submit" class="submit-button">
+        {% trans 'Create Selected Events' %}
+      </button>
+      <a href="{% url 'admin:index' %}" class="cancel-button">
+        {% trans 'Cancel' %}
+      </a>
+    </div>
+  </form>
+</div>
+{% endblock %}
