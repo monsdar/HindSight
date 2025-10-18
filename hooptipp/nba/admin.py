@@ -1,6 +1,8 @@
 """NBA admin customizations."""
 
 import json
+import logging
+import threading
 from datetime import datetime, timedelta
 
 from django.contrib import admin, messages
@@ -25,6 +27,8 @@ from hooptipp.predictions.services import _build_bdl_client, _upsert_team
 
 from .models import NbaUserPreferences
 from .services import sync_players, sync_teams
+
+logger = logging.getLogger(__name__)
 
 # Note: ScheduledGame admin is in predictions.admin for now
 # It will be moved here when we fully migrate ScheduledGame to the nba app
@@ -461,6 +465,104 @@ def create_nba_events_view(request: HttpRequest):
     return HttpResponseRedirect(reverse('admin:predictions_predictionevent_changelist'))
 
 
+def nba_sync_view(request: HttpRequest):
+    """Display the NBA sync page with buttons to sync teams and players."""
+    if not request.user.has_perm('predictions.add_option'):
+        raise PermissionDenied
+    
+    context = {
+        'title': 'NBA Data Synchronization',
+        'app_label': 'nba',
+        'has_permission': True,
+    }
+    
+    return render(request, 'admin/nba/sync.html', context)
+
+
+def sync_teams_view(request: HttpRequest):
+    """Sync NBA teams from BallDontLie API."""
+    if request.method != 'POST':
+        return HttpResponseNotAllowed(['POST'])
+    
+    if not request.user.has_perm('predictions.add_option'):
+        raise PermissionDenied
+    
+    try:
+        result = sync_teams()
+        
+        if not result.changed:
+            messages.info(request, 'Teams sync completed with no changes.')
+        else:
+            message_parts = []
+            if result.created:
+                message_parts.append(f'{result.created} team(s) created')
+            if result.updated:
+                message_parts.append(f'{result.updated} team(s) updated')
+            if result.removed:
+                message_parts.append(f'{result.removed} team(s) removed')
+            
+            messages.success(
+                request,
+                f'Teams synced successfully: {", ".join(message_parts)}.'
+            )
+    except Exception as e:
+        messages.error(request, f'Failed to sync teams: {str(e)}')
+    
+    return HttpResponseRedirect(reverse('admin:nba_sync'))
+
+
+def _run_player_sync_background():
+    """
+    Background worker function for player sync.
+    
+    Runs the sync and logs results. This function is executed in a separate thread
+    to avoid blocking the admin request.
+    """
+    try:
+        logger.info('Starting background player sync...')
+        result = sync_players()
+        
+        if not result.changed:
+            logger.info('Player sync completed with no changes.')
+        else:
+            message_parts = []
+            if result.created:
+                message_parts.append(f'{result.created} player(s) created')
+            if result.updated:
+                message_parts.append(f'{result.updated} player(s) updated')
+            if result.removed:
+                message_parts.append(f'{result.removed} player(s) removed')
+            
+            logger.info(f'Player sync completed successfully: {", ".join(message_parts)}.')
+    except Exception as e:
+        logger.exception(f'Background player sync failed: {str(e)}')
+
+
+def sync_players_view(request: HttpRequest):
+    """Sync NBA players from BallDontLie API in the background."""
+    if request.method != 'POST':
+        return HttpResponseNotAllowed(['POST'])
+    
+    if not request.user.has_perm('predictions.add_option'):
+        raise PermissionDenied
+    
+    # Start the sync in a background thread
+    sync_thread = threading.Thread(
+        target=_run_player_sync_background,
+        daemon=True,
+        name='nba-player-sync'
+    )
+    sync_thread.start()
+    
+    messages.info(
+        request,
+        'Player sync started in the background. This may take several minutes due to API rate limits. '
+        'Check the server logs for completion status. You can continue working normally.'
+    )
+    
+    return HttpResponseRedirect(reverse('admin:nba_sync'))
+
+
 # Register custom admin URLs for NBA games management
 # These are registered as part of the NbaUserPreferencesAdmin get_urls
 class CustomNbaAdmin:
@@ -470,6 +572,21 @@ class CustomNbaAdmin:
     def get_urls():
         """Get custom NBA admin URLs."""
         return [
+            path(
+                'sync/',
+                admin.site.admin_view(nba_sync_view),
+                name='nba_sync',
+            ),
+            path(
+                'sync/teams/',
+                admin.site.admin_view(sync_teams_view),
+                name='nba_sync_teams',
+            ),
+            path(
+                'sync/players/',
+                admin.site.admin_view(sync_players_view),
+                name='nba_sync_players',
+            ),
             path(
                 'games/add-upcoming/',
                 admin.site.admin_view(add_upcoming_nba_games_view),
