@@ -1,0 +1,99 @@
+{% comment %}
+NBA game result card - shows the outcome of a completed game prediction.
+{% endcomment %}
+
+<article class="rounded-xl border {% if active_user %}{% if user_tip %}{% if is_correct %}border-green-500/50 bg-green-500/5{% else %}border-red-500/50 bg-red-500/5{% endif %}{% else %}border-slate-800 bg-slate-950{% endif %}{% else %}border-slate-800 bg-slate-950{% endif %} p-4">
+  
+  {# Header #}
+  <header class="space-y-1">
+    <p class="text-xs uppercase tracking-wide text-slate-500">{{ event.tip_type.name }}</p>
+    <h3 class="text-lg font-semibold text-slate-200">{{ event.name }}</h3>
+    {% if event.description %}
+      <p class="text-sm text-slate-400">{{ event.description }}</p>
+    {% endif %}
+  </header>
+
+  {# Final Score #}
+  <div class="mt-3 rounded-lg border border-slate-800 bg-slate-900 p-3">
+    <div class="flex items-center justify-between gap-4">
+      
+      {# Away Team #}
+      <div class="flex-1 text-center">
+        {% if card_context.away_team_logo %}
+          <img src="{{ card_context.away_team_logo }}" 
+               alt="{{ card_context.away_team }}" 
+               class="mx-auto h-12 w-12 object-contain"
+               onerror="this.style.display='none'" />
+        {% endif %}
+        <p class="mt-1 text-lg font-bold text-slate-200">
+          {{ card_context.away_team_tricode }}
+        </p>
+        {% if card_context.away_score is not None %}
+          <p class="mt-1 text-2xl font-bold text-slate-300">
+            {{ card_context.away_score }}
+          </p>
+        {% endif %}
+      </div>
+      
+      {# Final indicator #}
+      <div class="text-center">
+        <span class="text-xs uppercase tracking-wide text-slate-500">Final</span>
+      </div>
+      
+      {# Home Team #}
+      <div class="flex-1 text-center">
+        {% if card_context.home_team_logo %}
+          <img src="{{ card_context.home_team_logo }}" 
+               alt="{{ card_context.home_team }}" 
+               class="mx-auto h-12 w-12 object-contain"
+               onerror="this.style.display='none'" />
+        {% endif %}
+        <p class="mt-1 text-lg font-bold text-slate-200">
+          {{ card_context.home_team_tricode }}
+        </p>
+        {% if card_context.home_score is not None %}
+          <p class="mt-1 text-2xl font-bold text-slate-300">
+            {{ card_context.home_score }}
+          </p>
+        {% endif %}
+      </div>
+      
+    </div>
+  </div>
+
+  {# Winning Outcome #}
+  <div class="mt-3 rounded-lg border border-slate-800 bg-slate-900 p-3">
+    <p class="text-xs uppercase tracking-wide text-slate-500">Winning outcome</p>
+    <p class="mt-1 font-semibold text-slate-100">
+      {% if outcome.winning_option %}
+        {{ outcome.winning_option.label }}
+      {% elif outcome.winning_generic_option %}
+        {{ outcome.winning_generic_option.name }}
+      {% else %}
+        Not specified
+      {% endif %}
+    </p>
+  </div>
+
+  {# User's Prediction Result #}
+  {% if active_user and user_tip %}
+    <div class="mt-3 rounded-lg border {% if is_correct %}border-green-500/30 bg-green-500/10{% else %}border-red-500/30 bg-red-500/10{% endif %} p-3">
+      <p class="text-xs uppercase tracking-wide {% if is_correct %}text-green-400{% else %}text-red-400{% endif %}">Your prediction</p>
+      <p class="mt-1 font-semibold {% if is_correct %}text-green-200{% else %}text-red-200{% endif %}">
+        {{ user_tip.prediction }}
+      </p>
+      <p class="mt-1 text-xs font-bold uppercase {% if is_correct %}text-green-300{% else %}text-red-300{% endif %}">
+        {% if is_correct %}✓ Correct{% else %}✗ Incorrect{% endif %}
+      </p>
+    </div>
+  {% endif %}
+
+  {# Footer #}
+  <div class="mt-3 flex items-center justify-between text-xs text-slate-500">
+    <span>Resolved {{ outcome.resolved_at|date:"M d, H:i" }}</span>
+    <span class="theme-accent-pill inline-flex items-center gap-1 rounded-full px-2 py-1 font-semibold">
+      {{ event.points }} pt{{ event.points|pluralize }}
+    </span>
+  </div>
+
+</article>

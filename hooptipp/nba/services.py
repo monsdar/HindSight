@@ -439,3 +439,165 @@ def fetch_upcoming_week_games(limit: int = 7) -> tuple[Optional[date], list[dict
 
     selected.sort(key=lambda item: item["game_time"])
     return week_start, selected
+
+
+# Card rendering helpers
+
+
+def get_team_logo_url(tricode: str) -> str:
+    """
+    Get the URL for an NBA team logo.
+
+    Args:
+        tricode: Team abbreviation (e.g., 'LAL', 'BOS')
+
+    Returns:
+        URL to team logo image
+    """
+    # Using NBA's official CDN for team logos
+    # Alternative: could use local static files or third-party service
+    return f"https://cdn.nba.com/logos/nba/{tricode}/primary/L/logo.svg"
+
+
+def get_live_game_data(nba_game_id: str) -> dict:
+    """
+    Fetch live game data (scores, status).
+
+    Cached for 30 seconds to avoid rate limits.
+
+    Args:
+        nba_game_id: NBA game identifier
+
+    Returns:
+        Dictionary with live game data:
+        {
+            'away_score': int | None,
+            'home_score': int | None,
+            'game_status': str,  # e.g., "Q3 5:23", "Final"
+            'is_live': bool,
+        }
+    """
+    from django.core.cache import cache
+
+    cache_key = f"nba_live_game_{nba_game_id}"
+    cached_data = cache.get(cache_key)
+
+    if cached_data:
+        return cached_data
+
+    # Default data structure
+    data = {
+        "away_score": None,
+        "home_score": None,
+        "game_status": "",
+        "is_live": False,
+    }
+
+    try:
+        client = _build_bdl_client()
+        if client is None:
+            return data
+
+        # Fetch game data from BallDontLie
+        game = client.nba.games.retrieve(int(nba_game_id))
+
+        # Extract scores
+        data["home_score"] = getattr(game, "home_team_score", None)
+        data["away_score"] = getattr(game, "visitor_team_score", None)
+
+        # Extract status
+        status = getattr(game, "status", "")
+        data["game_status"] = status
+
+        # Determine if game is live
+        status_lower = status.lower()
+        data["is_live"] = any(
+            keyword in status_lower
+            for keyword in ["q1", "q2", "q3", "q4", "ot", "halftime"]
+        )
+
+        # Cache for 30 seconds
+        cache.set(cache_key, data, 30)
+
+    except Exception as e:
+        logger.exception(f"Failed to fetch live game data for {nba_game_id}: {e}")
+
+    return data
+
+
+def get_player_card_data(player_external_id: str) -> dict:
+    """
+    Get player data for card display.
+
+    Args:
+        player_external_id: External player ID (e.g., BallDontLie ID)
+
+    Returns:
+        Dictionary with player display data:
+        {
+            'portrait_url': str | None,
+            'team': str,
+            'team_tricode': str,
+            'position': str,
+            'current_stats': dict | None,
+        }
+    """
+    from django.core.cache import cache
+
+    cache_key = f"nba_player_card_{player_external_id}"
+    cached_data = cache.get(cache_key)
+
+    if cached_data:
+        return cached_data
+
+    # Default data structure
+    data = {
+        "portrait_url": None,
+        "team": "",
+        "team_tricode": "",
+        "position": "",
+        "current_stats": None,
+    }
+
+    try:
+        # Fetch from Option model
+        players_cat = NbaPlayerManager.get_category()
+        player_option = Option.objects.filter(
+            category=players_cat, external_id=player_external_id
+        ).first()
+
+        if player_option:
+            metadata = player_option.metadata or {}
+            data["team"] = metadata.get("team_name", "")
+            data["team_tricode"] = metadata.get("team_abbreviation", "")
+            data["position"] = metadata.get("position", "")
+
+            # Portrait URL - could integrate with NBA CDN if they provide player images
+            # For now, return None - extensions can provide their own image service
+            data["portrait_url"] = None
+
+            # Current stats - would require additional API call or database
+            # For now, return None - can be enhanced later
+            data["current_stats"] = None
+
+        # Cache for 1 hour
+        cache.set(cache_key, data, 3600)
+
+    except Exception as e:
+        logger.exception(f"Failed to fetch player card data for {player_external_id}: {e}")
+
+    return data
+
+
+def get_mvp_standings() -> list:
+    """
+    Get current MVP race standings.
+
+    Returns:
+        List of top MVP candidates with their ratings.
+        Each entry is a dict with 'rank', 'player', and 'score' keys.
+    """
+    # This would fetch from an external API or calculate based on stats
+    # For now, return empty list as this requires additional data sources
+    # Extensions can implement their own MVP tracking system
+    return []
