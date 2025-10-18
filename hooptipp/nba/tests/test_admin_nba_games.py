@@ -102,9 +102,10 @@ class AddNbaGamesAdminViewTest(TestCase):
         self.assertContains(response, 'Boston Celtics at Los Angeles Lakers')
 
     @patch('hooptipp.nba.admin._build_bdl_client')
-    @patch('hooptipp.nba.admin._upsert_team')
-    def test_create_nba_events_view(self, mock_upsert_team, mock_build_client):
+    def test_create_nba_events_view(self, mock_build_client):
         """Test creating prediction events from selected games."""
+        from hooptipp.predictions.models import Option
+        
         mock_client = MagicMock()
         mock_build_client.return_value = mock_client
         
@@ -117,11 +118,23 @@ class AddNbaGamesAdminViewTest(TestCase):
             is_active=True,
         )
         
-        # Mock team creation
-        from hooptipp.nba.models import NbaTeam
-        mock_home_team = NbaTeam(id=1, name='Lakers', abbreviation='LAL')
-        mock_away_team = NbaTeam(id=2, name='Celtics', abbreviation='BOS')
-        mock_upsert_team.side_effect = [mock_home_team, mock_away_team]
+        # Create team options that will be found by abbreviation
+        Option.objects.create(
+            category=self.teams_category,
+            slug='lal',
+            name='Los Angeles Lakers',
+            short_name='LAL',
+            external_id='1',
+            metadata={'city': 'Los Angeles', 'conference': 'West', 'division': 'Pacific'}
+        )
+        Option.objects.create(
+            category=self.teams_category,
+            slug='bos',
+            name='Boston Celtics',
+            short_name='BOS',
+            external_id='2',
+            metadata={'city': 'Boston', 'conference': 'East', 'division': 'Atlantic'}
+        )
         
         # Create game data
         game_time = timezone.now() + timedelta(days=2)
@@ -189,11 +202,29 @@ class AddNbaGamesAdminViewTest(TestCase):
         self.assertIn('add-upcoming', response.url)
 
     @patch('hooptipp.nba.admin._build_bdl_client')
-    @patch('hooptipp.nba.admin._upsert_team')
-    def test_create_nba_events_skip_existing(self, mock_upsert_team, mock_build_client):
+    def test_create_nba_events_skip_existing(self, mock_build_client):
         """Test that existing events are skipped."""
+        from hooptipp.predictions.models import Option
         mock_client = MagicMock()
         mock_build_client.return_value = mock_client
+        
+        # Create team options
+        Option.objects.create(
+            category=self.teams_category,
+            slug='lal',
+            name='Los Angeles Lakers',
+            short_name='LAL',
+            external_id='1',
+            metadata={'city': 'Los Angeles', 'conference': 'West', 'division': 'Pacific'}
+        )
+        Option.objects.create(
+            category=self.teams_category,
+            slug='bos',
+            name='Boston Celtics',
+            short_name='BOS',
+            external_id='2',
+            metadata={'city': 'Boston', 'conference': 'East', 'division': 'Atlantic'}
+        )
         
         # Create an existing event
         tip_type = TipType.objects.create(

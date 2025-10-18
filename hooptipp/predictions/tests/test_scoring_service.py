@@ -4,7 +4,6 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.utils import timezone
 
-from hooptipp.nba.models import NbaTeam
 from hooptipp.predictions.models import (
     EventOutcome,
     Option,
@@ -50,24 +49,22 @@ class ScoreEventOutcomeTests(TestCase):
             is_active=True,
         )
         
-        # Create NbaTeam objects (still used for legacy data)
-        self.lakers = NbaTeam.objects.create(name="Los Angeles Lakers", abbreviation="LAL")
-        self.celtics = NbaTeam.objects.create(name="Boston Celtics", abbreviation="BOS")
-        
         # Create generic Options
         self.lakers_option_obj = Option.objects.create(
             category=self.teams_cat,
             slug='lal',
             name='Los Angeles Lakers',
             short_name='LAL',
-            metadata={'nba_team_id': self.lakers.id}
+            external_id='1',
+            metadata={'city': 'Los Angeles', 'conference': 'West', 'division': 'Pacific'}
         )
         self.celtics_option_obj = Option.objects.create(
             category=self.teams_cat,
             slug='bos',
             name='Boston Celtics',
             short_name='BOS',
-            metadata={'nba_team_id': self.celtics.id}
+            external_id='2',
+            metadata={'city': 'Boston', 'conference': 'East', 'division': 'Atlantic'}
         )
         
         # Create PredictionOptions using generic Options

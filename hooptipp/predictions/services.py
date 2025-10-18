@@ -12,7 +12,7 @@ from balldontlie.exceptions import BallDontLieException
 from django.utils import timezone
 
 from hooptipp.nba.client import CachedBallDontLieAPI, build_cached_bdl_client
-from hooptipp.nba.models import NbaPlayer, NbaTeam, ScheduledGame
+from hooptipp.nba.models import ScheduledGame
 from .models import (
     PredictionEvent,
     PredictionOption,
@@ -566,7 +566,7 @@ def fetch_upcoming_week_games(limit: int = 7) -> Tuple[Optional[date], List[dict
     return week_start, selected
 
 
-def _upsert_team(team_data: dict) -> Optional[NbaTeam]:
+def _upsert_team(team_data: dict):
     from .models import Option, OptionCategory
     
     team_id = team_data.get('id')
@@ -645,8 +645,8 @@ def _ensure_event_points(event: PredictionEvent, tip_type: TipType, *, created: 
 
 def _update_event_options(
     event: PredictionEvent,
-    home_team: Optional[NbaTeam],
-    away_team: Optional[NbaTeam],
+    home_team,
+    away_team,
 ) -> None:
     from .models import Option, OptionCategory
     

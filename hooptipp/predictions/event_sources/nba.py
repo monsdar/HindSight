@@ -13,7 +13,7 @@ from typing import Any
 
 from django.utils import timezone
 
-from hooptipp.nba.models import NbaPlayer, NbaTeam, ScheduledGame
+from hooptipp.nba.models import ScheduledGame
 from ..models import (
     Option,
     OptionCategory,
@@ -21,11 +21,8 @@ from ..models import (
     PredictionOption,
     TipType,
 )
-from ..services import (
-    fetch_upcoming_week_games,
-    sync_active_players as legacy_sync_players,
-    sync_teams as legacy_sync_teams,
-)
+from hooptipp.nba.services import sync_players, sync_teams
+from ..services import fetch_upcoming_week_games
 from .base import EventSource, EventSourceResult
 
 logger = logging.getLogger(__name__)
@@ -100,83 +97,22 @@ class NbaEventSource(EventSource):
             },
         )
 
-        # Sync teams using legacy function
+        # Sync teams from BallDontLie API directly to Options
         try:
-            team_result = legacy_sync_teams()
+            team_result = sync_teams()
             result.options_created += team_result.created
             result.options_updated += team_result.updated
             result.options_removed += team_result.removed
-
-            # Sync NbaTeam -> Option
-            for nba_team in NbaTeam.objects.all():
-                option, created = Option.objects.update_or_create(
-                    category=teams_cat,
-                    external_id=str(nba_team.balldontlie_id or nba_team.id),
-                    defaults={
-                        "slug": nba_team.abbreviation.lower()
-                        if nba_team.abbreviation
-                        else nba_team.name.lower().replace(" ", "-"),
-                        "name": nba_team.name,
-                        "short_name": nba_team.abbreviation,
-                        "description": f"{nba_team.city} - {nba_team.conference} Conference",
-                        "metadata": {
-                            "city": nba_team.city,
-                            "conference": nba_team.conference,
-                            "division": nba_team.division,
-                            "nba_team_id": nba_team.id,
-                        },
-                        "is_active": True,
-                        "sort_order": 0,
-                    },
-                )
-                if created:
-                    result.options_created += 1
-                else:
-                    result.options_updated += 1
-
         except Exception as e:
             logger.exception(f"Error syncing NBA teams: {e}")
             result.add_error(f"Failed to sync teams: {str(e)}")
 
-        # Sync players using legacy function
+        # Sync players from BallDontLie API directly to Options
         try:
-            player_result = legacy_sync_players()
+            player_result = sync_players()
             result.options_created += player_result.created
             result.options_updated += player_result.updated
             result.options_removed += player_result.removed
-
-            # Sync NbaPlayer -> Option
-            for nba_player in NbaPlayer.objects.select_related("team").all():
-                team_abbr = nba_player.team.abbreviation if nba_player.team else ""
-                option, created = Option.objects.update_or_create(
-                    category=players_cat,
-                    external_id=str(nba_player.balldontlie_id or nba_player.id),
-                    defaults={
-                        "slug": f"{nba_player.first_name}-{nba_player.last_name}".lower().replace(
-                            " ", "-"
-                        ),
-                        "name": nba_player.display_name,
-                        "short_name": f"{nba_player.first_name[0]}. {nba_player.last_name}"
-                        if nba_player.first_name
-                        else nba_player.last_name,
-                        "description": f"{nba_player.position} - {team_abbr}"
-                        if team_abbr
-                        else nba_player.position,
-                        "metadata": {
-                            "position": nba_player.position,
-                            "team_id": nba_player.team_id,
-                            "team_name": nba_player.team.name if nba_player.team else "",
-                            "nba_player_id": nba_player.id,
-                        },
-                        "is_active": True,
-                        "sort_order": 0,
-                    },
-                )
-                if created:
-                    result.options_created += 1
-                else:
-                    result.options_updated += 1
-
         except Exception as e:
             logger.exception(f"Error syncing NBA players: {e}")
             result.add_error(f"Failed to sync players: {str(e)}")

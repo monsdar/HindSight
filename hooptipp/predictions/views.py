@@ -10,7 +10,7 @@ from django.shortcuts import redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
-from hooptipp.nba.models import NbaPlayer, NbaTeam
+from hooptipp.nba.managers import NbaPlayerManager, NbaTeamManager
 
 from .forms import UserPreferencesForm
 from .lock_service import LockLimitError, LockService
@@ -113,8 +113,8 @@ def home(request):
         for event in visible_events
     )
 
-    team_choices = list(NbaTeam.objects.order_by('name')) if requires_team_choices else []
-    player_choices = list(NbaPlayer.objects.order_by('display_name')) if requires_player_choices else []
+    team_choices = list(NbaTeamManager.all()) if requires_team_choices else []
+    player_choices = list(NbaPlayerManager.all()) if requires_player_choices else []
 
     user_tips: dict[int, UserTip] = {}
     if active_user and visible_events:
@@ -228,11 +228,8 @@ def home(request):
                             if not selected_team:
                                 continue
                             prediction_label = selected_team.name
-                            # Find or create the Option for this team
-                            selected_option = Option.objects.filter(
-                                category__slug='nba-teams',
-                                metadata__nba_team_id=selected_team.id
-                            ).first()
+                            # Team choice is already an Option
+                            selected_option = selected_team
                         elif event.target_kind == PredictionEvent.TargetKind.PLAYER:
                             try:
                                 player_id = int(submitted_value)
@@ -244,12 +241,9 @@ def home(request):
                             )
                             if not selected_player:
                                 continue
-                            prediction_label = selected_player.display_name
-                            # Find or create the Option for this player
-                            selected_option = Option.objects.filter(
-                                category__slug='nba-players',
-                                metadata__nba_player_id=selected_player.id
-                            ).first()
+                            prediction_label = selected_player.name
+                            # Player choice is already an Option
+                            selected_option = selected_player
                         else:
                             # Generic option selection
                             try:

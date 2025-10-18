@@ -6,58 +6,6 @@ from django.conf import settings
 from django.db import models
 
 
-class NbaTeam(models.Model):
-    """
-    NBA team model.
-    
-    Note: The preferred approach is to use the generic Option system with
-    category='nba-teams'. This model is kept for specific NBA functionality
-    that requires team-specific fields.
-    """
-    balldontlie_id = models.PositiveIntegerField(unique=True, null=True, blank=True)
-    name = models.CharField(max_length=150)
-    abbreviation = models.CharField(max_length=5, blank=True)
-    city = models.CharField(max_length=100, blank=True)
-    conference = models.CharField(max_length=30, blank=True)
-    division = models.CharField(max_length=30, blank=True)
-
-    class Meta:
-        ordering = ["name"]
-        app_label = 'nba'
-
-    def __str__(self) -> str:
-        return self.name
-
-
-class NbaPlayer(models.Model):
-    """
-    NBA player model.
-    
-    Note: The preferred approach is to use the generic Option system with
-    category='nba-players'. This model is kept for specific NBA functionality
-    that requires player-specific fields.
-    """
-    balldontlie_id = models.PositiveIntegerField(unique=True, null=True, blank=True)
-    first_name = models.CharField(max_length=80)
-    last_name = models.CharField(max_length=80)
-    display_name = models.CharField(max_length=160)
-    position = models.CharField(max_length=10, blank=True)
-    team = models.ForeignKey(
-        NbaTeam,
-        on_delete=models.SET_NULL,
-        related_name="players",
-        null=True,
-        blank=True,
-    )
-
-    class Meta:
-        ordering = ["display_name"]
-        app_label = 'nba'
-
-    def __str__(self) -> str:
-        return self.display_name
-
-
 class ScheduledGame(models.Model):
     """
     NBA scheduled game model.
