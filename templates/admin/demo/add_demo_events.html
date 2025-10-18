@@ -1,0 +1,101 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block title %}Add Demo Events{% endblock %}
+
+{% block extrahead %}
+{{ block.super }}
+<style>
+  .demo-info {
+    background: #f0f9ff;
+    border: 2px solid #0ea5e9;
+    border-radius: 8px;
+    padding: 20px;
+    margin: 20px 0;
+  }
+  .demo-info h2 {
+    color: #0369a1;
+    margin-top: 0;
+  }
+  .demo-list {
+    list-style: none;
+    padding-left: 0;
+  }
+  .demo-list li {
+    padding: 8px 0;
+    border-bottom: 1px solid #e0f2fe;
+  }
+  .demo-list li:before {
+    content: "✓ ";
+    color: #0ea5e9;
+    font-weight: bold;
+    margin-right: 8px;
+  }
+  .submit-button {
+    background: #0ea5e9;
+    color: white;
+    padding: 12px 24px;
+    border: none;
+    border-radius: 6px;
+    font-size: 16px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+  .submit-button:hover {
+    background: #0284c7;
+  }
+</style>
+{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
+  &rsaquo; {% trans 'Demo Events' %}
+  &rsaquo; {% trans 'Add Demo Events' %}
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="demo-info">
+  <h2>📊 Create Demo Prediction Events</h2>
+  <p>
+    This action will create several demo prediction events to showcase the system's features.
+    These events are perfect for manual testing and demonstrations.
+  </p>
+  
+  <h3>Events to be created:</h3>
+  <ul class="demo-list">
+    <li><strong>Yes/No Question</strong> - Simple binary choice with custom styling</li>
+    <li><strong>Color Choice</strong> - Multiple choice with visual color swatches</li>
+    <li><strong>Bonus Event</strong> - Special event with enhanced styling and bonus points</li>
+    <li><strong>Player Championship</strong> - Player-type prediction with character selection</li>
+  </ul>
+  
+  <h3>⏰ Timing:</h3>
+  <ul class="demo-list">
+    <li>Opens: Immediately upon creation</li>
+    <li>Deadline: 5 minutes from now</li>
+  </ul>
+  
+  <p style="margin-top: 20px; color: #0369a1; font-weight: bold;">
+    ℹ️ Note: Demo events use the generic prediction system and showcase custom templates
+    and card renderers.
+  </p>
+</div>
+
+<form method="post" action="{% url 'admin:demo_add_demo_events' %}">
+  {% csrf_token %}
+  <div style="margin-top: 30px;">
+    <button type="submit" class="submit-button">
+      🚀 Create Demo Events
+    </button>
+  </div>
+</form>
+
+<div style="margin-top: 20px;">
+  <a href="{% url 'admin:predictions_predictionevent_changelist' %}" class="button">
+    Cancel
+  </a>
+</div>
+{% endblock %}

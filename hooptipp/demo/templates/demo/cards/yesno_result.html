@@ -1,0 +1,34 @@
+{% comment %}
+Demo yes/no result card template
+{% endcomment %}
+
+<article class="prediction-card rounded-2xl border border-emerald-800/50 bg-gradient-to-br from-emerald-950 to-slate-900 p-5 shadow-lg">
+  
+  <header class="flex items-start justify-between gap-3">
+    <div class="flex-1">
+      <div class="flex items-center gap-2">
+        <p class="text-xs uppercase tracking-wide text-emerald-400">{{ event.tip_type.name }}</p>
+        <span class="rounded-full bg-emerald-500/20 border border-emerald-500/40 px-2 py-0.5 text-xs font-semibold text-emerald-300">
+          DEMO
+        </span>
+        <span class="rounded-full bg-slate-700 px-2 py-0.5 text-xs font-semibold text-slate-300">
+          RESOLVED
+        </span>
+      </div>
+      <h3 class="mt-1 text-lg font-semibold text-slate-100">{{ event.name }}</h3>
+    </div>
+  </header>
+  
+  {# Result Display #}
+  <div class="mt-4 rounded-xl bg-emerald-500/10 border-2 border-emerald-500/40 p-4">
+    <p class="text-xs text-emerald-300 uppercase font-semibold">Winner</p>
+    <p class="text-2xl font-bold text-emerald-100 mt-1">
+      {% if outcome.winning_option %}
+        {{ outcome.winning_option.label }}
+      {% else %}
+        Result pending
+      {% endif %}
+    </p>
+  </div>
+  
+</article>

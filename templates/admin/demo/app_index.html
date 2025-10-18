@@ -1,0 +1,22 @@
+{% extends "admin/app_index.html" %}
+{% load i18n %}
+
+{% block content %}
+{{ block.super }}
+
+<div class="module" style="margin-top: 20px;">
+  <h2>{% trans 'Demo Actions' %}</h2>
+  <table summary="{% trans 'Demo Actions' %}">
+    <tr class="model-option">
+      <th scope="row">
+        <a href="{% url 'admin:demo_add_demo_events' %}">
+          {% trans 'Add Demo Events' %}
+        </a>
+      </th>
+      <td>
+        {% trans 'Create demo prediction events for testing and demonstration purposes' %}
+      </td>
+    </tr>
+  </table>
+</div>
+{% endblock %}
