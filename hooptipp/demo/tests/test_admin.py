@@ -279,3 +279,18 @@ class DemoAdminTestCase(TestCase):
         self.assertEqual(response.status_code, 200)
         # Should contain Demo app section
         self.assertContains(response, 'Demo')
+
+    def test_add_demo_events_has_dark_mode_styles(self):
+        """Test that add demo events page includes dark mode CSS."""
+        url = reverse('admin:demo_add_demo_events')
+        response = self.client.get(url)
+        
+        self.assertEqual(response.status_code, 200)
+        
+        # Check for dark mode media query
+        self.assertContains(response, '@media (prefers-color-scheme: dark)')
+        
+        # Check for dark mode specific styles
+        self.assertContains(response, 'background: #1e3a5f')  # Dark mode background
+        self.assertContains(response, 'color: #7dd3fc')  # Dark mode text color
+        self.assertContains(response, 'border: 2px solid #38bdf8')  # Dark mode border
