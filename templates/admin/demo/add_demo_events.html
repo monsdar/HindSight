@@ -6,6 +6,7 @@
 {% block extrahead %}
 {{ block.super }}
 <style>
+  /* Light mode styles (default) */
   .demo-info {
     background: #f0f9ff;
     border: 2px solid #0ea5e9;
@@ -45,6 +46,43 @@
   .submit-button:hover {
     background: #0284c7;
   }
+  .note-text {
+    margin-top: 20px;
+    color: #0369a1;
+    font-weight: bold;
+  }
+
+  /* Dark mode styles */
+  @media (prefers-color-scheme: dark) {
+    .demo-info {
+      background: #1e3a5f;
+      border: 2px solid #38bdf8;
+    }
+    .demo-info h2 {
+      color: #7dd3fc;
+    }
+    .demo-info p,
+    .demo-info h3 {
+      color: #e0f2fe;
+    }
+    .demo-list li {
+      border-bottom: 1px solid #334155;
+      color: #e0f2fe;
+    }
+    .demo-list li:before {
+      color: #38bdf8;
+    }
+    .note-text {
+      color: #7dd3fc;
+    }
+    .submit-button {
+      background: #0ea5e9;
+      color: white;
+    }
+    .submit-button:hover {
+      background: #38bdf8;
+    }
+  }
 </style>
 {% endblock %}
 
@@ -78,7 +116,7 @@
     <li>Deadline: 5 minutes from now</li>
   </ul>
   
-  <p style="margin-top: 20px; color: #0369a1; font-weight: bold;">
+  <p class="note-text">
     ℹ️ Note: Demo events use the generic prediction system and showcase custom templates
     and card renderers.
   </p>
