@@ -10,6 +10,8 @@ from django.shortcuts import redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
+from hooptipp.nba.models import NbaPlayer, NbaTeam
+
 from .forms import UserPreferencesForm
 from .lock_service import LockLimitError, LockService
 from .models import (
