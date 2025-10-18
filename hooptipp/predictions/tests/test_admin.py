@@ -192,3 +192,38 @@ class EventOutcomeAdminTemplateTests(TestCase):
 
         self.assertContains(response, 'Process event')
         self.assertContains(response, 'Re-score event')
+
+
+class EventSourceAdminTests(TestCase):
+    """Tests for EventSourceAdmin to ensure it works without a backing database table."""
+    
+    def setUp(self) -> None:
+        self.user = get_user_model().objects.create_superuser(
+            username='admin',
+            email='admin@example.com',
+            password='password123',
+        )
+        self.client.force_login(self.user)
+        super().setUp()
+    
+    def test_changelist_view_loads_without_database_error(self) -> None:
+        """Test that the EventSource changelist view loads without querying the database."""
+        url = reverse('admin:predictions_eventsourcepseudomodel_changelist')
+        
+        response = self.client.get(url)
+        
+        # Should return 200 without database errors
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Event Sources')
+    
+    def test_changelist_displays_registered_sources(self) -> None:
+        """Test that registered event sources are displayed in the changelist."""
+        url = reverse('admin:predictions_eventsourcepseudomodel_changelist')
+        
+        response = self.client.get(url)
+        
+        # Should contain information about event sources
+        # The actual sources depend on what's registered, but the page should render
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('sources', response.context)
+        self.assertIsInstance(response.context['sources'], list)

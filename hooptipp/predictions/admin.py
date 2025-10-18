@@ -1,6 +1,8 @@
 from django.contrib import admin, messages
+from django.contrib.admin.options import IncorrectLookupParameters
 from django.core.exceptions import PermissionDenied
 from django.http import Http404, HttpRequest, HttpResponseRedirect, HttpResponseNotAllowed
+from django.template.response import TemplateResponse
 from django.urls import path, reverse
 from django.utils.html import format_html
 from django.utils.translation import gettext_lazy as _
@@ -110,7 +112,25 @@ class EventSourceAdmin(admin.ModelAdmin):
     def has_delete_permission(self, request, obj=None):
         return False
     
+    def get_queryset(self, request):
+        """
+        Return an empty queryset that doesn't hit the database.
+        
+        This admin uses a pseudo-model with no backing table, so we return
+        an empty queryset to prevent any database queries.
+        """
+        return self.model.objects.none()
+    
     def changelist_view(self, request, extra_context=None):
+        """
+        Override changelist_view to render directly without querying the database.
+        
+        This admin uses a pseudo-model with no backing table, so we bypass
+        the default changelist behavior and render our custom template directly.
+        """
+        if not self.has_view_or_change_permission(request):
+            raise PermissionDenied
+        
         sources = []
         for source in list_sources():
             sources.append({
@@ -121,11 +141,32 @@ class EventSourceAdmin(admin.ModelAdmin):
                 'config_help': source.get_configuration_help(),
             })
         
-        extra_context = extra_context or {}
-        extra_context['sources'] = sources
-        extra_context['title'] = 'Event Sources'
+        context = {
+            **self.admin_site.each_context(request),
+            'module_name': str(self.model._meta.verbose_name_plural),
+            'title': _('Event Sources'),
+            'sources': sources,
+            'opts': self.model._meta,
+            'app_label': self.model._meta.app_label,
+            'has_view_permission': self.has_view_permission(request),
+            'has_add_permission': self.has_add_permission(request),
+            'has_change_permission': self.has_change_permission(request),
+            'has_delete_permission': self.has_delete_permission(request),
+            'has_editable_inline_admin_formsets': False,
+        }
         
-        return super().changelist_view(request, extra_context=extra_context)
+        if extra_context:
+            context.update(extra_context)
+        
+        return TemplateResponse(
+            request,
+            self.change_list_template,
+            context
+        )
+    
+    def has_view_or_change_permission(self, request, obj=None):
+        """Check if user has view or change permission."""
+        return self.has_view_permission(request, obj) or self.has_change_permission(request, obj)
     
     def get_urls(self):
         urls = super().get_urls()
