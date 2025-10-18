@@ -13,15 +13,14 @@ from django.utils.html import format_html
 from django.utils.translation import gettext_lazy as _
 
 from hooptipp.predictions.models import (
-    NbaPlayer,
-    NbaTeam,
     Option,
     OptionCategory,
     PredictionEvent,
     PredictionOption,
-    ScheduledGame,
     TipType,
 )
+
+from .models import NbaPlayer, NbaTeam, ScheduledGame
 from hooptipp.predictions.services import _build_bdl_client, _upsert_team
 
 from .models import NbaUserPreferences

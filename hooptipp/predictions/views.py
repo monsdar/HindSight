@@ -14,8 +14,6 @@ from .forms import UserPreferencesForm
 from .lock_service import LockLimitError, LockService
 from .models import (
     EventOutcome,
-    NbaPlayer,
-    NbaTeam,
     Option,
     OptionCategory,
     PredictionEvent,
@@ -24,7 +22,6 @@ from .models import (
     UserEventScore,
     UserTip,
 )
-from .services import sync_weekly_games
 from .theme_palettes import DEFAULT_THEME_KEY, get_theme_palette
 
 
@@ -63,7 +60,8 @@ def _apply_display_metadata(user, display_name_map: dict[int, str]) -> None:
 
 @require_http_methods(["GET", "POST"])
 def home(request):
-    sync_weekly_games()
+    # Sync events via event sources if needed
+    # Event sources can be triggered manually via admin or scheduled tasks
     active_user = _get_active_user(request)
     preferences = None
     preferences_form = None

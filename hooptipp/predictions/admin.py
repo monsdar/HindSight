@@ -5,6 +5,8 @@ from django.urls import path, reverse
 from django.utils.html import format_html
 from django.utils.translation import gettext_lazy as _
 
+from hooptipp.nba.models import ScheduledGame
+
 from . import scoring_service
 from .event_sources import list_sources, get_source
 from .models import (
@@ -13,7 +15,6 @@ from .models import (
     OptionCategory,
     PredictionEvent,
     PredictionOption,
-    ScheduledGame,
     TipType,
     UserEventScore,
     UserFavorite,

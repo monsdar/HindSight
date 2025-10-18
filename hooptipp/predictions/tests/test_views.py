@@ -6,13 +6,12 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
+from hooptipp.nba.models import NbaTeam, ScheduledGame
 from hooptipp.predictions.models import (
-    NbaTeam,
     Option,
     OptionCategory,
     PredictionEvent,
     PredictionOption,
-    ScheduledGame,
     TipType,
     UserPreferences,
     UserEventScore,

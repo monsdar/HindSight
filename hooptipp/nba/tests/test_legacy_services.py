@@ -1,3 +1,9 @@
+"""
+Legacy tests for NBA-specific functions in predictions.services.
+
+These tests are for the legacy NBA functions that work with NbaTeam/NbaPlayer models.
+New code should use the functions in hooptipp.nba.services that work with Options.
+"""
 import os
 from datetime import datetime, timedelta, timezone as dt_timezone
 from types import SimpleNamespace
@@ -7,12 +13,10 @@ from balldontlie import exceptions
 from django.test import TestCase as DjangoTestCase
 from django.utils import timezone
 
+from hooptipp.nba.models import NbaPlayer, NbaTeam, ScheduledGame
 from hooptipp.predictions import services
 from hooptipp.predictions.models import (
-    NbaPlayer,
-    NbaTeam,
     PredictionEvent,
-    ScheduledGame,
     TipType,
 )
 
