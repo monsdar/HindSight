@@ -6,7 +6,7 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from hooptipp.nba.models import NbaTeam, ScheduledGame
+from hooptipp.nba.models import ScheduledGame
 from hooptipp.predictions.models import (
     Option,
     OptionCategory,
@@ -36,27 +36,21 @@ class HomeViewTests(TestCase):
             slug='nba-teams',
             name='NBA Teams'
         )
-        self.home_team = NbaTeam.objects.create(
-            name='Los Angeles Lakers',
-            abbreviation='LAL',
-        )
-        self.away_team = NbaTeam.objects.create(
-            name='Boston Celtics',
-            abbreviation='BOS',
-        )
         self.home_option_obj = Option.objects.create(
             category=self.teams_cat,
             slug='lal',
             name='Los Angeles Lakers',
             short_name='LAL',
-            metadata={'nba_team_id': self.home_team.id}
+            external_id='1',
+            metadata={'city': 'Los Angeles', 'conference': 'West', 'division': 'Pacific'}
         )
         self.away_option_obj = Option.objects.create(
             category=self.teams_cat,
             slug='bos',
             name='Boston Celtics',
             short_name='BOS',
-            metadata={'nba_team_id': self.away_team.id}
+            external_id='2',
+            metadata={'city': 'Boston', 'conference': 'East', 'division': 'Atlantic'}
         )
         
         self.tip_type = TipType.objects.create(
@@ -194,23 +188,22 @@ class HomeViewTests(TestCase):
             venue='United Center',
             is_manual=True,
         )
-        away_team = NbaTeam.objects.create(name='Miami Heat', abbreviation='MIA')
-        home_team = NbaTeam.objects.create(name='Chicago Bulls', abbreviation='CHI')
-        
         # Create Options for these teams
         away_option = Option.objects.create(
             category=self.teams_cat,
             slug='mia',
             name='Miami Heat',
             short_name='MIA',
-            metadata={'nba_team_id': away_team.id}
+            external_id='3',
+            metadata={'city': 'Miami', 'conference': 'East', 'division': 'Southeast'}
         )
         home_option = Option.objects.create(
             category=self.teams_cat,
             slug='chi',
             name='Chicago Bulls',
             short_name='CHI',
-            metadata={'nba_team_id': home_team.id}
+            external_id='4',
+            metadata={'city': 'Chicago', 'conference': 'East', 'division': 'Central'}
         )
         
         additional_event = PredictionEvent.objects.create(

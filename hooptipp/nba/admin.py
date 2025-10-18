@@ -22,77 +22,13 @@ from hooptipp.predictions.models import (
     TipType,
 )
 
-from .models import NbaPlayer, NbaTeam, ScheduledGame
-from hooptipp.predictions.services import _build_bdl_client, _upsert_team
-
-from .models import NbaUserPreferences
-from .services import sync_players, sync_teams
+from .models import NbaUserPreferences, ScheduledGame
+from .services import sync_players, sync_teams, _build_bdl_client
 
 logger = logging.getLogger(__name__)
 
 # Note: ScheduledGame admin is in predictions.admin for now
 # It will be moved here when we fully migrate ScheduledGame to the nba app
-
-
-# =============================================================================
-# Legacy NBA Model Admins
-# =============================================================================
-# These admin classes manage the legacy NbaTeam and NbaPlayer models from
-# predictions.models. These models are deprecated in favor of the generic
-# Option system, but are kept for backward compatibility.
-# =============================================================================
-
-
-@admin.register(NbaTeam)
-class NbaTeamAdmin(admin.ModelAdmin):
-    """
-    Admin for legacy NbaTeam model.
-    
-    DEPRECATED: This model is deprecated. New code should use Option with
-    category='nba-teams'. Use the Event Sources admin to sync NBA teams.
-    """
-    list_display = (
-        'name',
-        'abbreviation',
-        'conference',
-        'division',
-        'balldontlie_id',
-    )
-    search_fields = ('name', 'abbreviation', 'city')
-    list_filter = ('conference', 'division')
-    readonly_fields = ('balldontlie_id',)
-    
-    def has_add_permission(self, request):
-        # Prevent manual creation - teams should be synced via Event Sources
-        return False
-
-
-@admin.register(NbaPlayer)
-class NbaPlayerAdmin(admin.ModelAdmin):
-    """
-    Admin for legacy NbaPlayer model.
-    
-    DEPRECATED: This model is deprecated. New code should use Option with
-    category='nba-players'. Use the Event Sources admin to sync NBA players.
-    """
-    list_display = (
-        'display_name',
-        'position',
-        'team',
-        'balldontlie_id',
-    )
-    list_filter = ('team', 'position')
-    search_fields = (
-        'display_name',
-        'first_name',
-        'last_name',
-    )
-    autocomplete_fields = ('team',)
-    readonly_fields = ('balldontlie_id',)
-    
-    def has_add_permission(self, request):
-        # Prevent manual creation - players should be synced via Event Sources
-        return False
 
 
 @admin.register(NbaUserPreferences)
@@ -367,10 +303,6 @@ def create_nba_events_view(request: HttpRequest):
         
         home_team_data = game_data.get('home_team', {})
         away_team_data = game_data.get('away_team', {})
-        
-        # Create/update teams
-        home_team = _upsert_team(home_team_data)
-        away_team = _upsert_team(away_team_data)
         
         # Create ScheduledGame
         scheduled_game, _ = ScheduledGame.objects.update_or_create(

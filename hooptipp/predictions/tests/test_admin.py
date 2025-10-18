@@ -8,8 +8,6 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
-from hooptipp.predictions import services
-from hooptipp.nba.models import NbaTeam
 from hooptipp.predictions.models import (
     EventOutcome,
     Option,
@@ -47,13 +45,13 @@ class EventOutcomeAdminScoreTests(TestCase):
             slug='test-teams',
             name='Test Teams'
         )
-        self.team = NbaTeam.objects.create(name='Metropolis Meteors', abbreviation='MM')
         self.team_option = Option.objects.create(
             category=teams_cat,
             slug='mm',
             name='Metropolis Meteors',
             short_name='MM',
-            metadata={'nba_team_id': self.team.id}
+            external_id='99',
+            metadata={'city': 'Metropolis', 'conference': 'East', 'division': 'Atlantic'}
         )
         
         self.tip_type = TipType.objects.create(
