@@ -181,7 +181,7 @@ class PredictionEvent(models.Model):
     is_active = models.BooleanField(default=True)
     # Legacy NBA-specific field - kept for backward compatibility
     scheduled_game = models.OneToOneField(
-        "ScheduledGame",
+        "nba.ScheduledGame",
         on_delete=models.CASCADE,
         related_name="prediction_event",
         null=True,
