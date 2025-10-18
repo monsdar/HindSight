@@ -616,7 +616,7 @@ class HomeViewTests(TestCase):
         # Check for the new dashboard sections instead of old "Scoring overview"
         self.assertContains(response, 'Current Ranking')
         self.assertContains(response, '6')  # Total points displayed in ranking
-        self.assertContains(response, 'Bonus event')
+        self.assertContains(response, 'Bonus')
 
 
 class LeaderboardViewTests(TestCase):

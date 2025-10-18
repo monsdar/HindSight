@@ -11,11 +11,16 @@ class NbaConfig(AppConfig):
     default_auto_field = 'django.db.models.BigAutoField'
 
     def ready(self):
-        """Initialize NBA app - register event source and preferences."""
+        """Initialize NBA app - register event source, card renderer, and preferences."""
         # Register NBA event source
         from hooptipp.predictions.event_sources import registry
         from .event_source import NbaEventSource
         registry.register(NbaEventSource)
+
+        # Register NBA card renderer
+        from hooptipp.predictions.card_renderers.registry import register
+        from .card_renderer import NbaCardRenderer
+        register(NbaCardRenderer())
 
         # Register NBA preferences
         from hooptipp.predictions.preferences_registry import (
