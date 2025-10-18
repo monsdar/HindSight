@@ -245,8 +245,93 @@ python manage.py shell
 - `hooptipp/predictions/event_sources/__init__.py` (removed NBA import)
 - `hooptipp/settings.py` (added nba app)
 
-### To be Removed:
+### Removed (Latest Refactoring - 2025-10-18):
+- ✅ `hooptipp/predictions/balldontlie_client.py` → Deleted (duplicate of nba/client.py)
+- ✅ `hooptipp/predictions/event_sources/nba.py` → Already removed
+- ✅ NBA admin classes from predictions/admin.py → Moved to nba/admin.py
+  - NbaTeamAdmin and NbaPlayerAdmin now in nba package
+- ✅ `hooptipp/predictions/tests/test_balldontlie_client.py` → Moved to `hooptipp/nba/tests/test_client.py`
+
+### Recent Changes (2025-10-18):
+
+#### 1. BallDontLie Client Consolidation
+- **Deleted**: `hooptipp/predictions/balldontlie_client.py` (duplicate)
+- **Updated**: All imports changed from `predictions.balldontlie_client` to `nba.client`
+- **Files affected**:
+  - `hooptipp/predictions/services.py` - now imports from nba.client
+  - `hooptipp/nba/tests/test_client.py` - moved and updated imports
+
+#### 2. Admin Reorganization
+- **Moved**: NbaTeam and NbaPlayer admin classes from predictions to NBA package
+- **Location**: `hooptipp/nba/admin.py` now contains:
+  - `NbaTeamAdmin` - marked as deprecated, view-only
+  - `NbaPlayerAdmin` - marked as deprecated, view-only
+  - Both prevent manual creation (sync via Event Sources instead)
+- **Removed**: Custom sync views from admin (now handled by Event Sources)
+- **Kept**: `ScheduledGameAdmin` in predictions (marked as NBA-specific, to be moved later)
+
+#### 3. Model Documentation
+Added deprecation warnings to legacy NBA models in `predictions/models.py`:
+- `NbaTeam` - deprecated in favor of Option with category='nba-teams'
+- `NbaPlayer` - deprecated in favor of Option with category='nba-players'
+- `ScheduledGame` - NBA-specific, should be in nba package
+
+All three models kept for backward compatibility but clearly marked as deprecated.
+
+#### 4. Test Organization
+- **Moved**: `test_balldontlie_client.py` → `hooptipp/nba/tests/test_client.py`
+- **Updated**: Test imports to use `hooptipp.nba.client`
+- **Note**: Other NBA-specific tests in `predictions/tests/test_services.py` remain for now
+  as they test legacy functions still used by views.py
+
+### Remaining Technical Debt
+
+#### NBA-Specific Code Still in Predictions:
+1. **predictions/services.py** - Contains NBA functions:
+   - `sync_teams()`, `sync_active_players()` - work with legacy NbaTeam/NbaPlayer models
+   - `fetch_upcoming_week_games()`, `sync_weekly_games()` - NBA-specific
+   - `_upsert_team()`, `_update_event_options()` - helper functions
+   - Note: predictions/views.py still calls `sync_weekly_games()`
+
+2. **predictions/tests/test_services.py** - NBA-specific test cases:
+   - GetBdlApiKeyTests
+   - GetTeamChoicesTests
+   - FetchUpcomingWeekGamesTests
+   - GetPlayerChoicesTests
+   - SyncTeamsTests
+   - SyncActivePlayersTests
+   - These should eventually move to nba/tests/
+
+3. **predictions/views.py** - Calls `sync_weekly_games()` directly
+   - Should use event source system instead
+   - Requires view refactoring
+
+### Migration Path Forward
+
+To complete the separation:
+
+1. **Refactor predictions/views.py** to use event sources instead of calling NBA services directly
+2. **Move remaining NBA test cases** from test_services.py to nba/tests/
+3. **Create migration helpers** to migrate legacy NbaTeam/NbaPlayer data to Options
+4. **Eventually remove** NbaTeam, NbaPlayer, and ScheduledGame models from predictions
+   (once all code is migrated to use Options)
+
+### Files Modified in Latest Refactoring:
+
+#### Deleted:
 - `hooptipp/predictions/balldontlie_client.py`
-- `hooptipp/predictions/event_sources/nba.py`
-- NBA models/admin from predictions app
-- NBA functions from predictions/services.py
+
+#### Obsolete (can be removed):
+- `templates/admin/predictions/nbateam/change_list.html` - old sync template
+- `templates/admin/predictions/nbaplayer/change_list.html` - old sync template
+  (These were for the removed sync functionality. Sync is now via Event Sources)
+
+#### Created/Moved:
+- `hooptipp/nba/tests/test_client.py` (moved from predictions/tests/)
+
+#### Modified:
+- `hooptipp/nba/admin.py` - Added NbaTeam and NbaPlayer admin classes
+- `hooptipp/predictions/admin.py` - Removed NBA admin classes, added deprecation note to ScheduledGame
+- `hooptipp/predictions/models.py` - Added deprecation docstrings to NBA models
+- `hooptipp/predictions/services.py` - Updated import to use nba.client
+- `hooptipp/nba/tests/test_client.py` - Updated import paths

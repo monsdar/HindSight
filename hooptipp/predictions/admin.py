@@ -9,8 +9,6 @@ from . import scoring_service
 from .event_sources import list_sources, get_source
 from .models import (
     EventOutcome,
-    NbaPlayer,
-    NbaTeam,
     Option,
     OptionCategory,
     PredictionEvent,
@@ -76,6 +74,12 @@ class TipTypeAdmin(admin.ModelAdmin):
 
 @admin.register(ScheduledGame)
 class ScheduledGameAdmin(admin.ModelAdmin):
+    """
+    Admin for ScheduledGame model.
+    
+    NOTE: This model is NBA-specific and should eventually be moved to the
+    nba package. For now it remains here for backward compatibility.
+    """
     list_display = (
         'nba_game_id',
         'game_date',
@@ -87,108 +91,6 @@ class ScheduledGameAdmin(admin.ModelAdmin):
     list_filter = ('tip_type', 'is_manual')
     search_fields = ('nba_game_id', 'home_team', 'away_team')
     autocomplete_fields = ('tip_type',)
-
-
-@admin.register(NbaTeam)
-class NbaTeamAdmin(admin.ModelAdmin):
-    list_display = (
-        'name',
-        'abbreviation',
-        'conference',
-        'division',
-    )
-    search_fields = ('name', 'abbreviation', 'city')
-    change_list_template = 'admin/predictions/nbateam/change_list.html'
-
-    def get_urls(self):
-        urls = super().get_urls()
-        custom_urls = [
-            path(
-                'sync/',
-                self.admin_site.admin_view(self.sync_teams_view),
-                name='predictions_nbateam_sync',
-            ),
-        ]
-        return custom_urls + urls
-
-    def sync_teams_view(self, request: HttpRequest):
-        if request.method != 'POST':
-            return HttpResponseNotAllowed(['POST'])
-
-        if not self.has_change_permission(request):
-            raise PermissionDenied
-
-        result = services.sync_teams()
-
-        if result.changed:
-            message = _(
-                'Team data updated. %(created)d created, %(updated)d updated, %(removed)d removed.'
-            ) % {
-                'created': result.created,
-                'updated': result.updated,
-                'removed': result.removed,
-            }
-            level = messages.SUCCESS
-        else:
-            message = _('Team sync completed with no changes.')
-            level = messages.INFO
-
-        self.message_user(request, message, level=level)
-        changelist_url = reverse('admin:predictions_nbateam_changelist')
-        return HttpResponseRedirect(changelist_url)
-
-
-@admin.register(NbaPlayer)
-class NbaPlayerAdmin(admin.ModelAdmin):
-    list_display = (
-        'display_name',
-        'position',
-        'team',
-    )
-    list_filter = ('team',)
-    search_fields = (
-        'display_name',
-        'first_name',
-        'last_name',
-    )
-    change_list_template = 'admin/predictions/nbaplayer/change_list.html'
-
-    def get_urls(self):
-        urls = super().get_urls()
-        custom_urls = [
-            path(
-                'sync/',
-                self.admin_site.admin_view(self.sync_players_view),
-                name='predictions_nbaplayer_sync',
-            ),
-        ]
-        return custom_urls + urls
-
-    def sync_players_view(self, request: HttpRequest):
-        if request.method != 'POST':
-            return HttpResponseNotAllowed(['POST'])
-
-        if not self.has_change_permission(request):
-            raise PermissionDenied
-
-        result = services.sync_active_players()
-
-        if result.changed:
-            message = _(
-                'Player data updated. %(created)d created, %(updated)d updated, %(removed)d removed.'
-            ) % {
-                'created': result.created,
-                'updated': result.updated,
-                'removed': result.removed,
-            }
-            level = messages.SUCCESS
-        else:
-            message = _('Player sync completed with no changes.')
-            level = messages.INFO
-
-        self.message_user(request, message, level=level)
-        changelist_url = reverse('admin:predictions_nbaplayer_changelist')
-        return HttpResponseRedirect(changelist_url)
 
 
 class EventSourceAdmin(admin.ModelAdmin):

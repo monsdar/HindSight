@@ -121,6 +121,16 @@ class TipType(models.Model):
 
 
 class ScheduledGame(models.Model):
+    """
+    Legacy model for NBA scheduled games.
+    
+    DEPRECATED: This model is NBA-specific and should be in the nba package.
+    It remains here for backward compatibility with existing code that still
+    references it. New code should use the generic event source system in the
+    nba package.
+    
+    Admin interface: Available in the NBA admin section.
+    """
     tip_type = models.ForeignKey(
         TipType,
         on_delete=models.CASCADE,
@@ -148,6 +158,17 @@ class ScheduledGame(models.Model):
 
 
 class NbaTeam(models.Model):
+    """
+    Legacy model for NBA teams.
+    
+    DEPRECATED: This model is deprecated in favor of the generic Option system.
+    NBA teams should now be stored as Option instances with category='nba-teams'.
+    This model remains for backward compatibility only.
+    
+    To sync NBA teams, use the Event Sources admin in the predictions app, which
+    will sync teams as Options. Admin interface for this legacy model is available
+    in the NBA admin section.
+    """
     balldontlie_id = models.PositiveIntegerField(unique=True, null=True, blank=True)
     name = models.CharField(max_length=150)
     abbreviation = models.CharField(max_length=5, blank=True)
@@ -163,6 +184,17 @@ class NbaTeam(models.Model):
 
 
 class NbaPlayer(models.Model):
+    """
+    Legacy model for NBA players.
+    
+    DEPRECATED: This model is deprecated in favor of the generic Option system.
+    NBA players should now be stored as Option instances with category='nba-players'.
+    This model remains for backward compatibility only.
+    
+    To sync NBA players, use the Event Sources admin in the predictions app, which
+    will sync players as Options. Admin interface for this legacy model is available
+    in the NBA admin section.
+    """
     balldontlie_id = models.PositiveIntegerField(unique=True, null=True, blank=True)
     first_name = models.CharField(max_length=80)
     last_name = models.CharField(max_length=80)

@@ -11,7 +11,7 @@ from urllib.parse import parse_qs, urlparse
 from balldontlie.exceptions import BallDontLieException
 from django.utils import timezone
 
-from .balldontlie_client import CachedBallDontLieAPI, build_cached_bdl_client
+from hooptipp.nba.client import CachedBallDontLieAPI, build_cached_bdl_client
 from .models import (
     NbaPlayer,
     NbaTeam,
