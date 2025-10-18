@@ -1,0 +1,217 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block title %}{{ title }} | {{ site_title|default:_('Django site admin') }}{% endblock %}
+
+{% block extrahead %}
+{{ block.super }}
+<style>
+  .demo-container {
+    max-width: 900px;
+    margin: 20px auto;
+    padding: 0;
+  }
+  .demo-card {
+    background: white;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 24px;
+    margin-bottom: 20px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  }
+  .demo-card h2 {
+    color: #1f2937;
+    margin-top: 0;
+    margin-bottom: 16px;
+    font-size: 24px;
+  }
+  .demo-card p {
+    color: #6b7280;
+    line-height: 1.6;
+    margin-bottom: 12px;
+  }
+  .demo-stats {
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    padding: 16px;
+    margin: 20px 0;
+  }
+  .demo-stats-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-bottom: 1px solid #e5e7eb;
+  }
+  .demo-stats-item:last-child {
+    border-bottom: none;
+  }
+  .demo-stats-label {
+    color: #6b7280;
+    font-weight: 500;
+  }
+  .demo-stats-value {
+    color: #1f2937;
+    font-weight: 600;
+  }
+  .demo-actions {
+    display: flex;
+    gap: 12px;
+    margin-top: 20px;
+  }
+  .demo-button {
+    display: inline-block;
+    padding: 12px 24px;
+    border-radius: 6px;
+    text-decoration: none;
+    font-weight: 600;
+    transition: all 0.2s;
+    border: none;
+    cursor: pointer;
+    font-size: 14px;
+  }
+  .demo-button-primary {
+    background: #0ea5e9;
+    color: white;
+  }
+  .demo-button-primary:hover {
+    background: #0284c7;
+    color: white;
+  }
+  .demo-button-secondary {
+    background: white;
+    color: #374151;
+    border: 1px solid #d1d5db;
+  }
+  .demo-button-secondary:hover {
+    background: #f9fafb;
+    color: #374151;
+  }
+  .demo-info-box {
+    background: #eff6ff;
+    border-left: 4px solid #3b82f6;
+    padding: 16px;
+    margin: 20px 0;
+    border-radius: 4px;
+  }
+  .demo-info-box h3 {
+    color: #1e40af;
+    margin-top: 0;
+    margin-bottom: 8px;
+    font-size: 16px;
+  }
+  .demo-info-box p {
+    color: #1e40af;
+    margin: 0;
+    font-size: 14px;
+  }
+  .demo-feature-list {
+    list-style: none;
+    padding: 0;
+    margin: 16px 0;
+  }
+  .demo-feature-list li {
+    padding: 8px 0;
+    padding-left: 28px;
+    position: relative;
+    color: #4b5563;
+  }
+  .demo-feature-list li:before {
+    content: "✓";
+    position: absolute;
+    left: 0;
+    color: #10b981;
+    font-weight: bold;
+    font-size: 18px;
+  }
+</style>
+{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
+  &rsaquo; {{ title }}
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="demo-container">
+  <div class="demo-card">
+    <h2>🎯 Demo Events Management</h2>
+    <p>
+      Create and manage demo prediction events for testing and demonstration purposes.
+      These events showcase the prediction system's features with various event types,
+      styling options, and card renderers.
+    </p>
+
+    <div class="demo-stats">
+      <div class="demo-stats-item">
+        <span class="demo-stats-label">Current Demo Events:</span>
+        <span class="demo-stats-value">{{ demo_event_count }}</span>
+      </div>
+      <div class="demo-stats-item">
+        <span class="demo-stats-label">Status:</span>
+        <span class="demo-stats-value">
+          {% if demo_event_count > 0 %}
+            ✓ Active
+          {% else %}
+            No demo events created yet
+          {% endif %}
+        </span>
+      </div>
+    </div>
+
+    {% if has_add_permission %}
+    <div class="demo-actions">
+      <a href="{% url 'admin:demo_add_demo_events' %}" class="demo-button demo-button-primary">
+        ➕ Create Demo Events
+      </a>
+      <a href="{% url 'admin:predictions_predictionevent_changelist' %}?source_id=demo" 
+         class="demo-button demo-button-secondary">
+        📋 View All Demo Events
+      </a>
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="demo-card">
+    <h2>📚 What Gets Created</h2>
+    <p>When you create demo events, the following will be generated:</p>
+    
+    <ul class="demo-feature-list">
+      <li><strong>Yes/No Question</strong> - Simple binary choice demonstrating basic prediction functionality</li>
+      <li><strong>Color Choice</strong> - Multiple choice event with visual color swatches and metadata</li>
+      <li><strong>Bonus Event</strong> - Special event with enhanced styling and bonus point mechanics</li>
+      <li><strong>Player Championship</strong> - Player-type prediction showcasing character selection</li>
+    </ul>
+
+    <div class="demo-info-box">
+      <h3>⏰ Demo Event Timing</h3>
+      <p>
+        Demo events are configured to open immediately and expire after 5 minutes,
+        making them perfect for quick testing and demonstrations.
+      </p>
+    </div>
+  </div>
+
+  <div class="demo-card">
+    <h2>🔧 Technical Details</h2>
+    <p>
+      The demo app is a reference implementation that demonstrates:
+    </p>
+    
+    <ul class="demo-feature-list">
+      <li>Generic prediction system integration</li>
+      <li>Custom card renderers for different event types</li>
+      <li>Option categories and metadata usage</li>
+      <li>Event styling and theming capabilities</li>
+      <li>Bonus event mechanics</li>
+    </ul>
+
+    <p style="margin-top: 20px; color: #6b7280; font-size: 14px;">
+      <strong>Note:</strong> Demo events use the <code>source_id='demo'</code> identifier
+      and can be filtered in the Prediction Events admin.
+    </p>
+  </div>
+</div>
+{% endblock %}
