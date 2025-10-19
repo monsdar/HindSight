@@ -1,12 +1,6 @@
 {% extends 'base.html' %}
 {% load prediction_extras %}
 
-{% block nav %}
-  <div class="flex items-center gap-3 text-sm font-semibold text-slate-300">
-    <a href="{% url 'predictions:home' %}" class="rounded-full bg-slate-800 px-3 py-1 text-slate-100 shadow-inner shadow-slate-900/60">Dashboard</a>
-  </div>
-{% endblock %}
-
 {% block title %}HoopTipp &ndash; Dashboard{% endblock %}
 
 {% block content %}
@@ -25,17 +19,10 @@
         .theme-accent-muted { color: color-mix(in srgb, var(--accent-color) 45%, white); }
       </style>
 
-      <section class="space-y-3">
-        <h1 class="text-3xl font-bold theme-accent-text">Dashboard</h1>
-        <p class="max-w-2xl text-slate-300">
-          Track the leaderboard, select a user, and make your predictions.
-        </p>
-      </section>
-
       {# 1. CURRENT RANKING #}
       <section class="space-y-4 rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-lg shadow-slate-900/30">
         <header>
-          <h2 class="text-xl font-semibold theme-accent-text">Current Ranking</h2>
+          <h2 class="text-xl font-semibold theme-accent-text">Leaderboard</h2>
           <p class="text-sm text-slate-400">
             {% if leaderboard_rows %}
               {{ leaderboard_rows|length }} player{{ leaderboard_rows|length|pluralize }} ranked
@@ -71,8 +58,8 @@
       </section>
 
       {# 2. USER SELECTION, ACTIVATION AND CUSTOMIZATION #}
-      <section class="space-y-6">
-        <form method="post" class="flex flex-wrap items-end gap-3 rounded-xl border border-slate-800 bg-slate-900 p-4 shadow-lg shadow-slate-900/30">
+      <section class="rounded-2xl border border-slate-800 bg-slate-900 p-4 shadow-lg shadow-slate-900/30">
+        <form method="post" class="flex flex-wrap items-end gap-3 p-4 shadow-lg shadow-slate-900/30">
           {% csrf_token %}
           <input type="hidden" name="set_active_user" value="1" />
           <div class="flex-1">
@@ -95,24 +82,11 @@
         </form>
 
         {% if active_user and preferences_form %}
-          <section class="rounded-2xl border border-slate-800 bg-slate-900 p-4 shadow-lg shadow-slate-900/30">
+          <section class=" p-4 shadow-lg shadow-slate-900/30">
             <details class="group">
               <summary class="flex w-full cursor-pointer items-center justify-between gap-3 rounded-xl border border-slate-800 bg-slate-950 px-4 py-3 text-left transition hover:border-slate-700">
                 <div>
                   <h2 class="text-lg font-semibold theme-accent-text">Customize experience</h2>
-                  <p class="text-sm text-slate-400">
-                    {% if user_preferences.nickname %}
-                      "{{ user_preferences.nickname }}"
-                    {% else %}
-                      No nickname set
-                    {% endif %}
-                    {% if user_preferences.favorite_team_display %}
-                      &bull; {{ user_preferences.favorite_team_display }}
-                    {% endif %}
-                    {% if user_preferences.favorite_player_display %}
-                      &bull; {{ user_preferences.favorite_player_display }}
-                    {% endif %}
-                  </p>
                 </div>
                 <span class="text-sm text-slate-500 transition group-open:rotate-180">&#9660;</span>
               </summary>
@@ -191,7 +165,7 @@
       {# 3. RECENTLY RESOLVED PREDICTIONS #}
       <section class="space-y-4 rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-lg shadow-slate-900/30">
         <header>
-          <h2 class="text-xl font-semibold theme-accent-text">Recently Resolved Predictions</h2>
+          <h2 class="text-xl font-semibold theme-accent-text">Recent Resolutions</h2>
           <p class="text-sm text-slate-400">
             {% if resolved_predictions %}
               Last {{ resolved_predictions|length }} resolved prediction{{ resolved_predictions|length|pluralize }}
@@ -213,14 +187,12 @@
       </section>
 
       {# 4. OPEN ACTIVE PREDICTIONS #}
-      <section class="space-y-4">
+      <section class="space-y-4 rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-lg shadow-slate-900/30">
         <header>
-          <h2 class="text-2xl font-semibold theme-accent-text">Open Predictions</h2>
+          <h2 class="text-xl font-semibold theme-accent-text">Open Predictions</h2>
           <p class="text-sm text-slate-400">
             {% if open_predictions %}
               {{ open_predictions|length }} open prediction{{ open_predictions|length|pluralize }} available
-            {% else %}
-              No open predictions
             {% endif %}
           </p>
         </header>
