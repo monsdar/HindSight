@@ -394,12 +394,12 @@ def fetch_upcoming_week_games(limit: int = 7) -> tuple[Optional[date], list[dict
         if "final" in status:
             continue
 
-        date_str = getattr(game, "date", "")
-        if not date_str:
+        datetime_str = getattr(game, "datetime", "")
+        if not datetime_str:
             continue
 
         try:
-            game_time = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
+            game_time = datetime.fromisoformat(datetime_str.replace("Z", "+00:00"))
         except ValueError:
             continue
 

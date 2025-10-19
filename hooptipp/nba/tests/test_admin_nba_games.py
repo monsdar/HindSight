@@ -62,6 +62,8 @@ class AddNbaGamesAdminViewTest(TestCase):
         
         # Create mock game data
         game_time = timezone.now() + timedelta(days=2)
+        # Use naive datetime for the mock to avoid timezone issues
+        naive_game_time = game_time.replace(tzinfo=None)
         
         mock_home_team = MagicMock()
         mock_home_team.id = 1
@@ -84,7 +86,7 @@ class AddNbaGamesAdminViewTest(TestCase):
         mock_game = MagicMock()
         mock_game.id = 12345
         mock_game.status = 'Scheduled'
-        mock_game.date = game_time.isoformat()
+        mock_game.datetime = naive_game_time.isoformat() + 'Z'
         mock_game.home_team = mock_home_team
         mock_game.visitor_team = mock_away_team
         mock_game.arena = 'Crypto.com Arena'
@@ -138,9 +140,11 @@ class AddNbaGamesAdminViewTest(TestCase):
         
         # Create game data
         game_time = timezone.now() + timedelta(days=2)
+        # Use naive datetime for the mock to avoid timezone issues
+        naive_game_time = game_time.replace(tzinfo=None)
         game_data = {
             'game_id': '12345',
-            'game_time': game_time.isoformat(),
+            'game_time': naive_game_time.isoformat() + 'Z',
             'home_team': {
                 'id': 1,
                 'full_name': 'Los Angeles Lakers',
@@ -236,6 +240,8 @@ class AddNbaGamesAdminViewTest(TestCase):
         )
         
         game_time = timezone.now() + timedelta(days=2)
+        # Use naive datetime for the mock to avoid timezone issues
+        naive_game_time = game_time.replace(tzinfo=None)
         
         existing_event = PredictionEvent.objects.create(
             tip_type=tip_type,
@@ -249,7 +255,7 @@ class AddNbaGamesAdminViewTest(TestCase):
         # Try to create the same event again
         game_data = {
             'game_id': '12345',
-            'game_time': game_time.isoformat(),
+            'game_time': naive_game_time.isoformat() + 'Z',
             'home_team': {
                 'id': 1,
                 'full_name': 'Los Angeles Lakers',

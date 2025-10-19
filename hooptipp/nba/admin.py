@@ -152,12 +152,12 @@ def add_upcoming_nba_games_view(request: HttpRequest):
         if 'final' in status:
             continue
         
-        date_str = getattr(game, 'date', '')
-        if not date_str:
+        datetime_str = getattr(game, 'datetime', '')
+        if not datetime_str:
             continue
         
         try:
-            game_time = datetime.fromisoformat(date_str.replace('Z', '+00:00'))
+            game_time = datetime.fromisoformat(datetime_str.replace('Z', '+00:00'))
             if timezone.is_naive(game_time):
                 game_time = timezone.make_aware(game_time)
         except ValueError:
