@@ -1,4 +1,4 @@
-# 🎯 HoopTipp - Flexible Prediction Platform
+# HoopTipp - Flexible Prediction Platform
 
 **HoopTipp** is a self-hosted, extensible prediction platform. While it started as a family-friendly NBA prediction app, it has evolved into a **general-purpose prediction system** that can track any type of predictable event.
 
@@ -6,14 +6,14 @@ Predict NBA games, elections, Olympic outcomes, personal goals, or create your o
 
 ---
 
-## 🌟 What Makes HoopTipp Special
+## What Makes HoopTipp Special
 
 ### Universal Prediction System
-- 📊 **Any Event Type**: Sports, politics, personal goals, world events
-- 🔌 **Extensible Sources**: Automatic imports from external APIs
-- 🎨 **Beautiful UI**: Clean, modern interface with Tailwind CSS
-- 👥 **Family-Friendly**: Simple user activation without complex authentication
-- 🏆 **Smart Scoring**: Configurable points, lock bonuses, and leaderboards
+- **Any Event Type**: Sports, politics, personal goals, world events
+- **Extensible Sources**: Automatic imports from external APIs
+- **Beautiful UI**: Clean, modern interface with Tailwind CSS
+- **Family-Friendly**: Simple user activation without complex authentication
+- **Smart Scoring**: Configurable points, lock bonuses, and leaderboards
 
 ### Built-in NBA Support
 HoopTipp comes with full NBA integration:
@@ -24,7 +24,7 @@ HoopTipp comes with full NBA integration:
 
 ---
 
-## 🎯 Core Concepts
+## Core Concepts
 
 ### Prediction Events
 Any binary outcome you want to predict:
@@ -48,31 +48,31 @@ Flexible organization system:
 
 ---
 
-## 🧩 Example Use Cases
+## Example Use Cases
 
-### 🏀 Sports Predictions
+### Sports Predictions
 - NBA games, standings, awards
 - Olympic medal counts
 - Tournament winners
 
-### 🗳️ Political Predictions
+### Political Predictions
 - Election results
 - Cabinet appointments
 - Policy outcomes
 
-### 🌍 World Events
+### World Events
 - "Which country names the next Pope?"
 - "Which country wins 30+ Olympic medals first?"
 - Climate milestone predictions
 
-### 🚴 Personal Tracking
+### Personal Tracking
 - "Will I bike to work 10+ times this month?"
 - Habit formation goals
 - Personal achievement predictions
 
 ---
 
-## 🚀 Getting Started
+## Getting Started
 
 ### Prerequisites
 - Python 3.12+
@@ -137,7 +137,7 @@ Flexible organization system:
 
 ---
 
-## 🎮 How Predictions Work
+## How Predictions Work
 
 ### User Activation Model
 Simple, family-friendly approach:
@@ -161,74 +161,7 @@ Simple, family-friendly approach:
 
 ---
 
-## 🛠️ Creating Custom Predictions
-
-### Manual Prediction Events
-
-Via the admin panel:
-1. Create or select a **Tip Type** (e.g., "Special Events")
-2. Create a **Prediction Event**:
-   - Set name, description, and timeframe
-   - Configure points and target kind
-3. Add **Prediction Options**:
-   - Use existing options from any category
-   - Or create new options for your category
-4. Publish and let users predict!
-
-### Custom Event Sources
-
-Create automatic importers for any external system:
-
-```python
-# hooptipp/predictions/event_sources/my_source.py
-from .base import EventSource, EventSourceResult
-
-class MyEventSource(EventSource):
-    @property
-    def source_id(self) -> str:
-        return "my-source"
-    
-    @property
-    def source_name(self) -> str:
-        return "My Prediction Source"
-    
-    @property
-    def category_slugs(self) -> list[str]:
-        return ["my-category"]
-    
-    def sync_options(self) -> EventSourceResult:
-        # Import your options (teams, players, etc.)
-        result = EventSourceResult()
-        # ... your implementation ...
-        return result
-    
-    def sync_events(self) -> EventSourceResult:
-        # Import your prediction events
-        result = EventSourceResult()
-        # ... your implementation ...
-        return result
-```
-
-Register your source in `event_sources/__init__.py`:
-```python
-from .my_source import MyEventSource
-registry.register(MyEventSource)
-```
-
-See `docs/generic_prediction_system_design.md` for complete documentation.
-
----
-
-## 📚 Documentation
-
-- **Architecture Guide**: `docs/generic_prediction_system_design.md`
-- **Scoring System**: `docs/scoring_plan.md`
-- **Lock System**: `docs/prediction_locks_plan.md`
-- **Agent Instructions**: `AGENTS.md`
-
----
-
-## 🚢 Production Deployment
+## Production Deployment
 
 HoopTipp is designed for Railway deployment:
 
@@ -250,42 +183,6 @@ The included `Dockerfile` and `docker-entrypoint.sh` handle the setup automatica
 
 ---
 
-## 🤝 Contributing
-
-This is a personal family project, but suggestions and improvements are welcome!
-
-- Architecture is designed for extensibility
-- Event sources are pluggable
-- Tests cover core functionality
-- Follow existing code style
-
----
-
-## 📄 License
+## License
 
 See [LICENSE](LICENSE) file for details.
-
----
-
-## 🎯 Roadmap Ideas
-
-- [ ] More event source integrations (Olympics, Elections, etc.)
-- [ ] Public/private prediction modes
-- [ ] Mobile app
-- [ ] Badges and achievements system
-- [ ] Group competitions
-- [ ] Export predictions to CSV
-- [ ] Integration with Discord/Slack
-
----
-
-## 🙏 Acknowledgments
-
-- Built with Django and Tailwind CSS
-- NBA data from [BallDontLie API](https://balldontlie.io)
-- Originally created for family NBA predictions
-- Evolved into a general-purpose prediction platform
-
----
-
-**Enjoy predicting! 🎯**
