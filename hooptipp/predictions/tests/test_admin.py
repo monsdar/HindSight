@@ -225,3 +225,249 @@ class EventSourceAdminTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn('sources', response.context)
         self.assertIsInstance(response.context['sources'], list)
+
+
+class EventOutcomeBatchAddTests(TestCase):
+    """Tests for the batch add event outcomes functionality."""
+    
+    def setUp(self) -> None:
+        self.user = get_user_model().objects.create_superuser(
+            username='admin',
+            email='admin@example.com',
+            password='password123',
+        )
+        self.client.force_login(self.user)
+        
+        now = timezone.now()
+        
+        # Create option category and options
+        teams_cat = OptionCategory.objects.create(
+            slug='test-teams',
+            name='Test Teams'
+        )
+        self.team1 = Option.objects.create(
+            category=teams_cat,
+            slug='team1',
+            name='Team 1',
+            short_name='T1'
+        )
+        self.team2 = Option.objects.create(
+            category=teams_cat,
+            slug='team2',
+            name='Team 2',
+            short_name='T2'
+        )
+        
+        self.tip_type = TipType.objects.create(
+            name='Test Tip Type',
+            slug='test-tip',
+            deadline=now + timedelta(days=30),
+        )
+        
+        # Create events - some past deadline, some not
+        self.past_event1 = PredictionEvent.objects.create(
+            tip_type=self.tip_type,
+            name='Past Event 1',
+            opens_at=now - timedelta(days=3),
+            deadline=now - timedelta(days=1),  # Past deadline
+        )
+        self.past_event2 = PredictionEvent.objects.create(
+            tip_type=self.tip_type,
+            name='Past Event 2',
+            opens_at=now - timedelta(days=3),
+            deadline=now - timedelta(days=2),  # Past deadline
+        )
+        self.future_event = PredictionEvent.objects.create(
+            tip_type=self.tip_type,
+            name='Future Event',
+            opens_at=now - timedelta(days=1),
+            deadline=now + timedelta(days=1),  # Future deadline
+        )
+        
+        # Create options for past events
+        self.option1a = PredictionOption.objects.create(
+            event=self.past_event1,
+            label='Team 1',
+            option=self.team1,
+        )
+        self.option1b = PredictionOption.objects.create(
+            event=self.past_event1,
+            label='Team 2',
+            option=self.team2,
+        )
+        self.option2a = PredictionOption.objects.create(
+            event=self.past_event2,
+            label='Team 1',
+            option=self.team1,
+        )
+        self.option2b = PredictionOption.objects.create(
+            event=self.past_event2,
+            label='Team 2',
+            option=self.team2,
+        )
+        
+        # Create an outcome for one past event (should not appear in batch add)
+        EventOutcome.objects.create(
+            prediction_event=self.past_event2,
+            winning_option=self.option2a,
+            winning_generic_option=self.team1,
+            resolved_by=self.user,
+        )
+
+    def test_batch_add_view_requires_permission(self) -> None:
+        """Test that batch add view requires add permission."""
+        # Create a user without permissions
+        user = get_user_model().objects.create_user(
+            username='regular_user',
+            email='user@example.com',
+            password='password123',
+        )
+        self.client.force_login(user)
+        
+        url = reverse('admin:predictions_eventoutcome_batch_add')
+        response = self.client.get(url)
+        
+        # Django redirects to login or shows 403 depending on configuration
+        self.assertIn(response.status_code, [302, 403])
+
+    def test_batch_add_view_shows_only_past_events_without_outcomes(self) -> None:
+        """Test that batch add view only shows events past deadline without outcomes."""
+        url = reverse('admin:predictions_eventoutcome_batch_add')
+        response = self.client.get(url)
+        
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Past Event 1')  # Past deadline, no outcome
+        self.assertNotContains(response, 'Past Event 2')  # Past deadline, but has outcome
+        self.assertNotContains(response, 'Future Event')  # Future deadline
+
+    def test_batch_add_view_shows_event_options(self) -> None:
+        """Test that batch add view shows available options for each event."""
+        url = reverse('admin:predictions_eventoutcome_batch_add')
+        response = self.client.get(url)
+        
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Team 1')
+        self.assertContains(response, 'Team 2')
+        self.assertContains(response, f'winning_option_{self.past_event1.id}')
+
+    def test_batch_add_view_no_events_message(self) -> None:
+        """Test that batch add view shows appropriate message when no events need outcomes."""
+        # Create outcome for the remaining past event
+        EventOutcome.objects.create(
+            prediction_event=self.past_event1,
+            winning_option=self.option1a,
+            winning_generic_option=self.team1,
+            resolved_by=self.user,
+        )
+        
+        url = reverse('admin:predictions_eventoutcome_batch_add')
+        response = self.client.get(url)
+        
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'No events found that need outcomes')
+
+    def test_batch_add_submission_creates_outcomes(self) -> None:
+        """Test that batch add submission creates outcomes for selected events."""
+        url = reverse('admin:predictions_eventoutcome_batch_add')
+        
+        data = {
+            f'winning_option_{self.past_event1.id}': self.option1a.id,
+        }
+        
+        response = self.client.post(url, data, follow=True)
+        
+        self.assertEqual(response.status_code, 200)
+        
+        # Check that outcome was created
+        outcome = EventOutcome.objects.get(prediction_event=self.past_event1)
+        self.assertEqual(outcome.winning_option, self.option1a)
+        self.assertEqual(outcome.winning_generic_option, self.team1)
+        self.assertEqual(outcome.resolved_by, self.user)
+        
+        # Check success message
+        messages = list(get_messages(response.wsgi_request))
+        self.assertTrue(any('Successfully created 1 event outcomes' in message.message for message in messages))
+
+    def test_batch_add_submission_ignores_empty_selections(self) -> None:
+        """Test that batch add submission ignores events with no selection."""
+        url = reverse('admin:predictions_eventoutcome_batch_add')
+        
+        # Submit with no selections
+        data = {}
+        
+        response = self.client.post(url, data, follow=True)
+        
+        self.assertEqual(response.status_code, 200)
+        
+        # Check that no outcomes were created
+        self.assertEqual(EventOutcome.objects.filter(prediction_event=self.past_event1).count(), 0)
+        
+        # Check info message
+        messages = list(get_messages(response.wsgi_request))
+        self.assertTrue(any('No outcomes were created' in message.message for message in messages))
+
+    def test_batch_add_submission_handles_invalid_option(self) -> None:
+        """Test that batch add submission handles invalid option selections."""
+        url = reverse('admin:predictions_eventoutcome_batch_add')
+        
+        # Submit with invalid option ID
+        data = {
+            f'winning_option_{self.past_event1.id}': 99999,  # Non-existent option
+        }
+        
+        response = self.client.post(url, data, follow=True)
+        
+        self.assertEqual(response.status_code, 200)
+        
+        # Check that no outcomes were created
+        self.assertEqual(EventOutcome.objects.filter(prediction_event=self.past_event1).count(), 0)
+        
+        # Check error message
+        messages = list(get_messages(response.wsgi_request))
+        self.assertTrue(any('Invalid option selected' in message.message for message in messages))
+
+    def test_batch_add_submission_creates_multiple_outcomes(self) -> None:
+        """Test that batch add submission can create multiple outcomes at once."""
+        # Create another past event without outcome
+        past_event3 = PredictionEvent.objects.create(
+            tip_type=self.tip_type,
+            name='Past Event 3',
+            opens_at=timezone.now() - timedelta(days=3),
+            deadline=timezone.now() - timedelta(days=1),
+        )
+        option3a = PredictionOption.objects.create(
+            event=past_event3,
+            label='Team 1',
+            option=self.team1,
+        )
+        
+        url = reverse('admin:predictions_eventoutcome_batch_add')
+        
+        data = {
+            f'winning_option_{self.past_event1.id}': self.option1a.id,
+            f'winning_option_{past_event3.id}': option3a.id,
+        }
+        
+        response = self.client.post(url, data, follow=True)
+        
+        self.assertEqual(response.status_code, 200)
+        
+        # Check that both outcomes were created
+        self.assertEqual(EventOutcome.objects.filter(prediction_event=self.past_event1).count(), 1)
+        self.assertEqual(EventOutcome.objects.filter(prediction_event=past_event3).count(), 1)
+        
+        # Check success message
+        messages = list(get_messages(response.wsgi_request))
+        self.assertTrue(any('Successfully created 2 event outcomes' in message.message for message in messages))
+
+    def test_batch_add_redirects_to_changelist(self) -> None:
+        """Test that batch add submission redirects to the changelist."""
+        url = reverse('admin:predictions_eventoutcome_batch_add')
+        
+        data = {
+            f'winning_option_{self.past_event1.id}': self.option1a.id,
+        }
+        
+        response = self.client.post(url, data)
+        
+        self.assertRedirects(response, reverse('admin:predictions_eventoutcome_changelist'))

@@ -6,6 +6,9 @@ from django.template.response import TemplateResponse
 from django.urls import path, reverse
 from django.utils.html import format_html
 from django.utils.translation import gettext_lazy as _
+from django.utils import timezone
+from django.shortcuts import render
+from django.db import transaction
 
 from hooptipp.nba.models import ScheduledGame
 
@@ -353,6 +356,7 @@ class PredictionEventAdmin(admin.ModelAdmin):
 @admin.register(EventOutcome)
 class EventOutcomeAdmin(admin.ModelAdmin):
     change_form_template = 'admin/predictions/eventoutcome/change_form.html'
+    changelist_template = 'admin/predictions/eventoutcome/change_list.html'
     list_display = (
         'prediction_event',
         'winner_display',
@@ -381,13 +385,106 @@ class EventOutcomeAdmin(admin.ModelAdmin):
                 'winning_option',
                 'winning_generic_option',
             ),
-            'description': 'Specify the PredictionOption that won, and optionally the generic Option for easier querying.'
+            'description': 'Specify the PredictionOption that won (required), and optionally the underlying generic Option for easier querying.'
         }),
         ('Scoring', {
             'fields': ('scored_at', 'score_error'),
             'classes': ('collapse',),
         }),
     )
+
+    def get_urls(self):
+        urls = super().get_urls()
+        custom_urls = [
+            path(
+                'batch-add/',
+                self.admin_site.admin_view(self.batch_add_outcomes_view),
+                name='predictions_eventoutcome_batch_add',
+            ),
+            path(
+                '<path:object_id>/score/',
+                self.admin_site.admin_view(self.score_event_view),
+                name='predictions_eventoutcome_score',
+            ),
+        ]
+        return custom_urls + urls
+
+    def batch_add_outcomes_view(self, request: HttpRequest) -> HttpResponseRedirect | TemplateResponse:
+        """Custom view for batch adding event outcomes."""
+        if not self.has_add_permission(request):
+            raise PermissionDenied
+
+        # Get events that are past deadline and have no outcome
+        now = timezone.now()
+        events_without_outcomes = PredictionEvent.objects.filter(
+            deadline__lt=now,
+            outcome__isnull=True,
+            is_active=True
+        ).select_related('tip_type').prefetch_related('options__option').order_by('deadline', 'name')
+
+        if request.method == 'POST':
+            return self._process_batch_outcomes(request, events_without_outcomes)
+
+        # Prepare context for GET request
+        events_data = []
+        for event in events_without_outcomes:
+            events_data.append({
+                'event': event,
+                'options': event.options.filter(is_active=True).order_by('sort_order', 'label'),
+            })
+
+        context = {
+            **self.admin_site.each_context(request),
+            'title': _('Add Event Outcomes'),
+            'events_data': events_data,
+            'opts': self.model._meta,
+            'app_label': self.model._meta.app_label,
+            'has_view_permission': self.has_view_permission(request),
+            'has_add_permission': self.has_add_permission(request),
+        }
+
+        return render(request, 'admin/predictions/eventoutcome/batch_add.html', context)
+
+    def _process_batch_outcomes(self, request: HttpRequest, events_queryset) -> HttpResponseRedirect:
+        """Process the batch outcomes form submission."""
+        outcomes_created = 0
+        
+        with transaction.atomic():
+            for event in events_queryset:
+                winning_option_id = request.POST.get(f'winning_option_{event.id}')
+                
+                if winning_option_id:
+                    try:
+                        winning_option = PredictionOption.objects.get(
+                            id=winning_option_id,
+                            event=event
+                        )
+                        
+                        # Create the outcome
+                        outcome = EventOutcome.objects.create(
+                            prediction_event=event,
+                            winning_option=winning_option,
+                            winning_generic_option=winning_option.option,
+                            resolved_by=request.user,
+                            resolved_at=timezone.now()
+                        )
+                        
+                        outcomes_created += 1
+                        
+                    except PredictionOption.DoesNotExist:
+                        messages.error(
+                            request,
+                            _('Invalid option selected for event "%(event)s".') % {'event': event.name}
+                        )
+                        continue
+
+        if outcomes_created > 0:
+            message = _('Successfully created %(count)d event outcomes.') % {'count': outcomes_created}
+            messages.success(request, message)
+        else:
+            messages.info(request, _('No outcomes were created.'))
+
+        return HttpResponseRedirect(reverse('admin:predictions_eventoutcome_changelist'))
     
     def winner_display(self, obj):
         if obj.winning_option:
@@ -404,17 +501,6 @@ class EventOutcomeAdmin(admin.ModelAdmin):
         return '-'
     
     winner_display.short_description = 'Winner'
-
-    def get_urls(self):
-        urls = super().get_urls()
-        custom_urls = [
-            path(
-                '<path:object_id>/score/',
-                self.admin_site.admin_view(self.score_event_view),
-                name='predictions_eventoutcome_score',
-            ),
-        ]
-        return custom_urls + urls
 
     def score_event_view(self, request: HttpRequest, object_id: str) -> HttpResponseRedirect:
         if request.method != 'POST':
