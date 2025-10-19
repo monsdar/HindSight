@@ -561,6 +561,7 @@ class EventOutcomeAdmin(admin.ModelAdmin):
 
 @admin.register(UserEventScore)
 class UserEventScoreAdmin(admin.ModelAdmin):
+    change_list_template = 'admin/predictions/usereventscore/change_list.html'
     list_display = (
         'user',
         'prediction_event',
@@ -582,6 +583,61 @@ class UserEventScoreAdmin(admin.ModelAdmin):
         'user',
         'prediction_event',
     )
+
+    def get_urls(self):
+        urls = super().get_urls()
+        custom_urls = [
+            path(
+                'process-all-scores/',
+                self.admin_site.admin_view(self.process_all_scores_view),
+                name='predictions_usereventscore_process_all_scores',
+            ),
+        ]
+        return custom_urls + urls
+
+    def process_all_scores_view(self, request: HttpRequest) -> HttpResponseRedirect:
+        """Process scores for all user tips that have corresponding event outcomes."""
+        if request.method != 'POST':
+            return HttpResponseNotAllowed(['POST'])
+
+        if not self.has_change_permission(request):
+            raise PermissionDenied
+
+        force = request.POST.get('force') == '1'
+
+        try:
+            result = scoring_service.process_all_user_scores(force=force)
+        except Exception as exc:
+            message = f"Error processing scores: {str(exc)}"
+            self.message_user(request, message, level=messages.ERROR)
+        else:
+            if result.events_with_errors:
+                for error in result.events_with_errors:
+                    messages.warning(request, f"Warning: {error}")
+
+            if result.total_scores_created or result.total_scores_updated:
+                message = (
+                    f"Successfully processed {result.total_events_processed} events. "
+                    f"Created {result.total_scores_created} scores, "
+                    f"updated {result.total_scores_updated} scores. "
+                    f"Returned {result.total_locks_returned} locks to users, "
+                    f"forfeited {result.total_locks_forfeited} locks. "
+                    f"Skipped {result.total_tips_skipped} tips."
+                )
+                level = messages.SUCCESS
+            else:
+                message = (
+                    f"No scores were created or updated. "
+                    f"Processed {result.total_events_processed} events, "
+                    f"returned {result.total_locks_returned} locks to users, "
+                    f"forfeited {result.total_locks_forfeited} locks, "
+                    f"skipped {result.total_tips_skipped} tips."
+                )
+                level = messages.INFO
+
+            self.message_user(request, message, level=level)
+
+        return HttpResponseRedirect(reverse('admin:predictions_usereventscore_changelist'))
 
 
 @admin.register(UserTip)

@@ -9,6 +9,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from .models import EventOutcome, PredictionEvent, UserEventScore, UserTip
+from .lock_service import LockService
 
 LOCK_MULTIPLIER = 2
 _LOCK_BONUS_STATUSES = {
@@ -88,6 +89,10 @@ def score_event_outcome(outcome: EventOutcome, *, force: bool = False) -> ScoreE
 
         for tip in tips:
             if not _tip_matches_outcome(tip, outcome):
+                # Handle incorrect predictions with locks - forfeit them
+                if tip.lock_status == UserTip.LockStatus.ACTIVE:
+                    lock_service = LockService(tip.user)
+                    lock_service.schedule_forfeit(tip, resolved_at=outcome.resolved_at)
                 skipped += 1
                 continue
 
@@ -107,6 +112,11 @@ def score_event_outcome(outcome: EventOutcome, *, force: bool = False) -> ScoreE
                 defaults=defaults,
             )
             awarded.append(AwardedScore(score=score, created=created))
+            
+            # Return lock to user if they had an active lock
+            if tip.lock_status == UserTip.LockStatus.ACTIVE:
+                lock_service = LockService(tip.user)
+                lock_service.release_lock(tip)
 
         outcome.scored_at = timezone.now()
         outcome.score_error = ''
@@ -140,3 +150,118 @@ def _calculate_lock_multiplier(tip: UserTip) -> int:
     if tip.lock_status in _LOCK_BONUS_STATUSES:
         return LOCK_MULTIPLIER
     return 1
+
+
+@dataclass(frozen=True)
+class ProcessAllScoresResult:
+    """Summary returned when processing all user scores."""
+    
+    total_events_processed: int
+    total_scores_created: int
+    total_scores_updated: int
+    total_tips_skipped: int
+    total_locks_returned: int
+    total_locks_forfeited: int
+    events_with_errors: List[str]
+
+
+def process_all_user_scores(*, force: bool = False) -> ProcessAllScoresResult:
+    """Process scores for all user tips that have corresponding event outcomes.
+    
+    This function goes through all UserTips and creates/updates UserEventScore
+    records based on existing EventOutcomes.
+    
+    Args:
+        force: If True, existing UserEventScore records are deleted before processing
+        
+    Returns:
+        ProcessAllScoresResult with summary statistics
+    """
+    from django.db.models import Q
+    
+    total_events_processed = 0
+    total_scores_created = 0
+    total_scores_updated = 0
+    total_tips_skipped = 0
+    total_locks_returned = 0
+    total_locks_forfeited = 0
+    events_with_errors = []
+    
+    # Get all events that have outcomes
+    events_with_outcomes = PredictionEvent.objects.filter(
+        outcome__isnull=False
+    ).select_related('outcome').prefetch_related('tips__user', 'tips__prediction_option', 'tips__selected_option')
+    
+    with transaction.atomic():
+        if force:
+            # Delete all existing scores if force is True
+            UserEventScore.objects.all().delete()
+        
+        for event in events_with_outcomes:
+            try:
+                outcome = event.outcome
+                if not _outcome_has_selection(outcome):
+                    events_with_errors.append(f"{event.name}: No winning option specified")
+                    continue
+                
+                total_events_processed += 1
+                
+                # Get all tips for this event
+                tips = list(event.tips.all())
+                
+                for tip in tips:
+                    if not _tip_matches_outcome(tip, outcome):
+                        # Handle incorrect predictions with locks - forfeit them
+                        if tip.lock_status == UserTip.LockStatus.ACTIVE:
+                            lock_service = LockService(tip.user)
+                            lock_service.schedule_forfeit(tip, resolved_at=outcome.resolved_at)
+                            total_locks_forfeited += 1
+                        total_tips_skipped += 1
+                        continue
+                    
+                    base_points = event.points
+                    multiplier = _calculate_lock_multiplier(tip)
+                    total_points = base_points * multiplier
+                    defaults = {
+                        'base_points': base_points,
+                        'lock_multiplier': multiplier,
+                        'points_awarded': total_points,
+                        'is_lock_bonus': multiplier > 1,
+                    }
+                    
+                    score, created = UserEventScore.objects.update_or_create(
+                        user=tip.user,
+                        prediction_event=event,
+                        defaults=defaults,
+                    )
+                    
+                    if created:
+                        total_scores_created += 1
+                    else:
+                        total_scores_updated += 1
+                    
+                    # Return lock to user if they had an active lock
+                    if tip.lock_status == UserTip.LockStatus.ACTIVE:
+                        lock_service = LockService(tip.user)
+                        if lock_service.release_lock(tip):
+                            total_locks_returned += 1
+                
+                # Mark the outcome as scored if it wasn't already
+                if not outcome.scored_at:
+                    outcome.scored_at = timezone.now()
+                    outcome.score_error = ''
+                    outcome.save(update_fields=['scored_at', 'score_error'])
+                    
+            except Exception as e:
+                events_with_errors.append(f"{event.name}: {str(e)}")
+                continue
+    
+    return ProcessAllScoresResult(
+        total_events_processed=total_events_processed,
+        total_scores_created=total_scores_created,
+        total_scores_updated=total_scores_updated,
+        total_tips_skipped=total_tips_skipped,
+        total_locks_returned=total_locks_returned,
+        total_locks_forfeited=total_locks_forfeited,
+        events_with_errors=events_with_errors,
+    )

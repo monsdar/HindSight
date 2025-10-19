@@ -1,0 +1,24 @@
+{% extends "admin/change_list.html" %}
+{% load i18n admin_urls static admin_list %}
+
+{% block object-tools-items %}
+    {{ block.super }}
+    <li>
+        <form method="post" action="{% url 'admin:predictions_usereventscore_process_all_scores' %}" style="display: inline;">
+            {% csrf_token %}
+            <input type="hidden" name="force" value="0">
+            <button type="submit" class="default" onclick="return confirm('This will process scores for all user tips that have corresponding event outcomes. Continue?')">
+                Process All Scores
+            </button>
+        </form>
+    </li>
+    <li>
+        <form method="post" action="{% url 'admin:predictions_usereventscore_process_all_scores' %}" style="display: inline;">
+            {% csrf_token %}
+            <input type="hidden" name="force" value="1">
+            <button type="submit" class="default" onclick="return confirm('This will delete all existing scores and recalculate them from scratch. This action cannot be undone. Continue?')">
+                Force Recalculate All Scores
+            </button>
+        </form>
+    </li>
+{% endblock %}
