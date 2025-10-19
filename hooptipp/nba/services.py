@@ -42,6 +42,41 @@ PLAYER_SYNC_THROTTLE_SECONDS = 12.5
 _BDL_CLIENT_CACHE: dict[str, CachedBallDontLieAPI] = {}
 _BDL_CLIENT_LOCK = threading.Lock()
 
+# Mapping from BallDontLie team IDs to NBA team IDs for logo URLs
+# This mapping is based on the official NBA team IDs used in their CDN
+BALLDONTLIE_TO_NBA_TEAM_ID_MAP = {
+    1: 1610612737,   # Atlanta Hawks
+    2: 1610612738,   # Boston Celtics
+    3: 1610612751,   # Brooklyn Nets
+    4: 1610612766,   # Charlotte Hornets
+    5: 1610612741,   # Chicago Bulls
+    6: 1610612739,   # Cleveland Cavaliers
+    7: 1610612742,   # Dallas Mavericks
+    8: 1610612743,   # Denver Nuggets
+    9: 1610612765,   # Detroit Pistons
+    10: 1610612744,  # Golden State Warriors
+    11: 1610612745,  # Houston Rockets
+    12: 1610612754,  # Indiana Pacers
+    13: 1610612746,  # LA Clippers
+    14: 1610612747,  # Los Angeles Lakers
+    15: 1610612763,  # Memphis Grizzlies
+    16: 1610612748,  # Miami Heat
+    17: 1610612749,  # Milwaukee Bucks
+    18: 1610612750,  # Minnesota Timberwolves
+    19: 1610612740,  # New Orleans Pelicans
+    20: 1610612752,  # New York Knicks
+    21: 1610612760,  # Oklahoma City Thunder
+    22: 1610612753,  # Orlando Magic
+    23: 1610612755,  # Philadelphia 76ers
+    24: 1610612756,  # Phoenix Suns
+    25: 1610612757,  # Portland Trail Blazers
+    26: 1610612758,  # Sacramento Kings
+    27: 1610612759,  # San Antonio Spurs
+    28: 1610612761,  # Toronto Raptors
+    29: 1610612762,  # Utah Jazz
+    30: 1610612764,  # Washington Wizards
+}
+
 
 def _get_bdl_api_key() -> str:
     """Return the configured BallDontLie API token formatted for requests."""
@@ -142,6 +177,9 @@ def sync_teams() -> SyncResult:
         if not name:
             continue
 
+        # Map BallDontLie team ID to NBA team ID for logo URLs
+        nba_team_id = BALLDONTLIE_TO_NBA_TEAM_ID_MAP.get(team_id, team_id)
+        
         defaults = {
             "slug": abbreviation.lower() if abbreviation else name.lower().replace(" ", "-"),
             "name": name,
@@ -151,6 +189,8 @@ def sync_teams() -> SyncResult:
                 "city": city,
                 "conference": conference,
                 "division": division,
+                "nba_team_id": nba_team_id,  # Store NBA team ID for logo URLs
+                "balldontlie_team_id": team_id,  # Store original BallDontLie ID for reference
             },
             "is_active": True,
             "sort_order": 0,
@@ -444,19 +484,46 @@ def fetch_upcoming_week_games(limit: int = 7) -> tuple[Optional[date], list[dict
 # Card rendering helpers
 
 
-def get_team_logo_url(tricode: str) -> str:
+def get_team_logo_url(team_identifier: str) -> str:
     """
     Get the URL for an NBA team logo.
 
     Args:
-        tricode: Team abbreviation (e.g., 'LAL', 'BOS')
+        team_identifier: Team abbreviation (e.g., 'LAL', 'BOS') or NBA team ID
 
     Returns:
         URL to team logo image
     """
+    from django.core.cache import cache
+    
+    # Check if it's already a numeric NBA team ID
+    if team_identifier.isdigit():
+        nba_team_id = team_identifier
+    else:
+        # Look up NBA team ID from abbreviation
+        cache_key = f"nba_team_id_{team_identifier}"
+        nba_team_id = cache.get(cache_key)
+        
+        if nba_team_id is None:
+            # Query the database for the team
+            teams_cat = NbaTeamManager.get_category()
+            team_option = Option.objects.filter(
+                category=teams_cat,
+                short_name__iexact=team_identifier
+            ).first()
+            
+            if team_option and team_option.metadata:
+                nba_team_id = team_option.metadata.get("nba_team_id")
+                # Cache for 1 hour
+                if nba_team_id:
+                    cache.set(cache_key, nba_team_id, 3600)
+    
+    # Fallback to abbreviation if we couldn't find the NBA team ID
+    if not nba_team_id:
+        nba_team_id = team_identifier
+    
     # Using NBA's official CDN for team logos
-    # Alternative: could use local static files or third-party service
-    return f"https://cdn.nba.com/logos/nba/{tricode}/primary/L/logo.svg"
+    return f"https://cdn.nba.com/logos/nba/{nba_team_id}/global/L/logo.svg"
 
 
 def get_live_game_data(nba_game_id: str) -> dict:

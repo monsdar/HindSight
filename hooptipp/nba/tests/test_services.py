@@ -17,17 +17,131 @@ from hooptipp.predictions.models import Option, OptionCategory
 class GetTeamLogoUrlTests(TestCase):
     """Tests for get_team_logo_url function."""
 
-    def test_returns_logo_url_for_tricode(self):
-        """Function should return CDN URL for team logo."""
-        url = get_team_logo_url("LAL")
-        self.assertIn("LAL", url)
+    def setUp(self):
+        cache.clear()
+        self.teams_cat = OptionCategory.objects.create(
+            slug="nba-teams",
+            name="NBA Teams",
+        )
+
+    def tearDown(self):
+        cache.clear()
+
+    def test_returns_logo_url_for_nba_team_id(self):
+        """Function should return CDN URL using NBA team ID."""
+        url = get_team_logo_url("1610612738")  # Boston Celtics ID
+        self.assertIn("1610612738", url)
         self.assertIn("logo", url.lower())
+        self.assertIn("cdn.nba.com", url)
+
+    def test_returns_logo_url_for_team_abbreviation(self):
+        """Function should look up NBA team ID and return CDN URL."""
+        # Create a team option with NBA team ID in metadata
+        # Using BallDontLie ID 2 for Boston Celtics, which maps to NBA ID 1610612738
+        team = Option.objects.create(
+            category=self.teams_cat,
+            slug="boston-celtics",
+            name="Boston Celtics",
+            short_name="BOS",
+            external_id="2",  # BallDontLie ID
+            metadata={
+                "city": "Boston",
+                "conference": "East",
+                "division": "Atlantic",
+                "nba_team_id": 1610612738,  # NBA team ID
+                "balldontlie_team_id": 2,
+            },
+        )
+
+        url = get_team_logo_url("BOS")
+        self.assertIn("1610612738", url)
+        self.assertIn("logo", url.lower())
+        self.assertIn("cdn.nba.com", url)
 
     def test_returns_different_urls_for_different_teams(self):
         """Function should return different URLs for different teams."""
+        # Create team options using BallDontLie IDs
+        lakers = Option.objects.create(
+            category=self.teams_cat,
+            slug="los-angeles-lakers",
+            name="Los Angeles Lakers",
+            short_name="LAL",
+            external_id="14",  # BallDontLie ID for Lakers
+            metadata={
+                "nba_team_id": 1610612747,  # NBA team ID for Lakers
+                "balldontlie_team_id": 14,
+            },
+        )
+        celtics = Option.objects.create(
+            category=self.teams_cat,
+            slug="boston-celtics",
+            name="Boston Celtics",
+            short_name="BOS",
+            external_id="2",  # BallDontLie ID for Celtics
+            metadata={
+                "nba_team_id": 1610612738,  # NBA team ID for Celtics
+                "balldontlie_team_id": 2,
+            },
+        )
+
         lal_url = get_team_logo_url("LAL")
         bos_url = get_team_logo_url("BOS")
         self.assertNotEqual(lal_url, bos_url)
+        self.assertIn("1610612747", lal_url)
+        self.assertIn("1610612738", bos_url)
+
+    def test_falls_back_to_abbreviation_when_team_not_found(self):
+        """Function should fall back to abbreviation when team not found in database."""
+        url = get_team_logo_url("UNKNOWN")
+        self.assertIn("UNKNOWN", url)
+        self.assertIn("logo", url.lower())
+
+    def test_caches_team_id_lookup(self):
+        """Function should cache team ID lookups."""
+        team = Option.objects.create(
+            category=self.teams_cat,
+            slug="boston-celtics",
+            name="Boston Celtics",
+            short_name="BOS",
+            external_id="2",  # BallDontLie ID
+            metadata={
+                "nba_team_id": 1610612738,  # NBA team ID
+                "balldontlie_team_id": 2,
+            },
+        )
+
+        # First call
+        url1 = get_team_logo_url("BOS")
+        
+        # Delete the team
+        team.delete()
+        
+        # Second call should use cache
+        url2 = get_team_logo_url("BOS")
+        
+        # Should still work from cache
+        self.assertEqual(url1, url2)
+        self.assertIn("1610612738", url2)
+
+    def test_handles_case_insensitive_abbreviation(self):
+        """Function should handle case insensitive team abbreviations."""
+        team = Option.objects.create(
+            category=self.teams_cat,
+            slug="boston-celtics",
+            name="Boston Celtics",
+            short_name="BOS",
+            external_id="2",  # BallDontLie ID
+            metadata={
+                "nba_team_id": 1610612738,  # NBA team ID
+                "balldontlie_team_id": 2,
+            },
+        )
+
+        url_lower = get_team_logo_url("bos")
+        url_upper = get_team_logo_url("BOS")
+        
+        self.assertEqual(url_lower, url_upper)
+        self.assertIn("1610612738", url_lower)
 
 
 class GetLiveGameDataTests(TestCase):
