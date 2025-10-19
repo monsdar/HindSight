@@ -85,7 +85,7 @@ class AddNbaGamesAdminViewTest(TestCase):
         
         mock_game = MagicMock()
         mock_game.id = 12345
-        mock_game.status = 'Scheduled'
+        mock_game.status = naive_game_time.strftime('%Y-%m-%dT%H:%M:%SZ')  # Status contains datetime
         mock_game.datetime = naive_game_time.isoformat() + 'Z'
         mock_game.home_team = mock_home_team
         mock_game.visitor_team = mock_away_team

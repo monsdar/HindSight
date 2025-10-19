@@ -148,11 +148,36 @@ def add_upcoming_nba_games_view(request: HttpRequest):
     # Process games
     games = []
     for game in response.data:
-        status = (getattr(game, 'status', '') or '').lower()
-        if 'final' in status:
+        # Handle both dict and object responses
+        if isinstance(game, dict):
+            status = game.get('status', '')
+            datetime_str = game.get('datetime', '')
+            home_team = game.get('home_team', None)
+            away_team = game.get('visitor_team', None)
+            game_id = str(game.get('id', ''))
+        else:
+            # Handle NBAGame objects from BallDontLie API
+            # The status field contains the datetime string in the new API format
+            status = getattr(game, 'status', '')
+            datetime_str = status  # Use status as datetime since it contains the datetime string
+            home_team = getattr(game, 'home_team', None)
+            away_team = getattr(game, 'visitor_team', None)
+            game_id = str(getattr(game, 'id', ''))
+        
+        # Check if game is final - the status field now contains datetime strings
+        # for scheduled games, so we need to check if it's a valid datetime
+        # If it's not a datetime, it might be a status like "Final"
+        status_lower = (status or '').lower()
+        if 'final' in status_lower or 'end' in status_lower:
             continue
         
-        datetime_str = getattr(game, 'datetime', '')
+        # Additional check: if the status is a datetime string, it's likely a scheduled game
+        # If it's not a datetime and contains game status keywords, it might be finished
+        if status and not any(char.isdigit() for char in status) and any(
+            keyword in status_lower for keyword in ['final', 'end', 'complete', 'finished']
+        ):
+            continue
+        
         if not datetime_str:
             continue
         
@@ -167,38 +192,58 @@ def add_upcoming_nba_games_view(request: HttpRequest):
         if game_time < timezone.now():
             continue
         
-        home_team = getattr(game, 'home_team', None)
-        away_team = getattr(game, 'visitor_team', None)
-        
-        game_id = str(getattr(game, 'id', ''))
-        
         # Check if this game already exists as a PredictionEvent
         existing_event = PredictionEvent.objects.filter(
             source_id='nba-balldontlie',
             source_event_id=game_id
         ).first()
         
-        home_team_dict = {
-            'id': getattr(home_team, 'id', None),
-            'full_name': getattr(home_team, 'full_name', ''),
-            'name': getattr(home_team, 'name', ''),
-            'abbreviation': getattr(home_team, 'abbreviation', ''),
-            'city': getattr(home_team, 'city', ''),
-            'conference': getattr(home_team, 'conference', ''),
-            'division': getattr(home_team, 'division', ''),
-        }
-        
-        away_team_dict = {
-            'id': getattr(away_team, 'id', None),
-            'full_name': getattr(away_team, 'full_name', ''),
-            'name': getattr(away_team, 'name', ''),
-            'abbreviation': getattr(away_team, 'abbreviation', ''),
-            'city': getattr(away_team, 'city', ''),
-            'conference': getattr(away_team, 'conference', ''),
-            'division': getattr(away_team, 'division', ''),
-        }
-        
-        arena = getattr(game, 'arena', '') or ''
+        # Handle team data access for both dict and object responses
+        if isinstance(game, dict):
+            home_team_dict = {
+                'id': home_team.get('id', None) if home_team else None,
+                'full_name': home_team.get('full_name', '') if home_team else '',
+                'name': home_team.get('name', '') if home_team else '',
+                'abbreviation': home_team.get('abbreviation', '') if home_team else '',
+                'city': home_team.get('city', '') if home_team else '',
+                'conference': home_team.get('conference', '') if home_team else '',
+                'division': home_team.get('division', '') if home_team else '',
+            }
+            
+            away_team_dict = {
+                'id': away_team.get('id', None) if away_team else None,
+                'full_name': away_team.get('full_name', '') if away_team else '',
+                'name': away_team.get('name', '') if away_team else '',
+                'abbreviation': away_team.get('abbreviation', '') if away_team else '',
+                'city': away_team.get('city', '') if away_team else '',
+                'conference': away_team.get('conference', '') if away_team else '',
+                'division': away_team.get('division', '') if away_team else '',
+            }
+            
+            arena = game.get('arena', '') or ''
+        else:
+            # Handle NBAGame objects from BallDontLie API
+            home_team_dict = {
+                'id': getattr(home_team, 'id', None) if home_team else None,
+                'full_name': getattr(home_team, 'full_name', '') if home_team else '',
+                'name': getattr(home_team, 'name', '') if home_team else '',
+                'abbreviation': getattr(home_team, 'abbreviation', '') if home_team else '',
+                'city': getattr(home_team, 'city', '') if home_team else '',
+                'conference': getattr(home_team, 'conference', '') if home_team else '',
+                'division': getattr(home_team, 'division', '') if home_team else '',
+            }
+            
+            away_team_dict = {
+                'id': getattr(away_team, 'id', None) if away_team else None,
+                'full_name': getattr(away_team, 'full_name', '') if away_team else '',
+                'name': getattr(away_team, 'name', '') if away_team else '',
+                'abbreviation': getattr(away_team, 'abbreviation', '') if away_team else '',
+                'city': getattr(away_team, 'city', '') if away_team else '',
+                'conference': getattr(away_team, 'conference', '') if away_team else '',
+                'division': getattr(away_team, 'division', '') if away_team else '',
+            }
+            
+            arena = getattr(game, 'arena', '') or ''
         
         game_dict = {
             'game_id': game_id,
@@ -228,6 +273,17 @@ def add_upcoming_nba_games_view(request: HttpRequest):
     
     # Sort by game time
     games.sort(key=lambda g: g['game_time'])
+    
+    # Add date grouping information for CSS styling
+    current_date = None
+    date_group_index = 0
+    for game in games:
+        game_date = game['game_time'].date()
+        if current_date != game_date:
+            current_date = game_date
+            date_group_index = (date_group_index + 1) % 2  # Alternate between 0 and 1
+        game['date_group'] = date_group_index
+        game['game_date'] = game_date
     
     context = {
         'title': 'Add Upcoming NBA Games',
