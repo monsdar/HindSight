@@ -536,3 +536,90 @@ class HomeViewTests(TestCase):
         self.assertContains(response, 'Leaderboard')
         self.assertContains(response, '6')  # Total points displayed in ranking
         self.assertContains(response, 'Bonus')
+
+    def test_home_view_filters_open_predictions_to_upcoming_week(self) -> None:
+        """Test that open_predictions only shows events with deadlines in the upcoming week."""
+        now = timezone.now()
+        
+        # Create events with different deadline dates
+        # Event 1: Due in 1 hour (should be included - today)
+        event_today = PredictionEvent.objects.create(
+            tip_type=self.tip_type,
+            name='Event Today',
+            opens_at=now - timedelta(hours=1),
+            deadline=now + timedelta(hours=1),
+            is_active=True,
+        )
+        
+        # Event 2: Due in 3 days (should be included)
+        event_3_days = PredictionEvent.objects.create(
+            tip_type=self.tip_type,
+            name='Event in 3 Days',
+            opens_at=now - timedelta(hours=1),
+            deadline=now + timedelta(days=3),
+            is_active=True,
+        )
+        
+        # Event 3: Due in 6 days (should be included - end of week)
+        event_6_days = PredictionEvent.objects.create(
+            tip_type=self.tip_type,
+            name='Event in 6 Days',
+            opens_at=now - timedelta(hours=1),
+            deadline=now + timedelta(days=6),
+            is_active=True,
+        )
+        
+        # Event 4: Due in 8 days (should NOT be included - beyond week)
+        event_8_days = PredictionEvent.objects.create(
+            tip_type=self.tip_type,
+            name='Event in 8 Days',
+            opens_at=now - timedelta(hours=1),
+            deadline=now + timedelta(days=8),
+            is_active=True,
+        )
+        
+        # Event 5: Due 1 hour ago (should NOT be included - past deadline)
+        event_past = PredictionEvent.objects.create(
+            tip_type=self.tip_type,
+            name='Event Past',
+            opens_at=now - timedelta(days=2),
+            deadline=now - timedelta(hours=1),
+            is_active=True,
+        )
+        
+        # Event 6: Opens tomorrow (should NOT be included - not yet open)
+        event_opens_tomorrow = PredictionEvent.objects.create(
+            tip_type=self.tip_type,
+            name='Event Opens Tomorrow',
+            opens_at=now + timedelta(days=1),
+            deadline=now + timedelta(days=2),
+            is_active=True,
+        )
+
+        response = self.client.get(reverse('predictions:home'))
+        
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('open_predictions', response.context)
+        
+        open_predictions = response.context['open_predictions']
+        open_prediction_ids = [event.id for event in open_predictions]
+        
+        # Should include events due today, in 3 days, and in 6 days
+        self.assertIn(event_today.id, open_prediction_ids)
+        self.assertIn(event_3_days.id, open_prediction_ids)
+        self.assertIn(event_6_days.id, open_prediction_ids)
+        
+        # Should NOT include events due in 8 days, past deadline, or not yet open
+        self.assertNotIn(event_8_days.id, open_prediction_ids)
+        self.assertNotIn(event_past.id, open_prediction_ids)
+        self.assertNotIn(event_opens_tomorrow.id, open_prediction_ids)
+        
+        # Should be ordered by deadline
+        # Note: The existing event from setUp might also be included if its deadline is within the week
+        self.assertGreaterEqual(len(open_predictions), 3)
+        # Check that our specific events are included and in the right order
+        our_events = [event for event in open_predictions if event.id in [event_today.id, event_3_days.id, event_6_days.id]]
+        self.assertEqual(len(our_events), 3)
+        self.assertEqual(our_events[0].id, event_today.id)
+        self.assertEqual(our_events[1].id, event_3_days.id)
+        self.assertEqual(our_events[2].id, event_6_days.id)

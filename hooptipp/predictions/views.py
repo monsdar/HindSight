@@ -499,12 +499,17 @@ def home(request):
                     pass
             resolved_predictions_data.append(outcome_data)
 
-    # Get all open predictions ordered by deadline
+    # Get open predictions with due dates in the upcoming week
+    upcoming_range_start = timezone.localdate(now)
+    upcoming_range_end = upcoming_range_start + timedelta(days=6)
+    
     open_predictions = list(
         PredictionEvent.objects.filter(
             is_active=True,
             opens_at__lte=now,
             deadline__gte=now,
+            deadline__date__gte=upcoming_range_start,
+            deadline__date__lte=upcoming_range_end,
         )
         .exclude(outcome__isnull=False)  # Exclude events that have outcomes
         .select_related('scheduled_game', 'tip_type')
