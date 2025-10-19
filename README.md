@@ -88,28 +88,41 @@ Flexible organization system:
    pip install -r requirements.txt
    ```
 
-2. **Set up the database:**
+1. **Environment Configuration (Optional):**
+   
+   Example config:
+
+   ```env
+   # Django Settings
+   SECRET_KEY=your-secret-key-here
+   DEBUG=True
+
+   # Allowed Hosts (comma-separated)
+   DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1,0.0.0.0
+
+   # NBA API Configuration
+   BALLDONTLIE_API_TOKEN=YOUR_TOKEN_HERE
+
+   HOOPTIPP_ADMIN_USER=hoop
+   HOOPTIPP_ADMIN_PASSWORD=hoop
+   ```
+
+1. **Set up the database:**
    ```bash
    python manage.py migrate
-   python manage.py createsuperuser
    ```
 
-3. **Configure NBA integration (optional):**
-   ```bash
-   export BALLDONTLIE_API_TOKEN=your_api_token_here
-   ```
-
-4. **Run tests:**
+1. **Run tests:**
    ```bash
    python manage.py test
    ```
 
-5. **Start the server:**
+1. **Start the server:**
    ```bash
    python manage.py runserver
    ```
 
-6. **Access the app:**
+1. **Access the app:**
    - Homepage: http://localhost:8000
    - Admin panel: http://localhost:8000/admin
 
