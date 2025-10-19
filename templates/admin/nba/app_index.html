@@ -9,6 +9,16 @@
       <tbody>
         <tr>
           <td>
+            <a href="{% url 'admin:nba_sync' %}" class="addlink">
+              {% trans 'Data Synchronization' %}
+            </a>
+          </td>
+          <td>
+            {% trans 'Sync NBA teams and players from BallDontLie API' %}
+          </td>
+        </tr>
+        <tr>
+          <td>
             <a href="{% url 'admin:nba_add_upcoming_games' %}" class="addlink">
               {% trans 'Add Upcoming NBA Games' %}
             </a>
