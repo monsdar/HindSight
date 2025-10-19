@@ -150,7 +150,7 @@ class HomeViewTests(TestCase):
         self.assertContains(response, 'Ace (@alice)')
         self.assertContains(response, 'Buckets (@bob)')
         # Check for the new dashboard text instead of old "Scoring overview" text
-        self.assertContains(response, 'Current Ranking')
+        self.assertContains(response, 'Leaderboard')
         self.assertContains(
             response,
             'Making predictions as <span class="font-semibold text-slate-100">Ace</span>',
@@ -533,6 +533,6 @@ class HomeViewTests(TestCase):
         self.assertEqual(len(recent_scores), 1)
         self.assertEqual(recent_scores[0].points_awarded, 6)
         # Check for the new dashboard sections instead of old "Scoring overview"
-        self.assertContains(response, 'Current Ranking')
+        self.assertContains(response, 'Leaderboard')
         self.assertContains(response, '6')  # Total points displayed in ranking
         self.assertContains(response, 'Bonus')

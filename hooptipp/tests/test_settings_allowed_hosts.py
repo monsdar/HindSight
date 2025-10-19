@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib
 import os
 from types import ModuleType
+from unittest import mock
 
 from django.test import SimpleTestCase
 
@@ -25,9 +26,13 @@ class AllowedHostsSettingsTests(SimpleTestCase):
         return importlib.reload(module)
 
     def test_allowed_hosts_defaults_to_empty_list(self) -> None:
+        # Clear the environment variable and ensure no .env file is loaded
         os.environ.pop('DJANGO_ALLOWED_HOSTS', None)
-
-        settings = self._reload_settings()
+        
+        # Mock the load_dotenv function to prevent loading .env file
+        # We need to patch it at the module level before importing
+        with mock.patch('dotenv.load_dotenv'):
+            settings = self._reload_settings()
 
         self.assertEqual(settings.ALLOWED_HOSTS, [])
 

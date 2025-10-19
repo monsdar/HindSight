@@ -13,10 +13,13 @@ class EnsureDefaultSuperuserTests(TestCase):
         admin_setup.ensure_default_superuser(sender)
 
     def test_no_action_when_environment_missing(self) -> None:
+        # Clean up any existing users first
+        user_model = get_user_model()
+        user_model.objects.all().delete()
+        
         with mock.patch.dict('os.environ', {}, clear=True):
             self._call_handler()
 
-        user_model = get_user_model()
         self.assertEqual(user_model.objects.count(), 0)
 
     def test_creates_superuser_when_not_present(self) -> None:
