@@ -1,12 +1,12 @@
-# HoopTipp - Flexible Prediction Platform
+# HindSight - Flexible Prediction Platform
 
-**HoopTipp** is a self-hosted, extensible prediction platform. While it started as a family-friendly NBA prediction app, it has evolved into a **general-purpose prediction system** that can track any type of predictable event.
+**HindSight** is a self-hosted, extensible prediction platform. While it started as a family-friendly NBA prediction app, it has evolved into a **general-purpose prediction system** that can track any type of predictable event.
 
 Predict NBA games, elections, Olympic outcomes, personal goals, or create your own custom prediction events!
 
 ---
 
-## What Makes HoopTipp Special
+## What Makes HindSight Special
 
 ### Universal Prediction System
 - **Any Event Type**: Sports, politics, personal goals, world events
@@ -16,7 +16,7 @@ Predict NBA games, elections, Olympic outcomes, personal goals, or create your o
 - **Smart Scoring**: Configurable points, lock bonuses, and leaderboards
 
 ### Built-in NBA Support
-HoopTipp comes with full NBA integration:
+HindSight comes with full NBA integration:
 - Automatic game imports from BallDontLie API
 - 30 NBA teams and active player database
 - Weekly game predictions
@@ -176,7 +176,7 @@ Simple, family-friendly approach:
 
 ## Production Deployment
 
-HoopTipp is designed for Railway deployment:
+HindSight is designed for Railway deployment:
 
 1. **Environment Variables:**
    ```bash

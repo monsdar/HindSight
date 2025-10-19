@@ -1,4 +1,4 @@
-"""Theme definitions for HoopTipp user customization."""
+"""Theme definitions for HindSight user customization."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -16,7 +16,7 @@ class ThemePalette:
 
 
 _THEMES: Tuple[ThemePalette, ...] = (
-    ThemePalette("classic", "HoopTipp Classic (Gold & Midnight)", "#f59e0b", "#0f172a"),
+    ThemePalette("classic", "HindSight Classic (Gold & Midnight)", "#f59e0b", "#0f172a"),
     ThemePalette("atlanta-hawks", "Atlanta Hawks (Red & Black)", "#c8102e", "#000000"),
     ThemePalette("boston-celtics", "Boston Celtics (Green & Black)", "#007a33", "#000000"),
     ThemePalette("brooklyn-nets", "Brooklyn Nets (Black & White)", "#000000", "#ffffff"),

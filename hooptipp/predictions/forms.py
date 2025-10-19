@@ -1,4 +1,4 @@
-"""Forms for HoopTipp predictions views."""
+"""Forms for HindSight predictions views."""
 from __future__ import annotations
 
 from django import forms
@@ -8,7 +8,7 @@ from .theme_palettes import DEFAULT_THEME_KEY, THEME_CHOICES
 
 
 class UserPreferencesForm(forms.ModelForm):
-    """Allow active users to customize their HoopTipp experience."""
+    """Allow active users to customize their HindSight experience."""
 
     class Meta:
         model = UserPreferences
