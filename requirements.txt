@@ -3,3 +3,4 @@ balldontlie>=0.1.6
 whitenoise[brotli]>=6.6
 gunicorn>=21.2
 python-dotenv>=1.0.0
+psycopg2
