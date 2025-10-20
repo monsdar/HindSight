@@ -24,11 +24,27 @@ Demo yes/no card template - showcases simple binary choice
     </div>
   </header>
   
-  {# Points Badge #}
+  {# Points Badge and User Prediction Badges #}
   <div class="mt-3 flex flex-wrap items-center gap-2">
     <span class="rounded-full bg-emerald-500/20 border border-emerald-500/40 px-3 py-1 text-xs font-semibold uppercase text-emerald-300">
       {{ event.points }} pt{{ event.points|pluralize }}
     </span>
+    
+    {# User Prediction Badges #}
+    {% if users_who_predicted %}
+      <div class="flex flex-wrap items-center gap-1">
+        <span class="text-xs text-slate-400">Predicted by:</span>
+        {% for user in users_who_predicted %}
+          <span class="inline-flex items-center gap-1 rounded-full bg-slate-700/50 border border-slate-600/50 px-2 py-1 text-xs font-medium text-slate-300">
+            {% if user.display_name %}
+              {{ user.display_name }}
+            {% else %}
+              {{ user.username }}
+            {% endif %}
+          </span>
+        {% endfor %}
+      </div>
+    {% endif %}
   </div>
   
   {# Prediction Options - Large Yes/No Buttons #}

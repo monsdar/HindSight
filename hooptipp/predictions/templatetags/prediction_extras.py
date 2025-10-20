@@ -30,6 +30,10 @@ def render_prediction_card(context, event, user_tip=None):
     template_name = renderer.get_event_template(event)
     card_context = renderer.get_event_context(event, user=context.get("active_user"))
 
+    # Get users who have predicted this event
+    event_tip_users = context.get("event_tip_users", {})
+    users_who_predicted = event_tip_users.get(event.id, [])
+
     # Build render context
     render_context = {
         "event": event,
@@ -38,6 +42,7 @@ def render_prediction_card(context, event, user_tip=None):
         "lock_summary": context.get("lock_summary"),
         "card_context": card_context,
         "palette": context.get("active_theme_palette"),
+        "users_who_predicted": users_who_predicted,
     }
 
     return render_to_string(template_name, render_context, request=context.get("request"))

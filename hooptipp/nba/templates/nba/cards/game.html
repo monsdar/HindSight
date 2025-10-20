@@ -127,13 +127,31 @@ Shows team matchups with logos, venue, and game time.
     </p>
   {% endif %}
   
-  {# Footer - Points Badge #}
-  <div class="mt-4 flex items-center justify-between">
-    <span class="theme-accent-pill rounded-full px-3 py-1 text-xs font-semibold uppercase">
-      {{ event.points }} pt{{ event.points|pluralize }}
-    </span>
-    {% if event.is_bonus_event %}
-      <span class="text-xs font-semibold text-amber-400">⭐ Bonus Event</span>
+  {# Footer - Points Badge and User Prediction Badges #}
+  <div class="mt-4 flex flex-wrap items-center justify-between gap-2">
+    <div class="flex flex-wrap items-center gap-2">
+      <span class="theme-accent-pill rounded-full px-3 py-1 text-xs font-semibold uppercase">
+        {{ event.points }} pt{{ event.points|pluralize }}
+      </span>
+      {% if event.is_bonus_event %}
+        <span class="text-xs font-semibold text-amber-400">⭐ Bonus Event</span>
+      {% endif %}
+    </div>
+    
+    {# User Prediction Badges #}
+    {% if users_who_predicted %}
+      <div class="flex flex-wrap items-center gap-1">
+        <span class="text-xs text-slate-500">Predicted by:</span>
+        {% for user in users_who_predicted %}
+          <span class="inline-flex items-center gap-1 rounded-full bg-slate-700/50 border border-slate-600/50 px-2 py-1 text-xs font-medium text-slate-300">
+            {% if user.display_name %}
+              {{ user.display_name }}
+            {% else %}
+              {{ user.username }}
+            {% endif %}
+          </span>
+        {% endfor %}
+      </div>
     {% endif %}
   </div>
   

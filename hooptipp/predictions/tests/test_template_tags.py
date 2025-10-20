@@ -211,6 +211,122 @@ class RenderPredictionCardTemplateTagTests(TestCase):
         # Should contain event name
         self.assertIn("Test Event", rendered)
 
+    def test_render_prediction_card_includes_user_prediction_badges(self):
+        """Tag should include users who have predicted in context."""
+        # Create additional users
+        user2 = self.User.objects.create_user(username="user2")
+        user3 = self.User.objects.create_user(username="user3")
+        
+        # Create user tips for the event
+        UserTip.objects.create(
+            user=self.user,
+            tip_type=self.tip_type,
+            prediction_event=self.event,
+            prediction_option=self.prediction_option1,
+            selected_option=self.option1,
+            prediction="Option 1",
+        )
+        UserTip.objects.create(
+            user=user2,
+            tip_type=self.tip_type,
+            prediction_event=self.event,
+            prediction_option=self.prediction_option2,
+            selected_option=self.option2,
+            prediction="Option 2",
+        )
+
+        # Create event_tip_users mapping
+        event_tip_users = {
+            self.event.id: [self.user, user2]
+        }
+
+        template = Template(
+            "{% load prediction_extras %}"
+            "{% render_prediction_card event %}"
+        )
+        context = Context({
+            "event": self.event,
+            "active_user": self.user,
+            "event_tip_users": event_tip_users,
+        })
+
+        rendered = template.render(context)
+
+        # Should contain event name
+        self.assertIn("Test Event", rendered)
+        # Should contain "Predicted by:" text
+        self.assertIn("Predicted by:", rendered)
+        # Should contain usernames of users who predicted
+        self.assertIn("testuser", rendered)
+        self.assertIn("user2", rendered)
+        # Should not contain user3 who didn't predict
+        self.assertNotIn("user3", rendered)
+
+    def test_render_prediction_card_with_no_predictions(self):
+        """Tag should not show prediction badges when no users have predicted."""
+        template = Template(
+            "{% load prediction_extras %}"
+            "{% render_prediction_card event %}"
+        )
+        context = Context({
+            "event": self.event,
+            "active_user": self.user,
+            "event_tip_users": {},  # Empty mapping
+        })
+
+        rendered = template.render(context)
+
+        # Should contain event name
+        self.assertIn("Test Event", rendered)
+        # Should not contain "Predicted by:" text
+        self.assertNotIn("Predicted by:", rendered)
+
+    def test_render_prediction_card_with_user_display_names(self):
+        """Tag should show user display names when available."""
+        from hooptipp.predictions.models import UserPreferences
+        
+        # Create user with nickname
+        user_with_nickname = self.User.objects.create_user(username="nickname_user")
+        UserPreferences.objects.create(
+            user=user_with_nickname,
+            nickname="Cool User"
+        )
+        
+        # Create user tip
+        UserTip.objects.create(
+            user=user_with_nickname,
+            tip_type=self.tip_type,
+            prediction_event=self.event,
+            prediction_option=self.prediction_option1,
+            selected_option=self.option1,
+            prediction="Option 1",
+        )
+
+        # Manually set display name like the view does
+        user_with_nickname.display_name = "Cool User"
+
+        # Create event_tip_users mapping
+        event_tip_users = {
+            self.event.id: [user_with_nickname]
+        }
+
+        template = Template(
+            "{% load prediction_extras %}"
+            "{% render_prediction_card event %}"
+        )
+        context = Context({
+            "event": self.event,
+            "active_user": self.user,
+            "event_tip_users": event_tip_users,
+        })
+
+        rendered = template.render(context)
+
+        # Should contain the nickname
+        self.assertIn("Cool User", rendered)
+        # Should not contain the username
+        self.assertNotIn("nickname_user", rendered)
+
 
 class RenderResultCardTemplateTagTests(TestCase):
     """Tests for {% render_result_card %} template tag."""
