@@ -1,4 +1,5 @@
 import os
+import sys
 from pathlib import Path
 from typing import Any, Dict, Iterable, Mapping, Optional
 from urllib.parse import parse_qs, urlparse
@@ -89,6 +90,7 @@ MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+    'hooptipp.middleware.PrivacyGateMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -245,3 +247,10 @@ else:
     STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# Privacy Gate Configuration
+PRIVACY_GATE_ENABLED = os.environ.get('PRIVACY_GATE_ENABLED', 'True').lower() == 'true'
+PRIVACY_GATE_CORRECT_ANSWER = os.environ.get('PRIVACY_GATE_ANSWER', 'ORL,GSW,BOS,OKC').split(',')
+
+# Test Configuration
+TESTING = 'test' in sys.argv or 'pytest' in sys.argv[0] if sys.argv else False

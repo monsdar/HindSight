@@ -105,6 +105,7 @@ Flexible organization system:
 
    HOOPTIPP_ADMIN_USER=hoop
    HOOPTIPP_ADMIN_PASSWORD=hoop
+   PRIVACY_GATE_ANSWER=GSW,CLE,MIA
    ```
 
 1. **Set up the database:**

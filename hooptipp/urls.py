@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.http import HttpResponse
 from django.urls import include, path
 
-from .views import health
+from .views import health, privacy_gate
 
 
 def robots_txt(request):
@@ -17,6 +17,7 @@ Disallow: /
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path('privacy-gate/', privacy_gate, name='privacy_gate'),
     path('', include('hooptipp.predictions.urls', namespace='predictions')),
     path('health/', health, name='health'),
     path('robots.txt', robots_txt, name='robots_txt'),

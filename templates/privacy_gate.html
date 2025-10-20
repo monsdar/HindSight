@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Private Platform Access{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
+    <div class="max-w-4xl w-full">
+        <!-- Header -->
+        <div class="text-center mb-8">
+            <h1 class="text-4xl font-bold text-gray-900 mb-4">HindSight</h1>
+            <h2 class="text-2xl font-semibold text-gray-700 mb-2">✋ This is a private page! ✋</h2>
+            <p class="text-lg text-gray-600 max-w-2xl mx-auto">
+                Please complete the challenge below to access the site.
+            </p>
+        </div>
+
+        <!-- Challenge Card -->
+        <div class="bg-white rounded-2xl shadow-xl p-8 mb-8">
+            <div class="text-center mb-6">
+                <h3 class="text-xl font-semibold text-gray-800 mb-2">NBA Team Challenge</h3>
+                <p class="text-gray-600">{{ challenge_question }}</p>
+            </div>
+
+            <form method="post" id="privacy-gate-form" class="space-y-6">
+                {% csrf_token %}
+                
+                <!-- Team Selection Grid -->
+                <div class="grid grid-cols-6 gap-4" id="team-grid">
+                    {% for team in challenge_teams %}
+                    <div class="team-option relative group cursor-pointer" data-team="{{ team.short_name }}">
+                        <input 
+                            type="checkbox" 
+                            name="selected_teams" 
+                            value="{{ team.short_name }}" 
+                            id="team-{{ team.id }}"
+                            class="absolute opacity-0 peer"
+                        >
+                        <label 
+                            for="team-{{ team.id }}" 
+                            class="flex flex-col items-center p-4 border-2 border-gray-200 rounded-xl hover:border-blue-300 hover:bg-blue-50 transition-all duration-200 peer-checked:border-blue-500 peer-checked:bg-blue-100 peer-checked:shadow-md"
+                        >
+                            <div class="w-16 h-16 mb-2 flex items-center justify-center">
+                                <img 
+                                    src="{{ team.logo_url }}" 
+                                    alt="{{ team.short_name }} logo"
+                                    class="max-w-full max-h-full object-contain"
+                                    onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
+                                >
+                                <div class="w-16 h-16 bg-gray-200 rounded-full flex items-center justify-center text-gray-500 text-xs font-bold hidden">
+                                    {{ team.short_name }}
+                                </div>
+                            </div>
+                        </label>
+                    </div>
+                    {% endfor %}
+                </div>
+
+                <!-- Submit Button -->
+                <div class="text-center">
+                    <button 
+                        type="submit" 
+                        id="submit-btn"
+                        class="bg-blue-600 text-white py-3 px-8 rounded-lg font-semibold hover:bg-blue-700 transition-colors duration-200 disabled:bg-gray-400 disabled:cursor-not-allowed"
+                    >
+                        Submit Answer
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Footer -->
+        <div class="text-center text-sm text-gray-500">
+            <p>This challenge helps ensure only authorized users can access the platform.</p>
+        </div>
+    </div>
+</div>
+
+<style>
+.team-option label {
+    transition: all 0.2s ease;
+}
+
+.team-option label:hover {
+    transform: translateY(-2px);
+}
+
+.team-option input:checked + label {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .grid-cols-6 {
+        grid-template-columns: repeat(4, 1fr);
+    }
+}
+
+@media (max-width: 480px) {
+    .grid-cols-6 {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+</style>
+{% endblock %}
