@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import threading
 import time
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
-from typing import Any, Optional
+from typing import Any, Optional, List, Dict
 
 from balldontlie.exceptions import BallDontLieException
 from django.utils import timezone
@@ -221,7 +222,7 @@ def sync_teams() -> SyncResult:
 
 def sync_players(throttle_seconds: float = PLAYER_SYNC_THROTTLE_SECONDS) -> SyncResult:
     """
-    Fetch all active NBA players from BallDontLie and persist them as Options.
+    Fetch all NBA players from BallDontLie and persist them as Options.
 
     The API is rate limited to five requests per minute. ``throttle_seconds``
     governs the sleep interval between subsequent requests to stay within that
@@ -247,7 +248,7 @@ def sync_players(throttle_seconds: float = PLAYER_SYNC_THROTTLE_SECONDS) -> Sync
             params["cursor"] = cursor
 
         try:
-            response = client.nba.players.list_active(**params)
+            response = client.nba.players.list(**params)
         except BallDontLieException:
             logger.exception("Unable to fetch player list from BallDontLie API.")
             break
@@ -272,8 +273,15 @@ def sync_players(throttle_seconds: float = PLAYER_SYNC_THROTTLE_SECONDS) -> Sync
             short_name = f"{first_name[0]}. {last_name}" if first_name else last_name
             description = f"{position} - {team_abbr}" if team_abbr else position
 
+            # Generate a unique slug by including the player ID to avoid duplicates
+            base_slug = f"{first_name}-{last_name}".lower().replace(" ", "-")
+            # Remove any special characters that might cause issues
+            base_slug = re.sub(r'[^a-z0-9\-]', '', base_slug)
+            # Ensure slug is unique by appending player ID
+            unique_slug = f"{base_slug}-{player_id}"
+            
             defaults = {
-                "slug": f"{first_name}-{last_name}".lower().replace(" ", "-"),
+                "slug": unique_slug,
                 "name": display_name,
                 "short_name": short_name,
                 "description": description,
@@ -668,3 +676,231 @@ def get_mvp_standings() -> list:
     # For now, return empty list as this requires additional data sources
     # Extensions can implement their own MVP tracking system
     return []
+
+
+# HoopsHype scraping functionality for player data
+def _get_hoopshype_team_urls() -> Dict[str, str]:
+    """
+    Return mapping of team names to their HoopsHype salary page URLs.
+    
+    Returns:
+        Dict mapping team names to their HoopsHype URLs
+    """
+    return {
+        'Atlanta Hawks': 'https://eu.hoopshype.com/salaries/teams/atlanta-hawks/1/',
+        'Boston Celtics': 'https://eu.hoopshype.com/salaries/teams/boston-celtics/2/',
+        'Brooklyn Nets': 'https://eu.hoopshype.com/salaries/teams/brooklyn-nets/17/',
+        'Charlotte Hornets': 'https://eu.hoopshype.com/salaries/teams/charlotte-hornets/5312/',
+        'Chicago Bulls': 'https://eu.hoopshype.com/salaries/teams/chicago-bulls/4/',
+        'Cleveland Cavaliers': 'https://eu.hoopshype.com/salaries/teams/cleveland-cavaliers/5/',
+        'Dallas Mavericks': 'https://eu.hoopshype.com/salaries/teams/dallas-mavericks/6/',
+        'Denver Nuggets': 'https://eu.hoopshype.com/salaries/teams/denver-nuggets/7/',
+        'Detroit Pistons': 'https://eu.hoopshype.com/salaries/teams/detroit-pistons/8/',
+        'Golden State Warriors': 'https://eu.hoopshype.com/salaries/teams/golden-state-warriors/9/',
+        'Houston Rockets': 'https://eu.hoopshype.com/salaries/teams/houston-rockets/10/',
+        'Indiana Pacers': 'https://eu.hoopshype.com/salaries/teams/indiana-pacers/11/',
+        'LA Clippers': 'https://eu.hoopshype.com/salaries/teams/los-angeles-clippers/12/',
+        'Los Angeles Lakers': 'https://eu.hoopshype.com/salaries/teams/los-angeles-lakers/13/',
+        'Memphis Grizzlies': 'https://eu.hoopshype.com/salaries/teams/memphis-grizzlies/29/',
+        'Miami Heat': 'https://eu.hoopshype.com/salaries/teams/miami-heat/14/',
+        'Milwaukee Bucks': 'https://eu.hoopshype.com/salaries/teams/milwaukee-bucks/15/',
+        'Minnesota Timberwolves': 'https://eu.hoopshype.com/salaries/teams/minnesota-timberwolves/16/',
+        'New Orleans Pelicans': 'https://eu.hoopshype.com/salaries/teams/new-orleans-pelicans/3/',
+        'New York Knicks': 'https://eu.hoopshype.com/salaries/teams/new-york-knicks/18/',
+        'Oklahoma City Thunder': 'https://eu.hoopshype.com/salaries/teams/oklahoma-city-thunder/25/',
+        'Orlando Magic': 'https://eu.hoopshype.com/salaries/teams/orlando-magic/19/',
+        'Philadelphia 76ers': 'https://eu.hoopshype.com/salaries/teams/philadelphia-76ers/20/',
+        'Phoenix Suns': 'https://eu.hoopshype.com/salaries/teams/phoenix-suns/21/',
+        'Portland Trail Blazers': 'https://eu.hoopshype.com/salaries/teams/portland-trail-blazers/22/',
+        'Sacramento Kings': 'https://eu.hoopshype.com/salaries/teams/sacramento-kings/23/',
+        'San Antonio Spurs': 'https://eu.hoopshype.com/salaries/teams/san-antonio-spurs/24/',
+        'Toronto Raptors': 'https://eu.hoopshype.com/salaries/teams/toronto-raptors/28/',
+        'Utah Jazz': 'https://eu.hoopshype.com/salaries/teams/utah-jazz/26/',
+        'Washington Wizards': 'https://eu.hoopshype.com/salaries/teams/washington-wizards/27/',
+    }
+
+
+def _scrape_team_roster(team_name: str, team_url: str) -> List[Dict[str, Any]]:
+    """
+    Scrape a single team's roster from HoopsHype.
+    
+    Args:
+        team_name: Name of the team
+        team_url: URL to the team's salary page on HoopsHype
+    
+    Returns:
+        List of player dictionaries with name, position, salary, etc.
+    """
+    try:
+        import requests
+        from bs4 import BeautifulSoup
+        
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        }
+        
+        response = requests.get(team_url, headers=headers, timeout=10)
+        response.raise_for_status()
+        
+        soup = BeautifulSoup(response.content, 'html.parser')
+        players = []
+        
+        # Look for the roster table - this selector may need adjustment based on actual HTML
+        roster_table = soup.find('table', class_='hh-salaries-ranking-table')
+        if not roster_table:
+            # Try alternative selectors
+            roster_table = soup.find('table')
+        
+        if roster_table:
+            rows = roster_table.find_all('tr')
+            for row in rows[1:]:  # Skip header row
+                cells = row.find_all(['td', 'th'])
+                if len(cells) >= 2:
+                    # Extract player name (in cell 1, cell 0 is just row number)
+                    name_cell = cells[1]
+                    player_name = name_cell.get_text(strip=True)
+                    
+                    # Skip if this looks like a header, empty row, or team total
+                    if (not player_name or 
+                        player_name.lower() in ['player', 'name', ''] or
+                        player_name.startswith('$') or  # Skip salary amounts
+                        cells[0].get_text(strip=True).lower() == 'total'):  # Skip total rows
+                        continue
+                    
+                    # Extract current season salary (cell 2 is 2025-26 salary)
+                    salary = cells[2].get_text(strip=True) if len(cells) > 2 else ''
+                    
+                    # For position, we'll need to get it from the player's individual page
+                    # or use a default since HoopsHype salary pages don't show position
+                    position = ''  # Will be filled from other sources or left empty
+                    
+                    # Clean up the data
+                    player_name = re.sub(r'\s+', ' ', player_name).strip()
+                    salary = re.sub(r'\s+', ' ', salary).strip()
+                    
+                    if player_name:  # Only add if we have a valid name
+                        players.append({
+                            'name': player_name,
+                            'position': position,
+                            'salary': salary,
+                            'team': team_name,
+                        })
+        
+        logger.info(f"Scraped {len(players)} players from {team_name}")
+        return players
+        
+    except Exception as e:
+        logger.error(f"Failed to scrape team roster from {team_url}: {e}")
+        return []
+
+
+def _parse_player_name(full_name: str) -> tuple[str, str]:
+    """
+    Parse a full player name into first and last name.
+    
+    Args:
+        full_name: Full player name like "LeBron James" or "D'Angelo Russell"
+    
+    Returns:
+        Tuple of (first_name, last_name)
+    """
+    name_parts = full_name.strip().split()
+    if len(name_parts) >= 2:
+        first_name = name_parts[0]
+        last_name = ' '.join(name_parts[1:])
+    elif len(name_parts) == 1:
+        first_name = name_parts[0]
+        last_name = ''
+    else:
+        first_name = ''
+        last_name = ''
+    
+    return first_name, last_name
+
+
+def sync_players_from_hoopshype() -> SyncResult:
+    """
+    Scrape all NBA team rosters from HoopsHype and sync to database.
+    
+    This function scrapes player data from HoopsHype salary pages for all 30 NBA teams.
+    It's designed to be run once or twice per season to seed initial player data.
+    
+    Returns:
+        SyncResult with created and updated player counts
+    """
+    logger.info("Starting HoopsHype player sync...")
+    
+    team_urls = _get_hoopshype_team_urls()
+    players_cat = NbaPlayerManager.get_category()
+    created = 0
+    updated = 0
+    total_players = 0
+    
+    for team_name, team_url in team_urls.items():
+        logger.info(f"Scraping roster for {team_name}")
+        
+        players = _scrape_team_roster(team_name, team_url)
+        total_players += len(players)
+        
+        for player_data in players:
+            try:
+                # Parse player name
+                first_name, last_name = _parse_player_name(player_data['name'])
+                
+                if not (first_name or last_name):
+                    logger.warning(f"Skipping player with invalid name: {player_data}")
+                    continue
+                
+                # Generate unique slug using team name and full name for better uniqueness
+                base_slug = f"{first_name}-{last_name}".lower().replace(" ", "-")
+                base_slug = re.sub(r'[^a-z0-9\-]', '', base_slug)
+                # Use team name and full name hash for better uniqueness
+                team_slug = team_name.lower().replace(" ", "-").replace(".", "")
+                team_slug = re.sub(r'[^a-z0-9\-]', '', team_slug)
+                unique_slug = f"{base_slug}-{team_slug}-{abs(hash(player_data['name'] + team_name)) % 10000}"
+                
+                # Create display name and short name
+                display_name = f"{first_name} {last_name}".strip()
+                short_name = f"{first_name[0]}. {last_name}" if first_name else last_name
+                
+                # Create description
+                description = f"{player_data['position']} - {team_name}" if player_data['position'] else team_name
+                
+                # Use team name + player name hash as external ID for better uniqueness
+                external_id = f"hoopshype-{team_slug}-{abs(hash(player_data['name'] + team_name))}"
+                
+                defaults = {
+                    "slug": unique_slug,
+                    "name": display_name,
+                    "short_name": short_name,
+                    "description": description,
+                    "metadata": {
+                        "position": player_data['position'],
+                        "team": team_name,
+                        "salary": player_data['salary'],
+                        "source": "hoopshype",
+                    },
+                    "is_active": True,
+                    "sort_order": 0,
+                }
+                
+                _, created_flag = Option.objects.update_or_create(
+                    category=players_cat,
+                    external_id=external_id,
+                    defaults=defaults,
+                )
+                
+                if created_flag:
+                    created += 1
+                else:
+                    updated += 1
+                    
+            except Exception as e:
+                logger.error(f"Failed to process player {player_data}: {e}")
+                continue
+        
+        # Small delay to be respectful to the server
+        time.sleep(1)
+    
+    logger.info(f"HoopsHype sync completed: {created} created, {updated} updated, {total_players} total players processed")
+    return SyncResult(created=created, updated=updated, removed=0)

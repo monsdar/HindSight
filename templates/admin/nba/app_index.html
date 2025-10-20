@@ -1,6 +1,39 @@
 {% extends "admin/app_index.html" %}
 {% load i18n %}
 
+{% block extrahead %}
+{{ block.super }}
+<style>
+  /* Dark mode support for NBA admin */
+  @media (prefers-color-scheme: dark) {
+    .module {
+      background-color: #2d2d2d;
+      border: 1px solid #404040;
+    }
+    
+    .module h2 {
+      color: #e0e0e0;
+    }
+    
+    .module table {
+      color: #e0e0e0;
+    }
+    
+    .module td {
+      border-bottom: 1px solid #404040;
+    }
+    
+    .addlink {
+      color: #64b5f6 !important;
+    }
+    
+    .addlink:hover {
+      color: #90caf9 !important;
+    }
+  }
+</style>
+{% endblock %}
+
 {% block content %}
 <div id="content-main">
   <div class="module">
@@ -14,7 +47,7 @@
             </a>
           </td>
           <td>
-            {% trans 'Sync NBA teams and players from BallDontLie API' %}
+            {% trans 'Sync NBA teams from BallDontLie API and players from HoopsHype' %}
           </td>
         </tr>
         <tr>

@@ -10,7 +10,9 @@ from hooptipp.nba.services import (
     get_mvp_standings,
     get_player_card_data,
     get_team_logo_url,
+    sync_players,
 )
+from hooptipp.nba.managers import NbaPlayerManager
 from hooptipp.predictions.models import Option, OptionCategory
 
 
@@ -364,3 +366,99 @@ class GetMvpStandingsTests(TestCase):
 
         self.assertIsInstance(standings, list)
         self.assertEqual(len(standings), 0)
+
+
+class PlayerSyncSlugUniquenessTests(TestCase):
+    """Tests for player sync slug uniqueness to prevent duplicate constraint errors."""
+
+    def setUp(self):
+        """Set up test data."""
+        # Use the same category creation method as the sync function
+        self.players_cat = NbaPlayerManager.get_category()
+        
+        # Clear the BDL client cache to ensure fresh mocks
+        from hooptipp.nba.services import _BDL_CLIENT_CACHE
+        _BDL_CLIENT_CACHE.clear()
+
+    def test_generates_unique_slugs_for_players_with_same_name(self):
+        """Test that players with the same name get unique slugs."""
+        # Mock the API response with players having the same name
+        # Create mock player objects with attributes
+        mock_player1 = mock.Mock()
+        mock_player1.id = 1
+        mock_player1.first_name = 'John'
+        mock_player1.last_name = 'Smith'
+        mock_player1.position = 'G'
+        mock_player1.team.abbreviation = 'LAL'
+        mock_player1.team.full_name = 'Los Angeles Lakers'
+        
+        mock_player2 = mock.Mock()
+        mock_player2.id = 2
+        mock_player2.first_name = 'John'
+        mock_player2.last_name = 'Smith'
+        mock_player2.position = 'F'
+        mock_player2.team.abbreviation = 'BOS'
+        mock_player2.team.full_name = 'Boston Celtics'
+        
+        mock_players = [mock_player1, mock_player2]
+        
+        # Mock the API client and API key
+        with mock.patch('hooptipp.nba.services._get_bdl_api_key', return_value='test-api-key'):
+            # Create a real client but mock its API calls
+            from hooptipp.nba.services import _build_bdl_client
+            client = _build_bdl_client()
+            
+            # Mock the API response
+            mock_response = mock.Mock()
+            mock_response.data = mock_players
+            mock_response.meta = None
+            
+            # Mock the players.list method
+            with mock.patch.object(client.nba.players, 'list', return_value=mock_response):
+                # Run the sync
+                result = sync_players()
+                
+                # Verify both players were created
+                self.assertEqual(result.created, 2)
+                
+                # Verify both players have unique slugs
+                players = Option.objects.filter(category=self.players_cat)
+                slugs = [player.slug for player in players]
+                
+                # Should have unique slugs with player IDs
+                self.assertIn('john-smith-1', slugs)
+                self.assertIn('john-smith-2', slugs)
+                self.assertEqual(len(set(slugs)), 2)  # All slugs should be unique
+
+    def test_handles_special_characters_in_names(self):
+        """Test that special characters in names are properly handled."""
+        # Create mock player object with special characters
+        mock_player = mock.Mock()
+        mock_player.id = 3
+        mock_player.first_name = "D'Angelo"
+        mock_player.last_name = 'Russell'
+        mock_player.position = 'G'
+        mock_player.team.abbreviation = 'LAL'
+        mock_player.team.full_name = 'Los Angeles Lakers'
+        
+        mock_players = [mock_player]
+        
+        with mock.patch('hooptipp.nba.services._get_bdl_api_key', return_value='test-api-key'):
+            # Create a real client but mock its API calls
+            from hooptipp.nba.services import _build_bdl_client
+            client = _build_bdl_client()
+            
+            # Mock the API response
+            mock_response = mock.Mock()
+            mock_response.data = mock_players
+            mock_response.meta = None
+            
+            # Mock the players.list method
+            with mock.patch.object(client.nba.players, 'list', return_value=mock_response):
+                result = sync_players()
+                
+                self.assertEqual(result.created, 1)
+                
+                player = Option.objects.filter(category=self.players_cat).first()
+                # Special characters should be removed from slug
+                self.assertEqual(player.slug, 'dangelo-russell-3')

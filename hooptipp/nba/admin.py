@@ -23,7 +23,7 @@ from hooptipp.predictions.models import (
 )
 
 from .models import NbaUserPreferences, ScheduledGame
-from .services import sync_players, sync_teams, _build_bdl_client
+from .services import sync_players, sync_players_from_hoopshype, sync_teams, _build_bdl_client
 
 logger = logging.getLogger(__name__)
 
@@ -503,15 +503,15 @@ def _run_player_sync_background():
     """
     Background worker function for player sync.
     
-    Runs the sync and logs results. This function is executed in a separate thread
+    Runs the HoopsHype sync and logs results. This function is executed in a separate thread
     to avoid blocking the admin request.
     """
     try:
-        logger.info('Starting background player sync...')
-        result = sync_players()
+        logger.info('Starting background HoopsHype player sync...')
+        result = sync_players_from_hoopshype()
         
         if not result.changed:
-            logger.info('Player sync completed with no changes.')
+            logger.info('HoopsHype player sync completed with no changes.')
         else:
             message_parts = []
             if result.created:
@@ -521,13 +521,13 @@ def _run_player_sync_background():
             if result.removed:
                 message_parts.append(f'{result.removed} player(s) removed')
             
-            logger.info(f'Player sync completed successfully: {", ".join(message_parts)}.')
+            logger.info(f'HoopsHype player sync completed successfully: {", ".join(message_parts)}.')
     except Exception as e:
-        logger.exception(f'Background player sync failed: {str(e)}')
+        logger.exception(f'Background HoopsHype player sync failed: {str(e)}')
 
 
 def sync_players_view(request: HttpRequest):
-    """Sync NBA players from BallDontLie API in the background."""
+    """Sync NBA players from HoopsHype in the background."""
     if request.method != 'POST':
         return HttpResponseNotAllowed(['POST'])
     
@@ -544,7 +544,7 @@ def sync_players_view(request: HttpRequest):
     
     messages.info(
         request,
-        'Player sync started in the background. This may take several minutes due to API rate limits. '
+        'HoopsHype player sync started in the background. This will take about 30 seconds to complete. '
         'Check the server logs for completion status. You can continue working normally.'
     )
     

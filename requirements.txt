@@ -4,3 +4,5 @@ whitenoise[brotli]>=6.6
 gunicorn>=21.2
 python-dotenv>=1.0.0
 psycopg2
+requests>=2.31.0
+beautifulsoup4>=4.12.0

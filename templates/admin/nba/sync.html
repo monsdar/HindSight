@@ -4,6 +4,48 @@
 {% block extrahead %}
 {{ block.super }}
 <style>
+  /* Light mode styles */
+  :root {
+    --bg-primary: #ffffff;
+    --bg-secondary: #f8f9fa;
+    --bg-info: #e7f3ff;
+    --bg-warning: #fff3cd;
+    --text-primary: #333333;
+    --text-secondary: #666666;
+    --text-info: #1976D2;
+    --text-warning: #856404;
+    --border-color: #dddddd;
+    --border-info: #2196F3;
+    --border-warning: #ffc107;
+    --button-bg: #417690;
+    --button-hover: #2e5468;
+    --link-color: #417690;
+    --shadow: rgba(0,0,0,0.05);
+    --shadow-hover: rgba(0,0,0,0.1);
+  }
+
+  /* Dark mode styles */
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg-primary: #1a1a1a;
+      --bg-secondary: #2d2d2d;
+      --bg-info: #1e3a5f;
+      --bg-warning: #4a3c00;
+      --text-primary: #e0e0e0;
+      --text-secondary: #b0b0b0;
+      --text-info: #64b5f6;
+      --text-warning: #ffb74d;
+      --border-color: #404040;
+      --border-info: #2196F3;
+      --border-warning: #ffc107;
+      --button-bg: #5a7a8a;
+      --button-hover: #4a6a7a;
+      --link-color: #64b5f6;
+      --shadow: rgba(0,0,0,0.2);
+      --shadow-hover: rgba(0,0,0,0.3);
+    }
+  }
+
   .sync-container {
     max-width: 900px;
     margin: 20px auto;
@@ -11,21 +53,22 @@
   
   .info-box {
     padding: 20px;
-    background-color: #e7f3ff;
-    border-left: 4px solid #2196F3;
+    background-color: var(--bg-info);
+    border-left: 4px solid var(--border-info);
     margin-bottom: 30px;
     border-radius: 4px;
   }
   
   .info-box h3 {
     margin-top: 0;
-    color: #1976D2;
+    color: var(--text-info);
     font-size: 16px;
   }
   
   .info-box p {
     margin: 8px 0;
     line-height: 1.6;
+    color: var(--text-primary);
   }
   
   .info-box ul {
@@ -35,6 +78,11 @@
   
   .info-box li {
     margin: 5px 0;
+    color: var(--text-primary);
+  }
+  
+  .info-box a {
+    color: var(--link-color);
   }
   
   .sync-actions {
@@ -45,21 +93,21 @@
   }
   
   .sync-card {
-    background: white;
-    border: 1px solid #ddd;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
     border-radius: 8px;
     padding: 25px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    box-shadow: 0 2px 4px var(--shadow);
     transition: box-shadow 0.3s ease;
   }
   
   .sync-card:hover {
-    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    box-shadow: 0 4px 8px var(--shadow-hover);
   }
   
   .sync-card h2 {
     margin-top: 0;
-    color: #333;
+    color: var(--text-primary);
     font-size: 20px;
     display: flex;
     align-items: center;
@@ -71,13 +119,13 @@
   }
   
   .sync-card p {
-    color: #666;
+    color: var(--text-secondary);
     line-height: 1.6;
     margin: 15px 0;
   }
   
   .sync-card ul {
-    color: #666;
+    color: var(--text-secondary);
     line-height: 1.6;
     margin: 15px 0;
     padding-left: 20px;
@@ -88,7 +136,7 @@
   }
   
   .sync-button {
-    background-color: #417690;
+    background-color: var(--button-bg);
     color: white;
     padding: 12px 24px;
     border: none;
@@ -101,7 +149,7 @@
   }
   
   .sync-button:hover {
-    background-color: #2e5468;
+    background-color: var(--button-hover);
   }
   
   .sync-button:active {
@@ -110,25 +158,53 @@
   
   .warning-box {
     padding: 15px;
-    background-color: #fff3cd;
-    border-left: 4px solid #ffc107;
+    background-color: var(--bg-warning);
+    border-left: 4px solid var(--border-warning);
     margin: 15px 0;
     border-radius: 4px;
   }
   
   .warning-box strong {
-    color: #856404;
+    color: var(--text-warning);
   }
   
   .warning-box p {
-    color: #856404;
+    color: var(--text-warning);
     margin: 5px 0;
+  }
+  
+  .success-box {
+    padding: 15px;
+    background-color: #d4edda;
+    border-left: 4px solid #28a745;
+    margin: 15px 0;
+    border-radius: 4px;
+  }
+  
+  .success-box strong {
+    color: #155724;
+  }
+  
+  .success-box p {
+    color: #155724;
+    margin: 5px 0;
+  }
+  
+  @media (prefers-color-scheme: dark) {
+    .success-box {
+      background-color: #1e4d2b;
+    }
+    
+    .success-box strong,
+    .success-box p {
+      color: #81c784;
+    }
   }
   
   .back-link {
     display: inline-block;
     margin-top: 20px;
-    color: #417690;
+    color: var(--link-color);
     text-decoration: none;
     font-weight: bold;
   }
@@ -161,7 +237,10 @@
     <div class="info-box">
       <h3>ℹ️ {% trans 'About NBA Data Sync' %}</h3>
       <p>
-        {% trans 'This page allows you to synchronize NBA teams and players from the BallDontLie API into the system.' %}
+        {% trans 'This page allows you to synchronize NBA teams and players into the system.' %}
+      </p>
+      <p>
+        {% trans 'Teams are synced from the BallDontLie API, while players are synced from HoopsHype for better performance and current roster data.' %}
       </p>
       <p>
         {% trans 'The data is stored as Options in the generic prediction system, which allows for flexible categorization and management.' %}
@@ -170,7 +249,7 @@
         <li>{% trans 'Teams are stored in the "nba-teams" category' %}</li>
         <li>{% trans 'Players are stored in the "nba-players" category' %}</li>
         <li>{% trans 'Existing records are updated with latest data' %}</li>
-        <li>{% trans 'Records no longer in the API are removed' %}</li>
+        <li>{% trans 'Players include current salary information' %}</li>
       </ul>
     </div>
     
@@ -186,7 +265,7 @@
         <p>
           <strong>{% trans 'Processing time:' %}</strong> {% trans '~10 seconds' %}
         </p>
-        <form method="post" action="{% url 'admin:nba_sync_teams' %}" onsubmit="return confirm('{% trans 'Start team synchronization?' %}');">
+        <form method="post" action="{% url 'admin:nba_sync_teams' %}">
           {% csrf_token %}
           <button type="submit" class="sync-button">
             🔄 {% trans 'Sync Teams Now' %}
@@ -200,18 +279,18 @@
           {% trans 'Sync Players' %}
         </h2>
         <p>
-          {% trans 'Synchronize all active NBA players from the BallDontLie API. This includes player names, positions, and current team assignments.' %}
+          {% trans 'Synchronize all current NBA players from HoopsHype. This includes player names, current team assignments, and salary information.' %}
         </p>
         <div class="warning-box">
           <strong>⚠️ {% trans 'Note:' %}</strong>
           <p>
-            {% trans 'Player sync runs in the background and may take several minutes due to API rate limits (5 requests per minute). Check the server logs for completion status.' %}
+            {% trans 'Player sync runs in the background and takes about 30 seconds to complete. Check the server logs for completion status.' %}
           </p>
         </div>
-        <form method="post" action="{% url 'admin:nba_sync_players' %}" onsubmit="return confirm('{% trans 'Start background player synchronization? This will run asynchronously and may take several minutes. Check server logs for completion status.' %}');">
+        <form method="post" action="{% url 'admin:nba_sync_players' %}">
           {% csrf_token %}
           <button type="submit" class="sync-button">
-            🔄 {% trans 'Sync Players (Background)' %}
+            🔄 {% trans 'Sync Players' %}
           </button>
         </form>
       </div>
