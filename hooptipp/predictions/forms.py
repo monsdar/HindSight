@@ -15,6 +15,7 @@ class UserPreferencesForm(forms.ModelForm):
         fields = [
             "nickname",
             "theme",
+            "activation_pin",
         ]
         widgets = {
             "nickname": forms.TextInput(
@@ -23,6 +24,7 @@ class UserPreferencesForm(forms.ModelForm):
                     "placeholder": "Enter a nickname",
                 }
             ),
+            "activation_pin": forms.HiddenInput(),  # We'll handle this with custom JavaScript
         }
 
     def __init__(self, *args: object, **kwargs: object) -> None:
@@ -41,3 +43,5 @@ class UserPreferencesForm(forms.ModelForm):
             ),
             help_text="Choose an NBA-inspired colorway.",
         )
+        self.fields["activation_pin"].label = "Activation PIN"
+        self.fields["activation_pin"].help_text = "Select 3 NBA teams as your activation PIN. This prevents others from activating your account."

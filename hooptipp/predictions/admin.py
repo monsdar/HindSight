@@ -716,7 +716,7 @@ class UserFavoriteAdmin(admin.ModelAdmin):
 
 @admin.register(UserPreferences)
 class UserPreferencesAdmin(admin.ModelAdmin):
-    list_display = ('user', 'nickname', 'theme', 'updated_at')
+    list_display = ('user', 'nickname', 'theme', 'has_pin', 'updated_at')
     search_fields = ('user__username', 'nickname')
     autocomplete_fields = ('user',)
     
@@ -724,12 +724,21 @@ class UserPreferencesAdmin(admin.ModelAdmin):
         (None, {
             'fields': ('user', 'nickname', 'theme')
         }),
+        ('Security', {
+            'fields': ('activation_pin',),
+            'description': 'Comma-separated NBA team abbreviations (e.g., LAL,GSW,BOS)',
+        }),
         ('Timestamps', {
             'fields': ('created_at', 'updated_at'),
             'classes': ('collapse',),
         }),
     )
     readonly_fields = ('created_at', 'updated_at')
+    
+    def has_pin(self, obj):
+        return bool(obj.activation_pin)
+    has_pin.boolean = True
+    has_pin.short_description = 'Has PIN'
 
 
 # Register the EventSourceAdmin manually

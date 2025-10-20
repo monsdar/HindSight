@@ -59,7 +59,7 @@
 
       {# 2. USER SELECTION, ACTIVATION AND CUSTOMIZATION #}
       <section class="rounded-2xl border border-slate-800 bg-slate-900 p-4 shadow-lg shadow-slate-900/30">
-        <form method="post" class="flex flex-wrap items-end gap-3 p-4 shadow-lg shadow-slate-900/30">
+        <form method="post" id="user-activation-form" class="flex flex-wrap items-end gap-3 p-4 shadow-lg shadow-slate-900/30">
           {% csrf_token %}
           <input type="hidden" name="set_active_user" value="1" />
           <div class="flex-1">
@@ -72,9 +72,8 @@
             </select>
           </div>
           <button
-            type="submit"
-            name="active_user_action"
-            value="activate"
+            type="button"
+            id="activate-user-btn"
             class="theme-accent-bg theme-accent-shadow inline-flex items-center gap-2 rounded-lg px-4 py-2 font-semibold transition"
           >
             Activate user
@@ -138,6 +137,19 @@
                       <p class="mt-2 text-xs text-slate-500">The team that appears in highlights around your profile.</p>
                       {% if preferences_form.favorite_team_id.errors %}
                         <p class="mt-2 text-sm text-red-300">{{ preferences_form.favorite_team_id.errors|join:', ' }}</p>
+                      {% endif %}
+                    </div>
+                    <div>
+                      <label class="block text-sm font-semibold uppercase tracking-wide text-slate-400">Activation PIN</label>
+                      <div class="mt-2">
+                        <button type="button" id="edit-pin-btn" class="theme-accent-outline w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-left text-slate-100 focus:outline-none">
+                          <span id="pin-display">Click to set PIN</span>
+                        </button>
+                      </div>
+                      <p class="mt-2 text-xs text-slate-500">Select 3 NBA teams as your activation PIN. This prevents others from activating your account.</p>
+                      {{ preferences_form.activation_pin }}
+                      {% if preferences_form.activation_pin.errors %}
+                        <p class="mt-2 text-sm text-red-300">{{ preferences_form.activation_pin.errors|join:', ' }}</p>
                       {% endif %}
                     </div>
                     <div>
@@ -256,4 +268,325 @@
       {% endif %}
     </div>
   {% endwith %}
+
+  {# PIN Entry Modal #}
+  <div id="pin-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center">
+    <div class="bg-slate-900 rounded-2xl border border-slate-800 p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+      <div class="flex justify-between items-center mb-4">
+        <h3 class="text-xl font-semibold theme-accent-text">Enter Activation PIN</h3>
+        <button type="button" id="close-pin-modal" class="text-slate-400 hover:text-slate-200">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+          </svg>
+        </button>
+      </div>
+      
+      <p class="text-slate-300 mb-6">Select the 3 NBA teams for <span id="selected-user-name" class="font-semibold theme-accent-text"></span>'s activation PIN:</p>
+      
+      <form id="pin-form" method="post">
+        {% csrf_token %}
+        <input type="hidden" name="set_active_user" value="1" />
+        <input type="hidden" name="active_user_action" value="activate" />
+        <input type="hidden" id="pin-user-id" name="user_id" />
+        
+        <!-- Team Selection Grid -->
+        <div class="grid grid-cols-6 gap-3 mb-6" id="pin-team-grid">
+          {% for team in team_choices %}
+          <div class="team-option relative group cursor-pointer" data-team="{{ team.short_name }}">
+            <input 
+              type="checkbox" 
+              name="pin_teams" 
+              value="{{ team.short_name }}" 
+              id="pin-team-{{ team.id }}"
+              class="absolute opacity-0 peer"
+            >
+            <label 
+              for="pin-team-{{ team.id }}" 
+              class="flex flex-col items-center p-3 border-2 border-slate-700 rounded-xl hover:border-blue-400 hover:bg-slate-800 transition-all duration-200 peer-checked:border-blue-500 peer-checked:bg-blue-900/20 peer-checked:shadow-md"
+            >
+              <div class="w-12 h-12 mb-1 flex items-center justify-center">
+                <img 
+                  src="https://cdn.nba.com/logos/nba/{{ team.metadata.nba_team_id }}/global/L/logo.svg" 
+                  alt="{{ team.short_name }} logo"
+                  class="max-w-full max-h-full object-contain"
+                  onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
+                >
+                <div class="w-12 h-12 bg-slate-700 rounded-full flex items-center justify-center text-slate-300 text-xs font-bold hidden">
+                  {{ team.short_name }}
+                </div>
+              </div>
+              <span class="text-xs text-slate-300">{{ team.short_name }}</span>
+            </label>
+          </div>
+          {% endfor %}
+        </div>
+        
+        <div class="flex justify-end gap-3">
+          <button type="button" id="cancel-pin" class="px-4 py-2 text-slate-300 hover:text-slate-100 border border-slate-700 rounded-lg hover:border-slate-600 transition">
+            Cancel
+          </button>
+          <button type="submit" id="submit-pin" class="px-4 py-2 theme-accent-bg theme-accent-shadow rounded-lg font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+            Activate User
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  {# PIN Setup Modal for Preferences #}
+  <div id="pin-setup-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center">
+    <div class="bg-slate-900 rounded-2xl border border-slate-800 p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+      <div class="flex justify-between items-center mb-4">
+        <h3 class="text-xl font-semibold theme-accent-text">Set Activation PIN</h3>
+        <button type="button" id="close-pin-setup-modal" class="text-slate-400 hover:text-slate-200">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+          </svg>
+        </button>
+      </div>
+      
+      <p class="text-slate-300 mb-6">Select 3 NBA teams as your activation PIN. This prevents others from activating your account.</p>
+      
+      <form id="pin-setup-form" method="post">
+        {% csrf_token %}
+        <input type="hidden" name="update_preferences" value="1" />
+        <input type="hidden" name="activation_pin" id="pin-setup-activation-pin" />
+        <input type="hidden" name="nickname" value="{{ preferences_form.nickname.value|default:'' }}" />
+        <input type="hidden" name="theme" value="{{ preferences_form.theme.value|default:'golden-state-warriors' }}" />
+        
+        <!-- Team Selection Grid -->
+        <div class="grid grid-cols-6 gap-3 mb-6" id="pin-setup-team-grid">
+          {% for team in team_choices %}
+          <div class="team-option relative group cursor-pointer" data-team="{{ team.short_name }}">
+            <input 
+              type="checkbox" 
+              name="setup_pin_teams" 
+              value="{{ team.short_name }}" 
+              id="pin-setup-team-{{ team.id }}"
+              class="absolute opacity-0 peer"
+            >
+            <label 
+              for="pin-setup-team-{{ team.id }}" 
+              class="flex flex-col items-center p-3 border-2 border-slate-700 rounded-xl hover:border-blue-400 hover:bg-slate-800 transition-all duration-200 peer-checked:border-blue-500 peer-checked:bg-blue-900/20 peer-checked:shadow-md"
+            >
+              <div class="w-12 h-12 mb-1 flex items-center justify-center">
+                <img 
+                  src="https://cdn.nba.com/logos/nba/{{ team.metadata.nba_team_id }}/global/L/logo.svg" 
+                  alt="{{ team.short_name }} logo"
+                  class="max-w-full max-h-full object-contain"
+                  onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
+                >
+                <div class="w-12 h-12 bg-slate-700 rounded-full flex items-center justify-center text-slate-300 text-xs font-bold hidden">
+                  {{ team.short_name }}
+                </div>
+              </div>
+              <span class="text-xs text-slate-300">{{ team.short_name }}</span>
+            </label>
+          </div>
+          {% endfor %}
+        </div>
+        
+        <div class="flex justify-end gap-3">
+          <button type="button" id="cancel-pin-setup" class="px-4 py-2 text-slate-300 hover:text-slate-100 border border-slate-700 rounded-lg hover:border-slate-600 transition">
+            Cancel
+          </button>
+          <button type="submit" id="submit-pin-setup" class="px-4 py-2 theme-accent-bg theme-accent-shadow rounded-lg font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+            Save PIN
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      const activateBtn = document.getElementById('activate-user-btn');
+      const pinModal = document.getElementById('pin-modal');
+      const closePinModal = document.getElementById('close-pin-modal');
+      const cancelPin = document.getElementById('cancel-pin');
+      const pinForm = document.getElementById('pin-form');
+      const submitPin = document.getElementById('submit-pin');
+      const selectedUserName = document.getElementById('selected-user-name');
+      const pinUserId = document.getElementById('pin-user-id');
+      const userSelect = document.getElementById('user_id');
+      const pinCheckboxes = document.querySelectorAll('input[name="pin_teams"]');
+      
+      // Show PIN modal when activate button is clicked
+      if (activateBtn) {
+        activateBtn.addEventListener('click', function() {
+          const selectedUserId = userSelect.value;
+          const selectedUserOption = userSelect.options[userSelect.selectedIndex];
+          
+          if (!selectedUserId) {
+            alert('Please select a user first.');
+            return;
+          }
+          
+          // Set the selected user info
+          pinUserId.value = selectedUserId;
+          selectedUserName.textContent = selectedUserOption.textContent.split(' (')[0]; // Remove username part
+          
+          // Reset form
+          pinCheckboxes.forEach(cb => cb.checked = false);
+          updateSubmitButton();
+          
+          // Show modal
+          pinModal.classList.remove('hidden');
+        });
+      }
+      
+      // Close modal handlers
+      if (closePinModal) {
+        closePinModal.addEventListener('click', closeModal);
+      }
+      if (cancelPin) {
+        cancelPin.addEventListener('click', closeModal);
+      }
+      
+      // Close modal when clicking outside
+      if (pinModal) {
+        pinModal.addEventListener('click', function(e) {
+          if (e.target === pinModal) {
+            closeModal();
+          }
+        });
+      }
+      
+      function closeModal() {
+        if (pinModal) {
+          pinModal.classList.add('hidden');
+        }
+      }
+      
+      // Update submit button state based on selected teams
+      function updateSubmitButton() {
+        const selectedCount = document.querySelectorAll('input[name="pin_teams"]:checked').length;
+        if (submitPin) {
+          submitPin.disabled = selectedCount !== 3;
+          submitPin.textContent = selectedCount === 3 ? 'Activate User' : `Select ${3 - selectedCount} more team${3 - selectedCount === 1 ? '' : 's'}`;
+        }
+      }
+      
+      // Update submit button when teams are selected/deselected
+      pinCheckboxes.forEach(checkbox => {
+        checkbox.addEventListener('change', updateSubmitButton);
+      });
+      
+      // Handle form submission
+      if (pinForm) {
+        pinForm.addEventListener('submit', function(e) {
+          const selectedCount = document.querySelectorAll('input[name="pin_teams"]:checked').length;
+          if (selectedCount !== 3) {
+            e.preventDefault();
+            alert('Please select exactly 3 teams.');
+            return;
+          }
+        });
+      }
+
+      // PIN Setup Modal functionality
+      const editPinBtn = document.getElementById('edit-pin-btn');
+      const pinSetupModal = document.getElementById('pin-setup-modal');
+      const closePinSetupModal = document.getElementById('close-pin-setup-modal');
+      const cancelPinSetup = document.getElementById('cancel-pin-setup');
+      const pinSetupForm = document.getElementById('pin-setup-form');
+      const submitPinSetup = document.getElementById('submit-pin-setup');
+      const pinDisplay = document.getElementById('pin-display');
+      const activationPinField = document.querySelector('input[name="activation_pin"]');
+      const pinSetupCheckboxes = document.querySelectorAll('input[name="setup_pin_teams"]');
+      
+      // Initialize PIN display
+      function updatePinDisplay() {
+        if (activationPinField && pinDisplay) {
+          const currentPin = activationPinField.value;
+          if (currentPin) {
+            const teams = currentPin.split(',').map(t => t.trim()).filter(t => t);
+            pinDisplay.textContent = teams.length > 0 ? teams.join(', ') : 'Click to set PIN';
+          } else {
+            pinDisplay.textContent = 'Click to set PIN';
+          }
+        }
+      }
+      
+      // Show PIN setup modal
+      if (editPinBtn) {
+        editPinBtn.addEventListener('click', function() {
+          // Reset form
+          pinSetupCheckboxes.forEach(cb => cb.checked = false);
+          updatePinSetupSubmitButton();
+          
+          // Show modal
+          if (pinSetupModal) {
+            pinSetupModal.classList.remove('hidden');
+          }
+        });
+      }
+      
+      // Close modal handlers
+      if (closePinSetupModal) {
+        closePinSetupModal.addEventListener('click', closePinSetupModalFunc);
+      }
+      if (cancelPinSetup) {
+        cancelPinSetup.addEventListener('click', closePinSetupModalFunc);
+      }
+      
+      // Close modal when clicking outside
+      if (pinSetupModal) {
+        pinSetupModal.addEventListener('click', function(e) {
+          if (e.target === pinSetupModal) {
+            closePinSetupModalFunc();
+          }
+        });
+      }
+      
+      function closePinSetupModalFunc() {
+        if (pinSetupModal) {
+          pinSetupModal.classList.add('hidden');
+        }
+      }
+      
+      // Update submit button state based on selected teams
+      function updatePinSetupSubmitButton() {
+        const selectedCount = document.querySelectorAll('input[name="setup_pin_teams"]:checked').length;
+        if (submitPinSetup) {
+          submitPinSetup.disabled = selectedCount !== 3;
+          submitPinSetup.textContent = selectedCount === 3 ? 'Save PIN' : `Select ${3 - selectedCount} more team${3 - selectedCount === 1 ? '' : 's'}`;
+        }
+      }
+      
+      // Update submit button when teams are selected/deselected
+      pinSetupCheckboxes.forEach(checkbox => {
+        checkbox.addEventListener('change', updatePinSetupSubmitButton);
+      });
+      
+      // Handle PIN setup form submission
+      if (pinSetupForm) {
+        pinSetupForm.addEventListener('submit', function(e) {
+          const selectedCount = document.querySelectorAll('input[name="setup_pin_teams"]:checked').length;
+          if (selectedCount !== 3) {
+            e.preventDefault();
+            alert('Please select exactly 3 teams.');
+            return;
+          }
+          
+          // Set the activation_pin field value
+          const selectedTeams = Array.from(document.querySelectorAll('input[name="setup_pin_teams"]:checked'))
+            .map(cb => cb.value);
+          const pinValue = selectedTeams.join(',');
+          
+          // Set the value on both the original field and the PIN setup form field
+          if (activationPinField) {
+            activationPinField.value = pinValue;
+          }
+          const pinSetupField = document.getElementById('pin-setup-activation-pin');
+          if (pinSetupField) {
+            pinSetupField.value = pinValue;
+          }
+        });
+      }
+      
+      // Initialize PIN display on page load
+      updatePinDisplay();
+    });
+  </script>
 {% endblock %}

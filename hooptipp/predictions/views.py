@@ -113,7 +113,8 @@ def home(request):
         for event in visible_events
     )
 
-    team_choices = list(NbaTeamManager.all()) if requires_team_choices else []
+    # Always load team choices for PIN modal functionality
+    team_choices = list(NbaTeamManager.all())
     player_choices = list(NbaPlayerManager.all()) if requires_player_choices else []
 
     user_tips: dict[int, UserTip] = {}
@@ -141,8 +142,28 @@ def home(request):
                 return redirect('predictions:home')
 
             if user_id:
-                request.session['active_user_id'] = int(user_id)
-                messages.success(request, 'Active user selected successfully.')
+                # Check if PIN validation is required
+                if action == 'activate':
+                    selected_teams = request.POST.getlist('pin_teams')
+                    User = get_user_model()
+                    try:
+                        target_user = User.objects.get(pk=user_id)
+                        user_prefs, _ = UserPreferences.objects.get_or_create(user=target_user)
+                        
+                        # Validate PIN if user has one set
+                        if user_prefs.activation_pin:
+                            if not user_prefs.validate_pin(selected_teams):
+                                messages.error(request, 'Invalid PIN. Please select the correct NBA teams.')
+                                return redirect('predictions:home')
+                        
+                        request.session['active_user_id'] = int(user_id)
+                        messages.success(request, 'Active user selected successfully.')
+                    except User.DoesNotExist:
+                        messages.error(request, 'User not found.')
+                else:
+                    # For other actions, just set the user (this handles the case where PIN was already validated)
+                    request.session['active_user_id'] = int(user_id)
+                    messages.success(request, 'Active user selected successfully.')
             else:
                 request.session.pop('active_user_id', None)
                 messages.info(request, 'No active user selected.')

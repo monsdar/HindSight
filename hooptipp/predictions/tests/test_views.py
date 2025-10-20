@@ -623,3 +623,162 @@ class HomeViewTests(TestCase):
         self.assertEqual(our_events[0].id, event_today.id)
         self.assertEqual(our_events[1].id, event_3_days.id)
         self.assertEqual(our_events[2].id, event_6_days.id)
+
+
+class UserActivationPinTests(TestCase):
+    """Tests for PIN-based user activation functionality."""
+    
+    def setUp(self) -> None:
+        user_model = get_user_model()
+        self.alice = user_model.objects.create_user(
+            username='alice',
+            password='password123',
+        )
+        self.bob = user_model.objects.create_user(
+            username='bob',
+            password='password123',
+        )
+        
+        # Create NBA teams for PIN testing
+        self.teams_cat = OptionCategory.objects.create(
+            slug='nba-teams',
+            name='NBA Teams'
+        )
+        self.lal_team = Option.objects.create(
+            category=self.teams_cat,
+            slug='lal',
+            name='Los Angeles Lakers',
+            short_name='LAL',
+            external_id='1',
+            metadata={'nba_team_id': '1'}
+        )
+        self.gsw_team = Option.objects.create(
+            category=self.teams_cat,
+            slug='gsw',
+            name='Golden State Warriors',
+            short_name='GSW',
+            external_id='2',
+            metadata={'nba_team_id': '2'}
+        )
+        self.bos_team = Option.objects.create(
+            category=self.teams_cat,
+            slug='bos',
+            name='Boston Celtics',
+            short_name='BOS',
+            external_id='3',
+            metadata={'nba_team_id': '3'}
+        )
+        self.mia_team = Option.objects.create(
+            category=self.teams_cat,
+            slug='mia',
+            name='Miami Heat',
+            short_name='MIA',
+            external_id='4',
+            metadata={'nba_team_id': '4'}
+        )
+        
+        # Set up user preferences with PINs
+        self.alice_prefs = UserPreferences.objects.create(
+            user=self.alice,
+            activation_pin='LAL,GSW,BOS'
+        )
+        self.bob_prefs = UserPreferences.objects.create(
+            user=self.bob,
+            activation_pin=''  # No PIN set
+        )
+
+    def test_user_activation_without_pin(self) -> None:
+        """Test activating a user who has no PIN set."""
+        response = self.client.post(reverse('predictions:home'), {
+            'set_active_user': '1',
+            'user_id': str(self.bob.id),
+            'active_user_action': 'activate',
+            'pin_teams': ['LAL', 'GSW', 'BOS']
+        })
+        
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(self.client.session.get('active_user_id'), self.bob.id)
+
+    def test_user_activation_with_correct_pin(self) -> None:
+        """Test activating a user with correct PIN."""
+        response = self.client.post(reverse('predictions:home'), {
+            'set_active_user': '1',
+            'user_id': str(self.alice.id),
+            'active_user_action': 'activate',
+            'pin_teams': ['LAL', 'GSW', 'BOS']
+        })
+        
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(self.client.session.get('active_user_id'), self.alice.id)
+
+    def test_user_activation_with_incorrect_pin(self) -> None:
+        """Test activating a user with incorrect PIN."""
+        response = self.client.post(reverse('predictions:home'), {
+            'set_active_user': '1',
+            'user_id': str(self.alice.id),
+            'active_user_action': 'activate',
+            'pin_teams': ['LAL', 'GSW', 'MIA']  # Wrong third team
+        })
+        
+        self.assertEqual(response.status_code, 302)
+        self.assertIsNone(self.client.session.get('active_user_id'))
+
+    def test_user_activation_with_pin_different_order(self) -> None:
+        """Test activating a user with correct PIN in different order."""
+        response = self.client.post(reverse('predictions:home'), {
+            'set_active_user': '1',
+            'user_id': str(self.alice.id),
+            'active_user_action': 'activate',
+            'pin_teams': ['BOS', 'LAL', 'GSW']  # Different order
+        })
+        
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(self.client.session.get('active_user_id'), self.alice.id)
+
+    def test_user_activation_with_wrong_number_of_teams(self) -> None:
+        """Test activating a user with wrong number of teams."""
+        response = self.client.post(reverse('predictions:home'), {
+            'set_active_user': '1',
+            'user_id': str(self.alice.id),
+            'active_user_action': 'activate',
+            'pin_teams': ['LAL', 'GSW']  # Only 2 teams
+        })
+        
+        self.assertEqual(response.status_code, 302)
+        self.assertIsNone(self.client.session.get('active_user_id'))
+
+    def test_user_activation_case_insensitive(self) -> None:
+        """Test that PIN validation is case insensitive."""
+        response = self.client.post(reverse('predictions:home'), {
+            'set_active_user': '1',
+            'user_id': str(self.alice.id),
+            'active_user_action': 'activate',
+            'pin_teams': ['lal', 'gsw', 'bos']  # Lowercase
+        })
+        
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(self.client.session.get('active_user_id'), self.alice.id)
+
+    def test_user_activation_nonexistent_user(self) -> None:
+        """Test activating a non-existent user."""
+        response = self.client.post(reverse('predictions:home'), {
+            'set_active_user': '1',
+            'user_id': '999',
+            'active_user_action': 'activate',
+            'pin_teams': ['LAL', 'GSW', 'BOS']
+        })
+        
+        self.assertEqual(response.status_code, 302)
+        self.assertIsNone(self.client.session.get('active_user_id'))
+
+    def test_user_activation_without_pin_teams_parameter(self) -> None:
+        """Test activating a user without providing pin_teams parameter."""
+        response = self.client.post(reverse('predictions:home'), {
+            'set_active_user': '1',
+            'user_id': str(self.alice.id),
+            'active_user_action': 'activate',
+            # No pin_teams parameter
+        })
+        
+        self.assertEqual(response.status_code, 302)
+        self.assertIsNone(self.client.session.get('active_user_id'))
