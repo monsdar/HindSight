@@ -574,7 +574,7 @@ def get_live_game_data(nba_game_id: str) -> dict:
             return data
 
         # Fetch game data from BallDontLie
-        game = client.nba.games.retrieve(int(nba_game_id))
+        game = client.nba.games.get(int(nba_game_id))
 
         # Extract scores
         data["home_score"] = getattr(game, "home_team_score", None)
@@ -585,7 +585,7 @@ def get_live_game_data(nba_game_id: str) -> dict:
         data["game_status"] = status
 
         # Determine if game is live
-        status_lower = status.lower()
+        status_lower = str(status).lower()
         data["is_live"] = any(
             keyword in status_lower
             for keyword in ["q1", "q2", "q3", "q4", "ot", "halftime"]

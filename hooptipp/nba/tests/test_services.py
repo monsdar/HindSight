@@ -175,7 +175,7 @@ class GetLiveGameDataTests(TestCase):
         mock_game.status = "Final"
 
         mock_client = mock.Mock()
-        mock_client.nba.games.retrieve.return_value = mock_game
+        mock_client.nba.games.get.return_value = mock_game
 
         with mock.patch("hooptipp.nba.services._build_bdl_client", return_value=mock_client):
             data = get_live_game_data("12345")
@@ -193,7 +193,7 @@ class GetLiveGameDataTests(TestCase):
         mock_game.status = "Q3"
 
         mock_client = mock.Mock()
-        mock_client.nba.games.retrieve.return_value = mock_game
+        mock_client.nba.games.get.return_value = mock_game
 
         with mock.patch("hooptipp.nba.services._build_bdl_client", return_value=mock_client):
             data = get_live_game_data("12345")
@@ -208,7 +208,7 @@ class GetLiveGameDataTests(TestCase):
         mock_game.status = "Final"
 
         mock_client = mock.Mock()
-        mock_client.nba.games.retrieve.return_value = mock_game
+        mock_client.nba.games.get.return_value = mock_game
 
         with mock.patch("hooptipp.nba.services._build_bdl_client", return_value=mock_client):
             # First call
@@ -217,13 +217,13 @@ class GetLiveGameDataTests(TestCase):
             data2 = get_live_game_data("12345")
 
             # API should only be called once
-            mock_client.nba.games.retrieve.assert_called_once()
+            mock_client.nba.games.get.assert_called_once()
             self.assertEqual(data1, data2)
 
     def test_handles_api_errors_gracefully(self):
         """Function should handle API errors without crashing."""
         mock_client = mock.Mock()
-        mock_client.nba.games.retrieve.side_effect = Exception("API Error")
+        mock_client.nba.games.get.side_effect = Exception("API Error")
 
         with mock.patch("hooptipp.nba.services._build_bdl_client", return_value=mock_client):
             data = get_live_game_data("12345")
@@ -245,7 +245,7 @@ class GetLiveGameDataTests(TestCase):
                 mock_game.home_team_score = 50
                 mock_game.visitor_team_score = 48
                 mock_game.status = status
-                mock_client.nba.games.retrieve.return_value = mock_game
+                mock_client.nba.games.get.return_value = mock_game
 
                 cache.clear()  # Clear cache between tests
                 data = get_live_game_data("12345")
@@ -258,7 +258,7 @@ class GetLiveGameDataTests(TestCase):
                 mock_game.home_team_score = 110
                 mock_game.visitor_team_score = 105
                 mock_game.status = status
-                mock_client.nba.games.retrieve.return_value = mock_game
+                mock_client.nba.games.get.return_value = mock_game
 
                 cache.clear()
                 data = get_live_game_data("12345")
