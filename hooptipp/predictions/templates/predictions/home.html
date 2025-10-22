@@ -41,7 +41,20 @@
                     {{ row.rank }}
                   </span>
                   <div>
-                    <p class="font-semibold text-slate-200">{{ row.display_name }}</p>
+                    <div class="flex items-center gap-2">
+                      <p class="font-semibold text-slate-200">{{ row.display_name }}</p>
+                      <div class="flex items-center gap-1" title="Lock status: Available (🔒), Active (🔒 greyed), Forfeited (❌)">
+                        {% for i in "123"|make_list %}
+                          {% if forloop.counter0 < row.lock_summary.available %}
+                            <span title="Available lock">🔒</span>
+                          {% elif forloop.counter0 < row.lock_summary.available|add:row.lock_summary.active %}
+                            <span title="Active lock (in use)" class="opacity-40">🔒</span>
+                          {% else %}
+                            <span title="Forfeited lock (on cooldown)">❌</span>
+                          {% endif %}
+                        {% endfor %}
+                      </div>
+                    </div>
                     <p class="text-xs text-slate-500">{{ row.event_count }} event{{ row.event_count|pluralize }} scored</p>
                   </div>
                 </div>

@@ -537,6 +537,111 @@ class HomeViewTests(TestCase):
         self.assertContains(response, '6')  # Total points displayed in ranking
         self.assertContains(response, 'Bonus')
 
+    def test_leaderboard_displays_lock_status_symbols(self) -> None:
+        """Test that leaderboard displays lock status symbols for each user."""
+        # Create some scores to get users in the leaderboard
+        UserEventScore.objects.create(
+            user=self.alice,
+            prediction_event=self.event,
+            base_points=3,
+            lock_multiplier=1,
+            points_awarded=3,
+        )
+        UserEventScore.objects.create(
+            user=self.bob,
+            prediction_event=self.event,
+            base_points=3,
+            lock_multiplier=1,
+            points_awarded=3,
+        )
+
+        response = self.client.get(reverse('predictions:home'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('leaderboard_rows', response.context)
+        
+        leaderboard_rows = response.context['leaderboard_rows']
+        self.assertGreaterEqual(len(leaderboard_rows), 2)
+        
+        # Check that each user has lock_summary data
+        for row in leaderboard_rows:
+            self.assertTrue(hasattr(row, 'lock_summary'))
+            self.assertEqual(row.lock_summary.total, 3)
+            # For users without any lock activity, all locks should be available
+            self.assertEqual(row.lock_summary.available, 3)
+            self.assertEqual(row.lock_summary.active, 0)
+            self.assertEqual(row.lock_summary.pending, 0)
+
+    def test_leaderboard_lock_status_with_active_locks(self) -> None:
+        """Test leaderboard lock status when users have active locks."""
+        # Create scores for leaderboard
+        UserEventScore.objects.create(
+            user=self.alice,
+            prediction_event=self.event,
+            base_points=3,
+            lock_multiplier=1,
+            points_awarded=3,
+        )
+        
+        # Give Alice an active lock
+        alice_tip = UserTip.objects.get(user=self.alice, prediction_event=self.event)
+        alice_tip.is_locked = True
+        alice_tip.lock_status = UserTip.LockStatus.ACTIVE
+        alice_tip.lock_committed_at = timezone.now()
+        alice_tip.save(update_fields=['is_locked', 'lock_status', 'lock_committed_at'])
+
+        response = self.client.get(reverse('predictions:home'))
+
+        self.assertEqual(response.status_code, 200)
+        leaderboard_rows = response.context['leaderboard_rows']
+        
+        # Find Alice in the leaderboard
+        alice_row = None
+        for row in leaderboard_rows:
+            if row.id == self.alice.id:
+                alice_row = row
+                break
+        
+        self.assertIsNotNone(alice_row)
+        self.assertEqual(alice_row.lock_summary.available, 2)  # 3 total - 1 active
+        self.assertEqual(alice_row.lock_summary.active, 1)
+        self.assertEqual(alice_row.lock_summary.pending, 0)
+
+    def test_leaderboard_lock_status_with_forfeited_locks(self) -> None:
+        """Test leaderboard lock status when users have forfeited locks."""
+        # Create scores for leaderboard
+        UserEventScore.objects.create(
+            user=self.alice,
+            prediction_event=self.event,
+            base_points=3,
+            lock_multiplier=1,
+            points_awarded=3,
+        )
+        
+        # Give Alice a forfeited lock
+        alice_tip = UserTip.objects.get(user=self.alice, prediction_event=self.event)
+        alice_tip.is_locked = False
+        alice_tip.lock_status = UserTip.LockStatus.FORFEITED
+        alice_tip.lock_releases_at = timezone.now() + timedelta(days=30)
+        alice_tip.save(update_fields=['is_locked', 'lock_status', 'lock_releases_at'])
+
+        response = self.client.get(reverse('predictions:home'))
+
+        self.assertEqual(response.status_code, 200)
+        leaderboard_rows = response.context['leaderboard_rows']
+        
+        # Find Alice in the leaderboard
+        alice_row = None
+        for row in leaderboard_rows:
+            if row.id == self.alice.id:
+                alice_row = row
+                break
+        
+        self.assertIsNotNone(alice_row)
+        self.assertEqual(alice_row.lock_summary.available, 2)  # 3 total - 1 forfeited
+        self.assertEqual(alice_row.lock_summary.active, 0)
+        self.assertEqual(alice_row.lock_summary.pending, 1)
+
     def test_home_view_filters_open_predictions_to_upcoming_week(self) -> None:
         """Test that open_predictions only shows events with deadlines in the upcoming week."""
         now = timezone.now()

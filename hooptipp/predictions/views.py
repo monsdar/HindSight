@@ -483,6 +483,15 @@ def home(request):
         row.total_points = int(row.total_points)
         row.event_count = int(row.event_count)
         row.rank = index
+        
+        # Add lock summary for each user
+        try:
+            lock_service = LockService(row)
+            row.lock_summary = lock_service.get_summary()
+        except Exception:
+            # If there's any issue getting lock data, default to all locks available
+            from .lock_service import LockSummary
+            row.lock_summary = LockSummary(total=3, available=3, active=0, pending=0, next_return_at=None)
 
     # Fetch recently resolved predictions (last 5)
     resolved_predictions = list(
