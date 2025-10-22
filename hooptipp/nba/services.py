@@ -574,7 +574,13 @@ def get_live_game_data(nba_game_id: str) -> dict:
             return data
 
         # Fetch game data from BallDontLie
-        game = client.nba.games.get(int(nba_game_id))
+        response = client.nba.games.get(int(nba_game_id))
+        
+        # The API returns a BaseResponse object with a 'data' attribute
+        game = getattr(response, "data", None)
+        if game is None:
+            logger.warning(f"No game data found for game {nba_game_id}")
+            return data
 
         # Extract scores
         data["home_score"] = getattr(game, "home_team_score", None)

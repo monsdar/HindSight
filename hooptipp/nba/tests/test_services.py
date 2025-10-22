@@ -174,8 +174,11 @@ class GetLiveGameDataTests(TestCase):
         mock_game.visitor_team_score = 105
         mock_game.status = "Final"
 
+        mock_response = mock.Mock()
+        mock_response.data = mock_game
+
         mock_client = mock.Mock()
-        mock_client.nba.games.get.return_value = mock_game
+        mock_client.nba.games.get.return_value = mock_response
 
         with mock.patch("hooptipp.nba.services._build_bdl_client", return_value=mock_client):
             data = get_live_game_data("12345")
@@ -192,8 +195,11 @@ class GetLiveGameDataTests(TestCase):
         mock_game.visitor_team_score = 78
         mock_game.status = "Q3"
 
+        mock_response = mock.Mock()
+        mock_response.data = mock_game
+
         mock_client = mock.Mock()
-        mock_client.nba.games.get.return_value = mock_game
+        mock_client.nba.games.get.return_value = mock_response
 
         with mock.patch("hooptipp.nba.services._build_bdl_client", return_value=mock_client):
             data = get_live_game_data("12345")
@@ -207,8 +213,11 @@ class GetLiveGameDataTests(TestCase):
         mock_game.visitor_team_score = 105
         mock_game.status = "Final"
 
+        mock_response = mock.Mock()
+        mock_response.data = mock_game
+
         mock_client = mock.Mock()
-        mock_client.nba.games.get.return_value = mock_game
+        mock_client.nba.games.get.return_value = mock_response
 
         with mock.patch("hooptipp.nba.services._build_bdl_client", return_value=mock_client):
             # First call
@@ -245,7 +254,10 @@ class GetLiveGameDataTests(TestCase):
                 mock_game.home_team_score = 50
                 mock_game.visitor_team_score = 48
                 mock_game.status = status
-                mock_client.nba.games.get.return_value = mock_game
+                
+                mock_response = mock.Mock()
+                mock_response.data = mock_game
+                mock_client.nba.games.get.return_value = mock_response
 
                 cache.clear()  # Clear cache between tests
                 data = get_live_game_data("12345")
@@ -258,7 +270,10 @@ class GetLiveGameDataTests(TestCase):
                 mock_game.home_team_score = 110
                 mock_game.visitor_team_score = 105
                 mock_game.status = status
-                mock_client.nba.games.get.return_value = mock_game
+                
+                mock_response = mock.Mock()
+                mock_response.data = mock_game
+                mock_client.nba.games.get.return_value = mock_response
 
                 cache.clear()
                 data = get_live_game_data("12345")
