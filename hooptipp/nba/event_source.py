@@ -101,121 +101,84 @@ class NbaEventSource(EventSource):
 
     def sync_events(self, limit: int = 7) -> EventSourceResult:
         """
-        Sync upcoming NBA games as prediction events.
+        Sync NBA games as prediction events.
 
         Args:
-            limit: Number of days to look ahead for games.
+            limit: Number of days to look ahead for games (unused for manual process).
 
         Returns:
             EventSourceResult with counts of events synced.
         """
         result = EventSourceResult()
 
-        if not self.is_configured():
-            result.add_error("NBA source is not configured (missing API key)")
-            return result
-
         try:
-            from .services import fetch_upcoming_week_games
-
-            week_start, games = fetch_upcoming_week_games(limit=limit)
-
-            if not games:
-                # Check for manual games
-                tip_type = TipType.objects.filter(slug="weekly-games").first()
-                if tip_type:
-                    manual_games = ScheduledGame.objects.filter(
-                        tip_type=tip_type, is_manual=True
-                    )
-                    if manual_games.exists():
-                        logger.info(
-                            f"No API games found, but {manual_games.count()} manual games exist"
-                        )
+            # Check for manual games
+            tip_type = TipType.objects.filter(slug="weekly-games").first()
+            if not tip_type:
+                logger.info("No weekly-games tip type found")
                 return result
+                
+            manual_games = ScheduledGame.objects.filter(
+                tip_type=tip_type, is_manual=True
+            ).order_by('game_date')
+            
+            if not manual_games.exists():
+                logger.info("No manual games found")
+                return result
+                
+            logger.info(f"Found {manual_games.count()} manual games")
 
-            # Get or create tip type
-            earliest_game_time = min(game["game_time"] for game in games)
-            tip_type, _ = TipType.objects.update_or_create(
-                slug="weekly-games",
-                defaults={
-                    "name": "Weekly games",
-                    "description": "Featured NBA matchups for the upcoming week",
-                    "category": TipType.TipCategory.GAME,
-                    "deadline": earliest_game_time,
-                    "is_active": True,
-                },
-            )
-
-            now = timezone.now()
-            selected_ids = []
-            event_ids = []
-
+            # Create events for manual games that don't have events yet
             teams_cat = NbaTeamManager.get_category()
-
-            for sort_index, game in enumerate(games, start=1):
-                # Find or create team options
+            created_count = 0
+            
+            for scheduled_game in manual_games:
+                # Check if event already exists
+                existing_event = PredictionEvent.objects.filter(
+                    scheduled_game=scheduled_game
+                ).first()
+                
+                if existing_event:
+                    continue
+                    
+                # Find team options
                 home_option = Option.objects.filter(
                     category=teams_cat,
-                    short_name=game["home_team"]["abbreviation"],
+                    short_name=scheduled_game.home_team_tricode,
                 ).first()
 
                 away_option = Option.objects.filter(
                     category=teams_cat,
-                    short_name=game["away_team"]["abbreviation"],
+                    short_name=scheduled_game.away_team_tricode,
                 ).first()
 
-                # Create ScheduledGame
-                scheduled, created = ScheduledGame.objects.update_or_create(
-                    nba_game_id=game["game_id"],
-                    defaults={
-                        "tip_type": tip_type,
-                        "game_date": game["game_time"],
-                        "home_team": game["home_team"]["full_name"]
-                        or game["home_team"]["name"],
-                        "home_team_tricode": game["home_team"]["abbreviation"],
-                        "away_team": game["away_team"]["full_name"]
-                        or game["away_team"]["name"],
-                        "away_team_tricode": game["away_team"]["abbreviation"],
-                        "venue": game["arena"],
-                        "is_manual": False,
-                        "home_team_option": home_option,
-                        "away_team_option": away_option,
-                    },
-                )
-                selected_ids.append(scheduled.nba_game_id)
-
                 # Create PredictionEvent
-                opens_at = min(now, game["game_time"])
+                opens_at = min(timezone.now(), scheduled_game.game_date)
                 event, event_created = PredictionEvent.objects.update_or_create(
-                    scheduled_game=scheduled,
+                    scheduled_game=scheduled_game,
                     defaults={
                         "tip_type": tip_type,
-                        "name": f"{game['away_team']['abbreviation']} @ {game['home_team']['abbreviation']}",
-                        "description": f"{game['away_team']['full_name']} at {game['home_team']['full_name']}",
+                        "name": f"{scheduled_game.away_team_tricode} @ {scheduled_game.home_team_tricode}",
+                        "description": f"{scheduled_game.away_team} at {scheduled_game.home_team}",
                         "target_kind": PredictionEvent.TargetKind.TEAM,
                         "selection_mode": PredictionEvent.SelectionMode.CURATED,
                         "source_id": self.source_id,
-                        "source_event_id": game["game_id"],
+                        "source_event_id": scheduled_game.nba_game_id,
                         "metadata": {
-                            "arena": game["arena"],
-                            "home_team_data": game["home_team"],
-                            "away_team_data": game["away_team"],
+                            "arena": scheduled_game.venue,
                         },
                         "opens_at": opens_at,
-                        "deadline": game["game_time"],
+                        "deadline": scheduled_game.game_date,
                         "reveal_at": opens_at,
                         "is_active": True,
-                        "sort_order": sort_index,
+                        "sort_order": 1,
                         "points": tip_type.default_points,
                     },
                 )
 
                 if event_created:
                     result.events_created += 1
-                else:
-                    result.events_updated += 1
-
-                event_ids.append(event.id)
+                    created_count += 1
 
                 # Create prediction options
                 if away_option:
@@ -240,39 +203,11 @@ class NbaEventSource(EventSource):
                         },
                     )
 
-                # Remove options that aren't home or away
-                valid_options = [opt for opt in [home_option, away_option] if opt]
-                if valid_options:
-                    PredictionOption.objects.filter(event=event).exclude(
-                        option__in=valid_options
-                    ).delete()
-
-            # Clean up old games
-            deleted_count, _ = (
-                ScheduledGame.objects.filter(tip_type=tip_type, is_manual=False)
-                .exclude(nba_game_id__in=selected_ids)
-                .delete()
-            )
-            result.events_removed += deleted_count
-
-            # Clean up events without scheduled games
-            deleted_events, _ = (
-                PredictionEvent.objects.filter(
-                    tip_type=tip_type, scheduled_game__isnull=False
-                )
-                .exclude(id__in=event_ids)
-                .delete()
-            )
-            result.events_removed += deleted_events
-
-            logger.info(
-                f"NBA sync completed: {result.events_created} created, "
-                f"{result.events_updated} updated, {result.events_removed} removed"
-            )
+            logger.info(f"NBA manual sync completed: {created_count} events created")
 
         except Exception as e:
-            logger.exception(f"Error syncing NBA events: {e}")
-            result.add_error(f"Failed to sync events: {str(e)}")
+            logger.exception(f"Error syncing NBA manual events: {e}")
+            result.add_error(f"Failed to sync manual events: {str(e)}")
 
         return result
 
