@@ -284,8 +284,8 @@ class NbaCardRendererTests(TestCase):
             # Check MVP standings (empty by default)
             self.assertIn("mvp_standings", context)
 
-    def test_get_event_context_with_live_game(self):
-        """Renderer should fetch live data for in-progress games."""
+    def test_get_event_context_with_game_data(self):
+        """Renderer should include basic game data."""
         game_time = timezone.now() - timedelta(hours=1)
         game = ScheduledGame.objects.create(
             tip_type=self.tip_type,
@@ -307,24 +307,16 @@ class NbaCardRendererTests(TestCase):
             deadline=game_time,
         )
 
-        with mock.patch("hooptipp.nba.services.get_live_game_data") as mock_live:
-            mock_live.return_value = {
-                "away_score": 95,
-                "home_score": 98,
-                "game_status": "Q3 5:23",
-                "is_live": True,
-            }
+        context = self.renderer.get_event_context(event)
 
-            context = self.renderer.get_event_context(event)
-
-            # Check live data
-            self.assertEqual(context["away_score"], 95)
-            self.assertEqual(context["home_score"], 98)
-            self.assertEqual(context["game_status"], "Q3 5:23")
-            self.assertTrue(context["is_live"])
+        # Check basic game data
+        self.assertEqual(context["away_team"], "Boston Celtics")
+        self.assertEqual(context["away_team_tricode"], "BOS")
+        self.assertEqual(context["home_team"], "Los Angeles Lakers")
+        self.assertEqual(context["home_team_tricode"], "LAL")
 
     def test_get_result_context_includes_final_score(self):
-        """Renderer should fetch final score for result cards."""
+        """Renderer should include final score from game model for result cards."""
         game_time = timezone.now() - timedelta(hours=2)
         game = ScheduledGame.objects.create(
             tip_type=self.tip_type,
@@ -354,20 +346,16 @@ class NbaCardRendererTests(TestCase):
             winning_option=pred_option,
         )
 
-        with mock.patch("hooptipp.nba.services.get_live_game_data") as mock_live:
-            mock_live.return_value = {
-                "away_score": 105,
-                "home_score": 110,
-                "game_status": "Final",
-                "is_live": False,
-            }
+        context = self.renderer.get_result_context(outcome)
 
-            context = self.renderer.get_result_context(outcome)
-
-            # Check final score data
-            self.assertEqual(context["away_score"], 105)
-            self.assertEqual(context["home_score"], 110)
-            self.assertEqual(context["game_status"], "Final")
+        # Check that context includes basic game data
+        self.assertEqual(context["away_team"], "Boston Celtics")
+        self.assertEqual(context["away_team_tricode"], "BOS")
+        self.assertEqual(context["home_team"], "Los Angeles Lakers")
+        self.assertEqual(context["home_team_tricode"], "LAL")
+        # Scores should be None since they're not stored in the model
+        self.assertIsNone(context.get("away_score"))
+        self.assertIsNone(context.get("home_score"))
 
     def test_renderer_priority(self):
         """Renderer should have default priority."""

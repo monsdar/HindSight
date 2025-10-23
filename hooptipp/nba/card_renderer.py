@@ -47,7 +47,6 @@ class NbaCardRenderer(CardRenderer):
     def get_event_context(self, event: PredictionEvent, user=None) -> dict:
         """Provide NBA-specific card data."""
         from .services import (
-            get_live_game_data,
             get_mvp_standings,
             get_player_card_data,
             get_team_logo_url,
@@ -72,10 +71,6 @@ class NbaCardRenderer(CardRenderer):
                 }
             )
 
-            # Add live data if game is in progress
-            if event.metadata.get("status") == "in_progress":
-                live_data = get_live_game_data(game.nba_game_id)
-                context.update(live_data)
 
             # Add playoff context if applicable
             if "playoff_series" in event.metadata:
@@ -105,11 +100,8 @@ class NbaCardRenderer(CardRenderer):
         # Add result-specific data
         if outcome.prediction_event.scheduled_game:
             game = outcome.prediction_event.scheduled_game
-            # Fetch final score
-            from .services import get_live_game_data
-
-            final_data = get_live_game_data(game.nba_game_id)
-            context.update(final_data)
+            # Note: Final scores are not stored in the ScheduledGame model
+            # They would need to be fetched from external API if needed
 
         # Add user score information if user is provided
         if user:
