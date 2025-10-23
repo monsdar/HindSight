@@ -91,9 +91,24 @@ NBA game result card - shows the outcome of a completed game prediction.
   {# Footer #}
   <div class="mt-3 flex items-center justify-between text-xs text-slate-500">
     <span>Resolved {{ outcome.resolved_at|date:"M d, H:i" }}</span>
-    <span class="theme-accent-pill inline-flex items-center gap-1 rounded-full px-2 py-1 font-semibold">
-      {{ event.points }} pt{{ event.points|pluralize }}
-    </span>
+    {% if active_user %}
+      {% if user_score %}
+        <span class="theme-accent-pill inline-flex items-center gap-1 rounded-full px-2 py-1 font-semibold">
+          {{ user_score.points_awarded }} pt{{ user_score.points_awarded|pluralize }}
+          {% if user_score.is_lock_bonus %}
+            <span class="text-xs">({{ user_score.lock_multiplier }}x lock)</span>
+          {% endif %}
+        </span>
+      {% else %}
+        <span class="theme-accent-pill inline-flex items-center gap-1 rounded-full px-2 py-1 font-semibold">
+          0 pt
+        </span>
+      {% endif %}
+    {% else %}
+      <span class="theme-accent-pill inline-flex items-center gap-1 rounded-full px-2 py-1 font-semibold">
+        {{ event.points }} pt{{ event.points|pluralize }}
+      </span>
+    {% endif %}
   </div>
 
 </article>

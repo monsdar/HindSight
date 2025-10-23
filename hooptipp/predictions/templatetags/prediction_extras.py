@@ -71,6 +71,7 @@ def render_result_card(context, outcome, user_tip=None, is_correct=None):
         "is_correct": is_correct,
         "active_user": context.get("active_user"),
         "card_context": card_context,
+        "user_score": card_context.get("user_score"),  # Extract user_score from card_context
         "palette": context.get("active_theme_palette"),
     }
 

@@ -111,6 +111,20 @@ class NbaCardRenderer(CardRenderer):
             final_data = get_live_game_data(game.nba_game_id)
             context.update(final_data)
 
+        # Add user score information if user is provided
+        if user:
+            from hooptipp.predictions.models import UserEventScore
+            try:
+                user_score = UserEventScore.objects.get(
+                    user=user,
+                    prediction_event=outcome.prediction_event
+                )
+                context['user_score'] = user_score
+            except UserEventScore.DoesNotExist:
+                context['user_score'] = None
+        else:
+            context['user_score'] = None
+
         return context
 
     @property
