@@ -70,6 +70,13 @@ class NbaCardRenderer(CardRenderer):
                     "game_time": game.game_date,
                 }
             )
+            
+            # Add option IDs for team selection
+            for option in event.options.all():
+                if option.option.short_name == game.away_team_tricode:
+                    context["away_team_option_id"] = option.id
+                elif option.option.short_name == game.home_team_tricode:
+                    context["home_team_option_id"] = option.id
 
 
             # Add playoff context if applicable
