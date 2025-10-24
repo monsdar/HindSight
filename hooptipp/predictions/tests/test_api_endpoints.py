@@ -324,6 +324,25 @@ class ToggleLockAPITests(TestCase):
         data = response.json()
         self.assertEqual(data['error'], 'Event deadline has passed')
 
+    def test_toggle_lock_no_prediction(self):
+        """Test lock toggle when no prediction exists."""
+        # Delete the existing tip
+        self.tip.delete()
+        
+        response = self.client.post(
+            '/api/toggle-lock/',
+            data=json.dumps({
+                'event_id': self.event.id,
+                'should_lock': True
+            }),
+            content_type='application/json'
+        )
+        
+        self.assertEqual(response.status_code, 400)
+        data = response.json()
+        self.assertEqual(data['error'], 'No prediction found. Please make a prediction first before locking.')
+        self.assertIn('lock_summary', data)
+
 
 class GetLockSummaryAPITests(TestCase):
     def setUp(self):

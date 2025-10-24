@@ -669,8 +669,18 @@ def toggle_lock(request):
         if event.deadline <= now:
             return JsonResponse({'error': 'Event deadline has passed'}, status=400)
         
-        # Get the tip
-        tip = get_object_or_404(UserTip, user=active_user, prediction_event=event)
+        # Get the tip - must exist first (user must have made a prediction)
+        try:
+            tip = UserTip.objects.get(user=active_user, prediction_event=event)
+        except UserTip.DoesNotExist:
+            return JsonResponse({
+                'error': 'No prediction found. Please make a prediction first before locking.',
+                'lock_summary': {
+                    'available': 0,
+                    'active': 0,
+                    'total': 0
+                }
+            }, status=400)
         
         lock_service = LockService(active_user)
         lock_service.refresh()
