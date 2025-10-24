@@ -86,7 +86,7 @@ class Command(BaseCommand):
         except Exception as e:
             logger.exception(f'Error processing scores: {e}')
             self.stdout.write(
-                self.style.ERROR(f'✗ Error processing scores: {e}')
+                self.style.ERROR(f'[ERROR] Error processing scores: {e}')
             )
             raise CommandError(f'Score processing failed: {e}')
 
@@ -244,13 +244,13 @@ class Command(BaseCommand):
         if result.events_with_errors:
             self.stdout.write(self.style.WARNING('Events with errors:'))
             for error in result.events_with_errors:
-                self.stdout.write(f'  ⚠ {error}')
+                self.stdout.write(f'  [WARNING] {error}')
             self.stdout.write('')
         
         if result.total_scores_created or result.total_scores_updated:
             self.stdout.write(
                 self.style.SUCCESS(
-                    f'✓ Successfully processed {result.total_events_processed} events. '
+                    f'[SUCCESS] Successfully processed {result.total_events_processed} events. '
                     f'Created {result.total_scores_created} scores, '
                     f'updated {result.total_scores_updated} scores. '
                     f'Returned {result.total_locks_returned} locks to users, '

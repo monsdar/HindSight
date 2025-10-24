@@ -261,7 +261,7 @@ class NbaSyncViewTest(TestCase):
         self.assertEqual(len(messages), 1)
         self.assertIn('started in the background', str(messages[0]).lower())
 
-    @patch('hooptipp.nba.admin.sync_players')
+    @patch('hooptipp.nba.admin.sync_players_from_hoopshype')
     @patch('hooptipp.nba.admin.logger')
     def test_background_sync_logs_success(self, mock_logger, mock_sync_players):
         """Test background sync function logs results."""
@@ -282,7 +282,7 @@ class NbaSyncViewTest(TestCase):
         self.assertIn('20 player(s) updated', log_text)
         self.assertIn('5 player(s) removed', log_text)
 
-    @patch('hooptipp.nba.admin.sync_players')
+    @patch('hooptipp.nba.admin.sync_players_from_hoopshype')
     @patch('hooptipp.nba.admin.logger')
     def test_background_sync_logs_errors(self, mock_logger, mock_sync_players):
         """Test background sync function logs errors."""

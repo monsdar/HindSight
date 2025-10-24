@@ -204,7 +204,7 @@ class RetryLogicTests(TestCase):
             with self.assertRaises(RateLimitError):
                 self.client.nba.players.list(per_page=10)
 
-        self.assertEqual(self.mock_players_api.list.call_count, 4)  # 1 initial + 3 retries
+        self.assertEqual(self.mock_players_api.list.call_count, 8)  # 1 initial + 7 retries (max_retries + 1)
 
     def test_does_not_retry_on_other_api_errors(self) -> None:
         """Test that the client does not retry on non-rate-limit errors."""

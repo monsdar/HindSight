@@ -80,23 +80,23 @@ class Command(BaseCommand):
                 if result == 'processed':
                     processed_count += 1
                     self.stdout.write(
-                        self.style.SUCCESS(f'✓ Processed: {event.name}')
+                        self.style.SUCCESS(f'[OK] Processed: {event.name}')
                     )
                 elif result == 'skipped':
                     skipped_count += 1
                     self.stdout.write(
-                        self.style.WARNING(f'⚠ Skipped: {event.name} (game not final)')
+                        self.style.WARNING(f'[SKIP] Skipped: {event.name} (game not final)')
                     )
                 else:
                     self.stdout.write(
-                        self.style.WARNING(f'⚠ Skipped: {event.name} (no valid outcome)')
+                        self.style.WARNING(f'[SKIP] Skipped: {event.name} (no valid outcome)')
                     )
                     skipped_count += 1
             except Exception as e:
                 error_count += 1
                 logger.exception(f'Error processing {event.name}: {e}')
                 self.stdout.write(
-                    self.style.ERROR(f'✗ Error processing {event.name}: {e}')
+                    self.style.ERROR(f'[ERROR] Error processing {event.name}: {e}')
                 )
         
         # Summary
