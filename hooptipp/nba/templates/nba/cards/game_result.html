@@ -7,10 +7,6 @@ NBA game result card - shows the outcome of a completed game prediction.
   {# Header #}
   <header class="space-y-1">
     <p class="text-xs uppercase tracking-wide text-slate-500">{{ event.tip_type.name }}</p>
-    <h3 class="text-lg font-semibold text-slate-200">{{ event.name }}</h3>
-    {% if event.description %}
-      <p class="text-sm text-slate-400">{{ event.description }}</p>
-    {% endif %}
   </header>
 
   {# Final Score #}
@@ -37,7 +33,7 @@ NBA game result card - shows the outcome of a completed game prediction.
         </div>
         {% if card_context.away_score is not None %}
           <p class="mt-1 text-2xl font-bold text-slate-300">
-            {{ card_context.away_score }}
+            {{ card_context.away_score | floatformat }}
           </p>
         {% endif %}
       </div>
@@ -67,28 +63,13 @@ NBA game result card - shows the outcome of a completed game prediction.
         </div>
         {% if card_context.home_score is not None %}
           <p class="mt-1 text-2xl font-bold text-slate-300">
-            {{ card_context.home_score }}
+            {{ card_context.home_score | floatformat }}
           </p>
         {% endif %}
       </div>
       
     </div>
   </div>
-
-  {# Winning Outcome #}
-  <div class="mt-3 rounded-lg border border-slate-800 bg-slate-900 p-3">
-    <p class="text-xs uppercase tracking-wide text-slate-500">Winning outcome</p>
-    <p class="mt-1 font-semibold text-slate-100">
-      {% if outcome.winning_option %}
-        {{ outcome.winning_option.label }}
-      {% elif outcome.winning_generic_option %}
-        {{ outcome.winning_generic_option.name }}
-      {% else %}
-        Not specified
-      {% endif %}
-    </p>
-  </div>
-
 
   {# Footer #}
   <div class="mt-3 flex items-center justify-between text-xs text-slate-500">

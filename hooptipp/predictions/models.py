@@ -321,6 +321,11 @@ class EventOutcome(models.Model):
         related_name="resolved_event_outcomes",
     )
     notes = models.TextField(blank=True)
+    metadata = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Additional outcome data (e.g., game scores, statistics)"
+    )
     scored_at = models.DateTimeField(null=True, blank=True)
     score_error = models.TextField(blank=True)
 

@@ -175,11 +175,24 @@ class Command(BaseCommand):
         
         # Create the EventOutcome
         with transaction.atomic():
+            # Store game result data in metadata
+            game_result_metadata = {
+                'away_score': away_score,
+                'home_score': home_score,
+                'away_team': game.away_team_tricode,
+                'home_team': game.home_team_tricode,
+                'away_team_full': game.away_team,
+                'home_team_full': game.home_team,
+                'game_status': status,
+                'nba_game_id': game.nba_game_id,
+            }
+            
             outcome = EventOutcome.objects.create(
                 prediction_event=event,
                 winning_option=winning_option,
                 winning_generic_option=winning_option.option,
                 resolved_at=timezone.now(),
+                metadata=game_result_metadata,
                 notes=f'Auto-generated from game result. Final score: {game.away_team_tricode} {away_score}, {game.home_team_tricode} {home_score}'
             )
             

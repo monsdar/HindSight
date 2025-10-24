@@ -161,6 +161,17 @@ class ProcessGameOutcomesCommandTest(TestCase):
             self.assertEqual(outcome.winning_option, self.home_option)
             self.assertEqual(outcome.winning_generic_option, self.home_team)
             self.assertIn('Final score: GSW 105, LAL 110', outcome.notes)
+            
+            # Verify metadata was stored correctly
+            self.assertIsNotNone(outcome.metadata)
+            self.assertEqual(outcome.metadata['away_score'], 105)
+            self.assertEqual(outcome.metadata['home_score'], 110)
+            self.assertEqual(outcome.metadata['away_team'], 'GSW')
+            self.assertEqual(outcome.metadata['home_team'], 'LAL')
+            self.assertEqual(outcome.metadata['away_team_full'], 'Golden State Warriors')
+            self.assertEqual(outcome.metadata['home_team_full'], 'Los Angeles Lakers')
+            self.assertEqual(outcome.metadata['game_status'], 'final')
+            self.assertEqual(outcome.metadata['nba_game_id'], '12345')
 
     def test_process_final_game_away_winner(self):
         """Test processing a final game with away team winner."""

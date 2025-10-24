@@ -357,6 +357,60 @@ class NbaCardRendererTests(TestCase):
         self.assertIsNone(context.get("away_score"))
         self.assertIsNone(context.get("home_score"))
 
+    def test_get_result_context_with_metadata(self):
+        """Renderer should include final score from EventOutcome metadata."""
+        game_time = timezone.now() - timedelta(hours=2)
+        game = ScheduledGame.objects.create(
+            tip_type=self.tip_type,
+            nba_game_id="FINAL123",
+            game_date=game_time,
+            home_team="Los Angeles Lakers",
+            home_team_tricode="LAL",
+            away_team="Boston Celtics",
+            away_team_tricode="BOS",
+        )
+
+        event = PredictionEvent.objects.create(
+            tip_type=self.tip_type,
+            name="BOS @ LAL",
+            source_id="nba-balldontlie",
+            scheduled_game=game,
+            opens_at=timezone.now() - timedelta(days=1),
+            deadline=game_time,
+        )
+        pred_option = PredictionOption.objects.create(
+            event=event,
+            label="Lakers",
+            option=self.lakers_option,
+        )
+        
+        # Create outcome with metadata containing game result
+        outcome = EventOutcome.objects.create(
+            prediction_event=event,
+            winning_option=pred_option,
+            metadata={
+                'away_score': 105,
+                'home_score': 110,
+                'away_team': 'BOS',
+                'home_team': 'LAL',
+                'game_status': 'Final',
+                'nba_game_id': 'FINAL123',
+            }
+        )
+
+        context = self.renderer.get_result_context(outcome)
+
+        # Check that context includes basic game data
+        self.assertEqual(context["away_team"], "Boston Celtics")
+        self.assertEqual(context["away_team_tricode"], "BOS")
+        self.assertEqual(context["home_team"], "Los Angeles Lakers")
+        self.assertEqual(context["home_team_tricode"], "LAL")
+        
+        # Check that metadata scores are included
+        self.assertEqual(context["away_score"], 105)
+        self.assertEqual(context["home_score"], 110)
+        self.assertEqual(context["game_status"], "Final")
+
     def test_renderer_priority(self):
         """Renderer should have default priority."""
         self.assertEqual(self.renderer.priority, 0)

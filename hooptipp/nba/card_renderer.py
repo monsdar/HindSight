@@ -97,15 +97,18 @@ class NbaCardRenderer(CardRenderer):
         # Start with event context
         context = self.get_event_context(outcome.prediction_event, user)
 
-        # Add result-specific data
-        if outcome.prediction_event.scheduled_game:
-            game = outcome.prediction_event.scheduled_game
-            # Note: Final scores are not stored in the ScheduledGame model
-            # They would need to be fetched from external API if needed
+        # Add result-specific data from EventOutcome metadata
+        if outcome.metadata:
+            game_result = outcome.metadata
+            context.update({
+                "away_score": game_result.get("away_score"),
+                "home_score": game_result.get("home_score"),
+                "game_status": game_result.get("game_status", "Final"),
+            })
 
         # Add user score information if user is provided
         if user:
-            from hooptipp.predictions.models import UserEventScore
+            from hooptipp.predictions.models import UserEventScore, UserTip
             try:
                 user_score = UserEventScore.objects.get(
                     user=user,
@@ -114,8 +117,25 @@ class NbaCardRenderer(CardRenderer):
                 context['user_score'] = user_score
             except UserEventScore.DoesNotExist:
                 context['user_score'] = None
+            
+            # Calculate is_correct for the user's prediction
+            try:
+                user_tip = UserTip.objects.get(
+                    user=user,
+                    prediction_event=outcome.prediction_event
+                )
+                # Check if the user's prediction was correct
+                if outcome.winning_option and user_tip.prediction_option:
+                    context['is_correct'] = (user_tip.prediction_option.id == outcome.winning_option.id)
+                elif outcome.winning_generic_option and user_tip.selected_option:
+                    context['is_correct'] = (user_tip.selected_option.id == outcome.winning_generic_option.id)
+                else:
+                    context['is_correct'] = False
+            except UserTip.DoesNotExist:
+                context['is_correct'] = False
         else:
             context['user_score'] = None
+            context['is_correct'] = False
 
         return context
 
