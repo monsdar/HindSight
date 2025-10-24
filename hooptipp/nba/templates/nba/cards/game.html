@@ -161,8 +161,8 @@ if (!window.hooptippGameCardInitialized) {
           this.classList.remove('border-slate-600');
           this.classList.add('theme-accent-border');
                     
-          // Update hidden form inputs
-          updatePredictionForm(eventId, optionId);
+          // Save prediction immediately via AJAX
+          savePredictionImmediately(eventId, optionId);
         });
       }
     });
@@ -185,70 +185,153 @@ if (!window.hooptippGameCardInitialized) {
           
           console.log('Current lock state:', isCurrentlyLocked);
           
-          // Toggle lock state
-          const lockSpan = this.querySelector('span');
-          if (isCurrentlyLocked) {
-            // Unlock: change to open lock
-            lockSpan.textContent = '🔓';
-            this.classList.remove('theme-accent-border', 'border-2');
-            this.classList.add('border-slate-600', 'border-2');
-            this.title = 'Lock this pick';
-            console.log('Unlocked event:', eventId);
-          } else {
-            // Lock: change to closed lock
-            lockSpan.textContent = '🔒';
-            this.classList.remove('border-slate-600', 'border-2');
-            this.classList.add('theme-accent-border', 'border-2');
-            this.title = 'Unlock this pick';
-            console.log('Locked event:', eventId);
-          }
-          
-          // Update hidden form inputs
-          updateLockForm(eventId, !isCurrentlyLocked);
+          // Toggle lock state immediately via AJAX
+          toggleLockImmediately(eventId, !isCurrentlyLocked, this);
         });
       }
     });
     
-    function updatePredictionForm(eventId, optionId) {
-      console.log('Updating prediction form:', eventId, optionId);
-      // Remove existing prediction input
-      const existingInput = document.querySelector(`input[name="prediction_${eventId}"]`);
-      if (existingInput) {
-        existingInput.remove();
-      }
-      
-      // Add new prediction input
-      const form = document.getElementById('tips-form');
-      if (form) {
-        const input = document.createElement('input');
-        input.type = 'hidden';
-        input.name = `prediction_${eventId}`;
-        input.value = optionId;
-        form.appendChild(input);
-        console.log('Added prediction input:', input.name, input.value);
+    // AJAX function to save prediction immediately
+    async function savePredictionImmediately(eventId, optionId) {
+      try {
+        const response = await fetch('/api/save-prediction/', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+          },
+          body: JSON.stringify({
+            event_id: eventId,
+            option_id: optionId
+          })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+          console.log('Prediction saved successfully:', data.message);
+          // Show a subtle success indicator
+          showTemporaryMessage('Prediction saved!', 'success');
+        } else {
+          console.error('Failed to save prediction:', data.error);
+          showTemporaryMessage('Failed to save prediction: ' + data.error, 'error');
+        }
+      } catch (error) {
+        console.error('Error saving prediction:', error);
+        showTemporaryMessage('Error saving prediction', 'error');
       }
     }
     
-    function updateLockForm(eventId, isLocked) {
-      console.log('Updating lock form:', eventId, isLocked);
-      // Remove existing lock input
-      const existingInput = document.querySelector(`input[name="lock_${eventId}"]`);
-      if (existingInput) {
-        existingInput.remove();
-      }
-      
-      // Add new lock input if locked
-      if (isLocked) {
-        const form = document.getElementById('tips-form');
-        if (form) {
-          const input = document.createElement('input');
-          input.type = 'hidden';
-          input.name = `lock_${eventId}`;
-          input.value = '1';
-          form.appendChild(input);
-          console.log('Added lock input:', input.name, input.value);
+    // AJAX function to toggle lock immediately
+    async function toggleLockImmediately(eventId, shouldLock, buttonElement) {
+      try {
+        const response = await fetch('/api/toggle-lock/', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+          },
+          body: JSON.stringify({
+            event_id: eventId,
+            should_lock: shouldLock
+          })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+          console.log('Lock toggled successfully:', data.message);
+          
+          // Update button appearance
+          const lockSpan = buttonElement.querySelector('span');
+          if (data.is_locked) {
+            lockSpan.textContent = '🔒';
+            buttonElement.classList.remove('border-slate-600', 'border-2');
+            buttonElement.classList.add('theme-accent-border', 'border-2');
+            buttonElement.title = 'Unlock this pick';
+          } else {
+            lockSpan.textContent = '🔓';
+            buttonElement.classList.remove('theme-accent-border', 'border-2');
+            buttonElement.classList.add('border-slate-600', 'border-2');
+            buttonElement.title = 'Lock this pick';
+          }
+          
+          // Update lock summary if available
+          if (data.lock_summary) {
+            updateLockSummary(data.lock_summary);
+            
+            // If locks are available, enable lock buttons
+            if (data.lock_summary.available > 0) {
+              enableLockButtons();
+            } else {
+              // If no locks available, disable remaining unlocked buttons
+              // Use a small delay to ensure button state is updated first
+              console.log('No locks available, disabling remaining buttons');
+              setTimeout(() => {
+                disableRemainingLockButtons();
+              }, 100);
+            }
+          }
+          
+          showTemporaryMessage(data.message, 'success');
+        } else {
+          console.error('Failed to toggle lock:', data.error);
+          showTemporaryMessage('Failed to toggle lock: ' + data.error, 'error');
         }
+      } catch (error) {
+        console.error('Error toggling lock:', error);
+        showTemporaryMessage('Error toggling lock', 'error');
       }
+    }
+    
+    // Function to show temporary messages
+    function showTemporaryMessage(message, type) {
+      // Create a temporary message element
+      const messageEl = document.createElement('div');
+      messageEl.className = `fixed top-4 right-4 z-50 px-4 py-2 rounded-lg text-sm font-medium transition-opacity duration-300 ${
+        type === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'
+      }`;
+      messageEl.textContent = message;
+      
+      document.body.appendChild(messageEl);
+      
+      // Remove after 3 seconds
+      setTimeout(() => {
+        messageEl.style.opacity = '0';
+        setTimeout(() => messageEl.remove(), 300);
+      }, 3000);
+    }
+    
+    // Function to update lock summary display
+    function updateLockSummary(lockSummary) {
+      const lockSummaryEl = document.querySelector('.lock-summary-display');
+      if (lockSummaryEl) {
+        lockSummaryEl.textContent = `Locks remaining: ${lockSummary.available} / ${lockSummary.total}`;
+      }
+    }
+    
+    // Function to disable remaining lock buttons when limit reached
+    function disableRemainingLockButtons() {
+      const lockButtons = document.querySelectorAll('.lock-toggle-btn');
+      lockButtons.forEach(button => {
+        const isCurrentlyLocked = button.querySelector('span').textContent === '🔒';
+        if (!isCurrentlyLocked) {
+          button.disabled = true;
+          button.classList.add('opacity-50', 'cursor-not-allowed');
+        }
+      });
+    }
+    
+    // Function to re-enable lock buttons when locks become available
+    function enableLockButtons() {
+      const lockButtons = document.querySelectorAll('.lock-toggle-btn');
+      lockButtons.forEach(button => {
+        const isCurrentlyLocked = button.querySelector('span').textContent === '🔒';
+        if (!isCurrentlyLocked) {
+          button.disabled = false;
+          button.classList.remove('opacity-50', 'cursor-not-allowed');
+        }
+      });
     }
   });
 }

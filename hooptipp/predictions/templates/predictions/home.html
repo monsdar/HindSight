@@ -242,7 +242,7 @@
         <section class="theme-accent-border theme-accent-surface rounded-2xl border p-5 backdrop-blur">
           {% if lock_summary %}
             <div class="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-xs text-slate-300">
-              <span class="font-semibold text-slate-100">Locks remaining: {{ lock_summary.available }} / {{ lock_summary.total }}</span>
+              <span class="font-semibold text-slate-100 lock-summary-display">Locks remaining: {{ lock_summary.available }} / {{ lock_summary.total }}</span>
               <span>
                 Active locks: {{ lock_summary.active }}
                 {% if lock_summary.pending %}
@@ -255,28 +255,21 @@
             </div>
           {% endif %}
 
-          <form id="tips-form" method="post" class="flex flex-wrap items-center justify-between gap-4">
-            {% csrf_token %}
-            <input type="hidden" name="save_tips" value="1" />
+          <div class="flex flex-wrap items-center justify-between gap-4">
             <p class="text-sm theme-accent-muted">
               Making predictions as <span class="font-semibold text-slate-100">{{ active_user.display_name }}</span>{% if active_user.display_name != active_user.username %}<span class="ml-1 text-xs text-slate-400">@{{ active_user.username }}</span>{% endif %}
+              <span class="ml-2 text-xs text-green-400">✓ Predictions save automatically</span>
             </p>
             <div class="flex gap-3">
-              <button type="submit" class="theme-accent-bg theme-accent-shadow inline-flex items-center gap-2 rounded-lg px-5 py-2 font-semibold transition">
-                Save picks
-              </button>
               <button
-                type="submit"
-                formaction="{% url 'predictions:home' %}"
-                name="set_active_user"
-                value="1"
-                onclick="document.getElementById('user_id').value = '';"
+                type="button"
+                onclick="document.getElementById('user_id').value = ''; document.getElementById('user-activation-form').submit();"
                 class="inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-900 px-5 py-2 font-semibold text-slate-200 transition hover:bg-slate-800"
               >
                 Finish Round
               </button>
             </div>
-          </form>
+          </div>
         </section>
       {% endif %}
     </div>

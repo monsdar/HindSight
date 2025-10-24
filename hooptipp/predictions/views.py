@@ -6,9 +6,12 @@ from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.db.models import Case, Count, F, IntegerField, Q, Sum, When
 from django.db.models.functions import Coalesce
-from django.shortcuts import redirect, render
+from django.http import JsonResponse
+from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
+from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
+import json
 
 from hooptipp.nba.managers import NbaPlayerManager, NbaTeamManager
 
@@ -19,6 +22,7 @@ from .models import (
     Option,
     OptionCategory,
     PredictionEvent,
+    PredictionOption,
     TipType,
     UserPreferences,
     UserEventScore,
@@ -570,5 +574,180 @@ def home(request):
         'open_predictions': open_predictions,
     }
     return render(request, 'predictions/home.html', context)
+
+
+@require_http_methods(["POST"])
+@csrf_exempt
+def save_prediction(request):
+    """Save a single prediction immediately via AJAX."""
+    if not request.user.is_authenticated:
+        return JsonResponse({'error': 'Authentication required'}, status=401)
+    
+    try:
+        data = json.loads(request.body)
+        event_id = data.get('event_id')
+        option_id = data.get('option_id')
+        
+        if not event_id or not option_id:
+            return JsonResponse({'error': 'Missing event_id or option_id'}, status=400)
+        
+        # Get the active user from session
+        active_user = _get_active_user(request)
+        if not active_user:
+            return JsonResponse({'error': 'No active user'}, status=400)
+        
+        # Get the event
+        event = get_object_or_404(PredictionEvent, id=event_id)
+        
+        # Check if event is still open
+        now = timezone.now()
+        if event.deadline <= now:
+            return JsonResponse({'error': 'Event deadline has passed'}, status=400)
+        
+        # Get the option
+        option = get_object_or_404(PredictionOption, id=option_id, event=event)
+        selected_option = option.option
+        prediction_label = option.label
+        
+        # Create or update the tip
+        tip, created = UserTip.objects.get_or_create(
+            user=active_user,
+            prediction_event=event,
+            defaults={
+                'tip_type': event.tip_type,
+                'prediction': prediction_label,
+                'prediction_option': option,
+                'selected_option': selected_option,
+            }
+        )
+        
+        if not created:
+            # Update existing tip
+            tip.tip_type = event.tip_type
+            tip.prediction = prediction_label
+            tip.prediction_option = option
+            tip.selected_option = selected_option
+            tip.save()
+        
+        return JsonResponse({
+            'success': True,
+            'message': 'Prediction saved successfully',
+            'created': created
+        })
+        
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@require_http_methods(["POST"])
+@csrf_exempt
+def toggle_lock(request):
+    """Toggle lock status for a prediction immediately via AJAX."""
+    if not request.user.is_authenticated:
+        return JsonResponse({'error': 'Authentication required'}, status=401)
+    
+    try:
+        data = json.loads(request.body)
+        event_id = data.get('event_id')
+        should_lock = data.get('should_lock', False)
+        
+        if not event_id:
+            return JsonResponse({'error': 'Missing event_id'}, status=400)
+        
+        # Get the active user from session
+        active_user = _get_active_user(request)
+        if not active_user:
+            return JsonResponse({'error': 'No active user'}, status=400)
+        
+        # Get the event
+        event = get_object_or_404(PredictionEvent, id=event_id)
+        
+        # Check if event is still open
+        now = timezone.now()
+        if event.deadline <= now:
+            return JsonResponse({'error': 'Event deadline has passed'}, status=400)
+        
+        # Get the tip
+        tip = get_object_or_404(UserTip, user=active_user, prediction_event=event)
+        
+        lock_service = LockService(active_user)
+        lock_service.refresh()
+        
+        if should_lock:
+            try:
+                lock_service.ensure_locked(tip)
+                return JsonResponse({
+                    'success': True,
+                    'message': 'Prediction locked successfully',
+                    'is_locked': True,
+                    'lock_summary': {
+                        'available': lock_service.available,
+                        'active': len(lock_service._active_ids),
+                        'total': lock_service.total
+                    }
+                })
+            except LockLimitError:
+                return JsonResponse({
+                    'error': 'No locks available',
+                    'lock_summary': {
+                        'available': lock_service.available,
+                        'active': len(lock_service._active_ids),
+                        'total': lock_service.total
+                    }
+                }, status=400)
+        else:
+            # Release lock
+            if tip.is_locked:
+                lock_service.release_lock(tip)
+                return JsonResponse({
+                    'success': True,
+                    'message': 'Prediction unlocked successfully',
+                    'is_locked': False,
+                    'lock_summary': {
+                        'available': lock_service.available,
+                        'active': len(lock_service._active_ids),
+                        'total': lock_service.total
+                    }
+                })
+            else:
+                return JsonResponse({
+                    'success': True,
+                    'message': 'Prediction was not locked',
+                    'is_locked': False,
+                    'lock_summary': {
+                        'available': lock_service.available,
+                        'active': len(lock_service._active_ids),
+                        'total': lock_service.total
+                    }
+                })
+        
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@require_http_methods(["GET"])
+def get_lock_summary(request):
+    """Get current lock summary for the active user."""
+    if not request.user.is_authenticated:
+        return JsonResponse({'error': 'Authentication required'}, status=401)
+    
+    active_user = _get_active_user(request)
+    if not active_user:
+        return JsonResponse({'error': 'No active user'}, status=400)
+    
+    lock_service = LockService(active_user)
+    summary = lock_service.refresh()
+    
+    return JsonResponse({
+        'available': summary.available,
+        'active': summary.active,
+        'total': summary.total,
+        'pending': summary.pending,
+        'next_return_at': summary.next_return_at.isoformat() if summary.next_return_at else None
+    })
 
 
