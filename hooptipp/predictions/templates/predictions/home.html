@@ -94,6 +94,33 @@
         </form>
 
         {% if active_user and preferences_form %}
+        
+          <section class="p-5">
+            {% if lock_summary %}
+              <div class="theme-accent-border theme-accent-surface mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-xs text-slate-300">
+                <span class="font-semibold text-slate-100 lock-summary-display">Locks remaining: {{ lock_summary.available }} / {{ lock_summary.total }}</span>
+                <span>
+                  Active locks: {{ lock_summary.active }}
+                  {% if lock_summary.pending %}
+                    &bull; Pending returns: {{ lock_summary.pending }}
+                  {% endif %}
+                </span>
+                {% if lock_summary.next_return_at %}
+                  <span>Next lock returns {{ lock_summary.next_return_at|date:"M d, Y" }}</span>
+                {% endif %}
+
+                <button
+                  type="button"
+                  onclick="document.getElementById('user_id').value = ''; document.getElementById('user-activation-form').submit();"
+                  class="inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-900 px-5 py-2 font-semibold text-slate-200 transition hover:bg-slate-800"
+                >
+                  Finish Predictions
+                </button>
+              </div>
+            {% endif %}
+            
+            
+          </section>
           <section class=" p-4 shadow-lg shadow-slate-900/30">
             <details class="group">
               <summary class="flex w-full cursor-pointer items-center justify-between gap-3 rounded-xl border border-slate-800 bg-slate-950 px-4 py-3 text-left transition hover:border-slate-700">
@@ -236,42 +263,6 @@
           </div>
         {% endif %}
       </section>
-
-      {# 5. FINISH ROUND BUTTON (only when user is active) #}
-      {% if active_user %}
-        <section class="theme-accent-border theme-accent-surface rounded-2xl border p-5 backdrop-blur">
-          {% if lock_summary %}
-            <div class="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-xs text-slate-300">
-              <span class="font-semibold text-slate-100 lock-summary-display">Locks remaining: {{ lock_summary.available }} / {{ lock_summary.total }}</span>
-              <span>
-                Active locks: {{ lock_summary.active }}
-                {% if lock_summary.pending %}
-                  &bull; Pending returns: {{ lock_summary.pending }}
-                {% endif %}
-              </span>
-              {% if lock_summary.next_return_at %}
-                <span>Next lock returns {{ lock_summary.next_return_at|date:"M d, Y" }}</span>
-              {% endif %}
-            </div>
-          {% endif %}
-
-          <div class="flex flex-wrap items-center justify-between gap-4">
-            <p class="text-sm theme-accent-muted">
-              Making predictions as <span class="font-semibold text-slate-100">{{ active_user.display_name }}</span>{% if active_user.display_name != active_user.username %}<span class="ml-1 text-xs text-slate-400">@{{ active_user.username }}</span>{% endif %}
-              <span class="ml-2 text-xs text-green-400">✓ Predictions save automatically</span>
-            </p>
-            <div class="flex gap-3">
-              <button
-                type="button"
-                onclick="document.getElementById('user_id').value = ''; document.getElementById('user-activation-form').submit();"
-                class="inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-900 px-5 py-2 font-semibold text-slate-200 transition hover:bg-slate-800"
-              >
-                Finish Round
-              </button>
-            </div>
-          </div>
-        </section>
-      {% endif %}
     </div>
   {% endwith %}
 

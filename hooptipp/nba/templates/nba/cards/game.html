@@ -44,7 +44,7 @@ Teams are directly selectable for predictions.
       {# Away Team - Selectable #}
       {% if active_user %}
         <button type="button" 
-                class="team-select-btn flex-1 text-center p-3 rounded-lg border-2 transition-all duration-200 hover:bg-slate-700 {% if user_tip and user_tip.prediction_option_id == card_context.away_team_option_id %}theme-accent-border{% else %}border-slate-600{% endif %}"
+                class="team-select-btn flex-1 text-center p-3 rounded-lg border-2 transition-all duration-200 hover:bg-slate-700 {% if user_tip and user_tip.prediction_option_id == card_context.away_team_option_id %}theme-accent-border theme-accent-bg{% else %}border-slate-600{% endif %}"
                 data-event-id="{{ event.id }}"
                 data-option-id="{{ card_context.away_team_option_id }}"
                 data-team-name="{{ card_context.away_team_tricode }}">
@@ -70,7 +70,7 @@ Teams are directly selectable for predictions.
       {# Home Team - Selectable #}
       {% if active_user %}
         <button type="button" 
-                class="team-select-btn flex-1 text-center p-3 rounded-lg border-2 transition-all duration-200 hover:bg-slate-700 {% if user_tip and user_tip.prediction_option_id == card_context.home_team_option_id %}theme-accent-border{% else %}border-slate-600{% endif %}"
+                class="team-select-btn flex-1 text-center p-3 rounded-lg border-2 transition-all duration-200 hover:bg-slate-700 {% if user_tip and user_tip.prediction_option_id == card_context.home_team_option_id %}theme-accent-border theme-accent-bg{% else %}border-slate-600{% endif %}"
                 data-event-id="{{ event.id }}"
                 data-option-id="{{ card_context.home_team_option_id }}"
                 data-team-name="{{ card_context.home_team_tricode }}">
@@ -153,13 +153,13 @@ if (!window.hooptippGameCardInitialized) {
           // Remove selection from other teams in this event
           const allTeamButtons = document.querySelectorAll(`[data-event-id="${eventId}"]`);
           allTeamButtons.forEach(btn => {
-            btn.classList.remove('theme-accent-border');
+            btn.classList.remove('theme-accent-border', 'theme-accent-bg');
             btn.classList.add('border-slate-600');
           });
           
           // Add selection to clicked team
           this.classList.remove('border-slate-600');
-          this.classList.add('theme-accent-border');
+          this.classList.add('theme-accent-border', 'theme-accent-bg');
                     
           // Save prediction immediately via AJAX
           savePredictionImmediately(eventId, optionId);
