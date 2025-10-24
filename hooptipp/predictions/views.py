@@ -327,7 +327,7 @@ def home(request):
                 )
             return redirect('predictions:home')
 
-    all_users = list(get_user_model().objects.order_by('username'))
+    all_users = list(get_user_model().objects.select_related('preferences').order_by('username'))
     lock_summary = None
     scoreboard_summary = None
     recent_scores: list[UserEventScore] = []

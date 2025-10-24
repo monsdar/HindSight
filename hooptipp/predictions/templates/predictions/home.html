@@ -72,26 +72,57 @@
 
       {# 2. USER SELECTION, ACTIVATION AND CUSTOMIZATION #}
       <section class="rounded-2xl border border-slate-800 bg-slate-900 p-4 shadow-lg shadow-slate-900/30">
-        <form method="post" id="user-activation-form" class="flex flex-wrap items-end gap-3 p-4 shadow-lg shadow-slate-900/30">
-          {% csrf_token %}
-          <input type="hidden" name="set_active_user" value="1" />
-          <div class="flex-1">
-            <label for="user_id" class="block text-sm font-semibold uppercase tracking-wide text-slate-400">Active user</label>
-            <select id="user_id" name="user_id" class="theme-accent-outline mt-2 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100 focus:outline-none">
-              <option value="">No active user</option>
+        {% if not active_user %}
+          {# Profile Picture Buttons Grid #}
+          <div class="space-y-4">
+            <h2 class="text-lg font-semibold theme-accent-text">Select Player</h2>
+            <div class="grid grid-cols-5 gap-4">
               {% for user in users %}
-                <option value="{{ user.id }}" {% if active_user and user.id == active_user.id %}selected{% endif %}>{{ user.display_name }}{% if user.display_name != user.username %} (@{{ user.username }}){% endif %}</option>
+                <button
+                  type="button"
+                  class="user-profile-btn group relative flex flex-col items-center gap-2 p-4 rounded-xl border-2 border-slate-700 bg-slate-950 hover:border-blue-400 hover:bg-slate-800 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  data-user-id="{{ user.id }}"
+                  data-user-name="{{ user.display_name }}"
+                >
+                  <div class="w-16 h-16 rounded-full overflow-hidden border-2 border-slate-600 group-hover:border-blue-400 transition-colors">
+                    {% if user.preferences.profile_picture %}
+                      <img 
+                        src="{{ user.preferences.profile_picture.url }}" 
+                        alt="{{ user.display_name }} profile"
+                        class="w-full h-full object-cover"
+                      >
+                    {% else %}
+                      <div class="w-full h-full bg-slate-700 flex items-center justify-center text-slate-300 text-lg font-bold">
+                        {{ user.display_name|slice:":2"|upper }}
+                      </div>
+                    {% endif %}
+                  </div>
+                  <span class="text-xs text-slate-300 text-center">{{ user.display_name }}</span>
+                </button>
               {% endfor %}
-            </select>
+            </div>
           </div>
-          <button
-            type="button"
-            id="activate-user-btn"
-            class="theme-accent-bg theme-accent-shadow inline-flex items-center gap-2 rounded-lg px-4 py-2 font-semibold transition"
-          >
-            Activate user
-          </button>
-        </form>
+        {% else %}
+          {# Finish Predictions Button #}
+          <div class="space-y-4">
+            <div class="flex items-center justify-between">
+              <div>
+                <h2 class="text-lg font-semibold theme-accent-text">Active Player</h2>
+                <p class="text-sm text-slate-400">{{ active_user.display_name }}</p>
+              </div>
+              <button
+                type="button"
+                id="finish-predictions-btn"
+                class="theme-accent-bg theme-accent-shadow inline-flex items-center gap-2 rounded-lg px-6 py-3 font-semibold transition hover:opacity-90"
+              >
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+                Finish Predictions
+              </button>
+            </div>
+          </div>
+        {% endif %}
 
         {% if active_user and preferences_form %}
         
@@ -108,18 +139,8 @@
                 {% if lock_summary.next_return_at %}
                   <span>Next lock returns {{ lock_summary.next_return_at|date:"M d, Y" }}</span>
                 {% endif %}
-
-                <button
-                  type="button"
-                  onclick="document.getElementById('user_id').value = ''; document.getElementById('user-activation-form').submit();"
-                  class="inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-900 px-5 py-2 font-semibold text-slate-200 transition hover:bg-slate-800"
-                >
-                  Finish Predictions
-                </button>
               </div>
             {% endif %}
-            
-            
           </section>
           <section class=" p-4 shadow-lg shadow-slate-900/30">
             <details class="group">
@@ -172,14 +193,6 @@
 
                   <div class="grid gap-5 md:grid-cols-2">
                     <div>
-                      <label for="{{ preferences_form.favorite_team_id.id_for_label }}" class="block text-sm font-semibold uppercase tracking-wide text-slate-400">Favorite team</label>
-                      {{ preferences_form.favorite_team_id }}
-                      <p class="mt-2 text-xs text-slate-500">The team that appears in highlights around your profile.</p>
-                      {% if preferences_form.favorite_team_id.errors %}
-                        <p class="mt-2 text-sm text-red-300">{{ preferences_form.favorite_team_id.errors|join:', ' }}</p>
-                      {% endif %}
-                    </div>
-                    <div>
                       <label class="block text-sm font-semibold uppercase tracking-wide text-slate-400">Activation PIN</label>
                       <div class="mt-2">
                         <button type="button" id="edit-pin-btn" class="theme-accent-outline w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-left text-slate-100 focus:outline-none">
@@ -190,14 +203,6 @@
                       {{ preferences_form.activation_pin }}
                       {% if preferences_form.activation_pin.errors %}
                         <p class="mt-2 text-sm text-red-300">{{ preferences_form.activation_pin.errors|join:', ' }}</p>
-                      {% endif %}
-                    </div>
-                    <div>
-                      <label for="{{ preferences_form.favorite_player_id.id_for_label }}" class="block text-sm font-semibold uppercase tracking-wide text-slate-400">Favorite player</label>
-                      {{ preferences_form.favorite_player_id }}
-                      <p class="mt-2 text-xs text-slate-500">Featured when we surface player-specific props.</p>
-                      {% if preferences_form.favorite_player_id.errors %}
-                        <p class="mt-2 text-sm text-red-300">{{ preferences_form.favorite_player_id.errors|join:', ' }}</p>
                       {% endif %}
                     </div>
                   </div>
@@ -397,7 +402,6 @@
 
   <script>
     document.addEventListener('DOMContentLoaded', function() {
-      const activateBtn = document.getElementById('activate-user-btn');
       const pinModal = document.getElementById('pin-modal');
       const closePinModal = document.getElementById('close-pin-modal');
       const cancelPin = document.getElementById('cancel-pin');
@@ -405,23 +409,19 @@
       const submitPin = document.getElementById('submit-pin');
       const selectedUserName = document.getElementById('selected-user-name');
       const pinUserId = document.getElementById('pin-user-id');
-      const userSelect = document.getElementById('user_id');
       const pinCheckboxes = document.querySelectorAll('input[name="pin_teams"]');
+      const userProfileBtns = document.querySelectorAll('.user-profile-btn');
+      const finishPredictionsBtn = document.getElementById('finish-predictions-btn');
       
-      // Show PIN modal when activate button is clicked
-      if (activateBtn) {
-        activateBtn.addEventListener('click', function() {
-          const selectedUserId = userSelect.value;
-          const selectedUserOption = userSelect.options[userSelect.selectedIndex];
-          
-          if (!selectedUserId) {
-            alert('Please select a user first.');
-            return;
-          }
+      // Show PIN modal when profile button is clicked
+      userProfileBtns.forEach(btn => {
+        btn.addEventListener('click', function() {
+          const userId = this.getAttribute('data-user-id');
+          const userName = this.getAttribute('data-user-name');
           
           // Set the selected user info
-          pinUserId.value = selectedUserId;
-          selectedUserName.textContent = selectedUserOption.textContent.split(' (')[0]; // Remove username part
+          pinUserId.value = userId;
+          selectedUserName.textContent = userName;
           
           // Reset form
           pinCheckboxes.forEach(cb => cb.checked = false);
@@ -429,6 +429,38 @@
           
           // Show modal
           pinModal.classList.remove('hidden');
+        });
+      });
+      
+      // Handle Finish Predictions button
+      if (finishPredictionsBtn) {
+        finishPredictionsBtn.addEventListener('click', function() {
+          // Create a form to submit the deactivation
+          const form = document.createElement('form');
+          form.method = 'POST';
+          form.action = window.location.href;
+          
+          const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+          const csrfInput = document.createElement('input');
+          csrfInput.type = 'hidden';
+          csrfInput.name = 'csrfmiddlewaretoken';
+          csrfInput.value = csrfToken;
+          form.appendChild(csrfInput);
+          
+          const setActiveUserInput = document.createElement('input');
+          setActiveUserInput.type = 'hidden';
+          setActiveUserInput.name = 'set_active_user';
+          setActiveUserInput.value = '1';
+          form.appendChild(setActiveUserInput);
+          
+          const userIdInput = document.createElement('input');
+          userIdInput.type = 'hidden';
+          userIdInput.name = 'user_id';
+          userIdInput.value = '';
+          form.appendChild(userIdInput);
+          
+          document.body.appendChild(form);
+          form.submit();
         });
       }
       

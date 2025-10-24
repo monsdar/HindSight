@@ -147,16 +147,14 @@ class HomeViewTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
 
-        self.assertContains(response, 'Ace (@alice)')
-        self.assertContains(response, 'Buckets (@bob)')
+        # Check for the active player section since a user is active
+        self.assertContains(response, 'Active Player')
+        self.assertContains(response, 'Ace')
+        self.assertContains(response, 'Finish Predictions')
         # Check for the new dashboard text instead of old "Scoring overview" text
         self.assertContains(response, 'Leaderboard')
-        self.assertContains(
-            response,
-            'Making predictions as <span class="font-semibold text-slate-100">Ace</span>',
-        )
         # Note: In the streamlined dashboard, user initials are not shown on individual
-        # prediction cards, only in the user selection dropdown
+        # prediction cards, only in the user selection buttons
 
         event_tip_users = response.context['event_tip_users'][self.event.id]
         self.assertEqual([user.display_name for user in event_tip_users], ['Ace', 'Buckets'])

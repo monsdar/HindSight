@@ -722,7 +722,8 @@ class UserPreferencesAdmin(admin.ModelAdmin):
     
     fieldsets = (
         (None, {
-            'fields': ('user', 'nickname', 'theme')
+            'fields': ('user', 'nickname', 'theme', 'profile_picture'),
+            'description': 'Profile picture must be square (1:1 ratio) and will be automatically resized to 256x256 pixels.',
         }),
         ('Security', {
             'fields': ('activation_pin',),

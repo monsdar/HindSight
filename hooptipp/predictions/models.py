@@ -3,8 +3,57 @@ from __future__ import annotations
 from django.conf import settings
 from django.db import models
 from django.utils import timezone
+from django.core.exceptions import ValidationError
+from django.core.files.base import ContentFile
+from django.db.models.signals import post_save
+from django.dispatch import receiver
+from PIL import Image
+import os
 
 from .theme_palettes import DEFAULT_THEME_KEY, THEME_CHOICES, get_theme_palette
+
+
+def validate_square_image(image):
+    """Validate that the uploaded image is square (1:1 ratio)."""
+    try:
+        with Image.open(image) as img:
+            width, height = img.size
+            if width != height:
+                raise ValidationError(
+                    f"Image must be square (1:1 ratio). Current dimensions: {width}x{height}. "
+                    f"Please crop your image to be square before uploading."
+                )
+    except Exception as e:
+        raise ValidationError(f"Invalid image file: {str(e)}")
+
+
+def process_profile_picture(instance, filename):
+    """Process and resize profile picture to 256x256 pixels."""
+    # Validate the image is square first
+    validate_square_image(instance.profile_picture.file)
+    
+    try:
+        with Image.open(instance.profile_picture.file) as img:
+            # Convert to RGB if necessary (handles RGBA, P mode images)
+            if img.mode in ('RGBA', 'P'):
+                img = img.convert('RGB')
+            
+            # Resize to 256x256
+            img = img.resize((256, 256), Image.Resampling.LANCZOS)
+            
+            # Save to a new file
+            output = ContentFile(b'')
+            img.save(output, format='JPEG', quality=95, optimize=True)
+            output.seek(0)
+            
+            # Update the file content
+            instance.profile_picture.save(
+                filename,
+                ContentFile(output.read()),
+                save=False
+            )
+    except Exception as e:
+        raise ValidationError(f"Failed to process image: {str(e)}")
 
 
 class OptionCategory(models.Model):
@@ -434,6 +483,13 @@ class UserPreferences(models.Model):
         blank=True,
         help_text="Comma-separated NBA team abbreviations for user activation (e.g., 'LAL,GSW,BOS')"
     )
+    profile_picture = models.ImageField(
+        upload_to='profile_pictures/',
+        blank=True,
+        null=True,
+        help_text="User profile picture (must be square, will be resized to 256x256px)",
+        validators=[validate_square_image]
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -463,3 +519,29 @@ class UserPreferences(models.Model):
         if not pin_teams:
             return False
         return set(team.strip().upper() for team in submitted_teams) == set(pin_teams)
+
+
+@receiver(post_save, sender=UserPreferences)
+def process_profile_picture_signal(sender, instance, created, **kwargs):
+    """Automatically process and resize profile pictures when saved."""
+    if instance.profile_picture and hasattr(instance.profile_picture, 'file'):
+        try:
+            # Get the current file path
+            current_path = instance.profile_picture.path
+            
+            # Open and process the image
+            with Image.open(current_path) as img:
+                # Convert to RGB if necessary
+                if img.mode in ('RGBA', 'P'):
+                    img = img.convert('RGB')
+                
+                # Resize to 256x256
+                img = img.resize((256, 256), Image.Resampling.LANCZOS)
+                
+                # Save the processed image back to the same file
+                img.save(current_path, format='JPEG', quality=95, optimize=True)
+                
+        except Exception as e:
+            # If processing fails, we'll let the validation error handle it
+            # This prevents the signal from breaking the save process
+            pass
