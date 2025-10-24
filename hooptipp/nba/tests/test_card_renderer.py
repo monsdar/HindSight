@@ -192,8 +192,15 @@ class NbaCardRendererTests(TestCase):
         # Check team logos are provided
         self.assertIn("home_team_logo", context)
         self.assertIn("away_team_logo", context)
-        self.assertIn("LAL", context["home_team_logo"])
-        self.assertIn("BOS", context["away_team_logo"])
+        # Check that logos are either local or CDN URLs
+        if context["home_team_logo"].startswith("/static/"):
+            self.assertIn("lal.svg", context["home_team_logo"])
+        else:
+            self.assertIn("LAL", context["home_team_logo"])
+        if context["away_team_logo"].startswith("/static/"):
+            self.assertIn("bos.svg", context["away_team_logo"])
+        else:
+            self.assertIn("BOS", context["away_team_logo"])
 
     def test_get_event_context_with_playoff_data(self):
         """Renderer should include playoff context if available."""

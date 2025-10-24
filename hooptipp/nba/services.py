@@ -379,17 +379,21 @@ def get_team_logo_url(team_identifier: str) -> str:
         team_identifier: Team abbreviation (e.g., 'LAL', 'BOS') or NBA team ID
 
     Returns:
-        URL to team logo image
+        URL to team logo image (local if available, otherwise CDN)
     """
     from django.core.cache import cache
+    from django.conf import settings
+    from pathlib import Path
     
     # Check if it's already a numeric NBA team ID
     if team_identifier.isdigit():
         nba_team_id = team_identifier
+        team_abbr = None
     else:
         # Look up NBA team ID from abbreviation
         cache_key = f"nba_team_id_{team_identifier}"
         nba_team_id = cache.get(cache_key)
+        team_abbr = team_identifier
         
         if nba_team_id is None:
             # Query the database for the team
@@ -409,7 +413,16 @@ def get_team_logo_url(team_identifier: str) -> str:
     if not nba_team_id:
         nba_team_id = team_identifier
     
-    # Using NBA's official CDN for team logos
+    # Check for local logo first
+    if team_abbr:
+        static_dir = Path(settings.STATICFILES_DIRS[0]) if settings.STATICFILES_DIRS else Path(settings.STATIC_ROOT)
+        local_logo_path = static_dir / 'nba' / 'logos' / f"{team_abbr.lower()}.svg"
+        
+        if local_logo_path.exists():
+            # Return static URL for local logo
+            return f"/static/nba/logos/{team_abbr.lower()}.svg"
+    
+    # Fallback to NBA's official CDN for team logos
     return f"https://cdn.nba.com/logos/nba/{nba_team_id}/global/L/logo.svg"
 
 

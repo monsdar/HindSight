@@ -37,7 +37,7 @@ class GetTeamLogoUrlTests(TestCase):
         self.assertIn("cdn.nba.com", url)
 
     def test_returns_logo_url_for_team_abbreviation(self):
-        """Function should look up NBA team ID and return CDN URL."""
+        """Function should look up NBA team ID and return local or CDN URL."""
         # Create a team option with NBA team ID in metadata
         # Using BallDontLie ID 2 for Boston Celtics, which maps to NBA ID 1610612738
         team = Option.objects.create(
@@ -56,9 +56,13 @@ class GetTeamLogoUrlTests(TestCase):
         )
 
         url = get_team_logo_url("BOS")
-        self.assertIn("1610612738", url)
-        self.assertIn("logo", url.lower())
-        self.assertIn("cdn.nba.com", url)
+        # Should return local URL if logo exists locally, otherwise CDN URL
+        if url.startswith("/static/"):
+            self.assertIn("bos.svg", url)
+        else:
+            self.assertIn("1610612738", url)
+            self.assertIn("logo", url.lower())
+            self.assertIn("cdn.nba.com", url)
 
     def test_returns_different_urls_for_different_teams(self):
         """Function should return different URLs for different teams."""
@@ -89,8 +93,17 @@ class GetTeamLogoUrlTests(TestCase):
         lal_url = get_team_logo_url("LAL")
         bos_url = get_team_logo_url("BOS")
         self.assertNotEqual(lal_url, bos_url)
-        self.assertIn("1610612747", lal_url)
-        self.assertIn("1610612738", bos_url)
+        
+        # Check that URLs are appropriate (local or CDN)
+        if lal_url.startswith("/static/"):
+            self.assertIn("lal.svg", lal_url)
+        else:
+            self.assertIn("1610612747", lal_url)
+            
+        if bos_url.startswith("/static/"):
+            self.assertIn("bos.svg", bos_url)
+        else:
+            self.assertIn("1610612738", bos_url)
 
     def test_falls_back_to_abbreviation_when_team_not_found(self):
         """Function should fall back to abbreviation when team not found in database."""
@@ -123,7 +136,11 @@ class GetTeamLogoUrlTests(TestCase):
         
         # Should still work from cache
         self.assertEqual(url1, url2)
-        self.assertIn("1610612738", url2)
+        # Check that URL is appropriate (local or CDN)
+        if url2.startswith("/static/"):
+            self.assertIn("bos.svg", url2)
+        else:
+            self.assertIn("1610612738", url2)
 
     def test_handles_case_insensitive_abbreviation(self):
         """Function should handle case insensitive team abbreviations."""
@@ -143,7 +160,11 @@ class GetTeamLogoUrlTests(TestCase):
         url_upper = get_team_logo_url("BOS")
         
         self.assertEqual(url_lower, url_upper)
-        self.assertIn("1610612738", url_lower)
+        # Check that URL is appropriate (local or CDN)
+        if url_lower.startswith("/static/"):
+            self.assertIn("bos.svg", url_lower)
+        else:
+            self.assertIn("1610612738", url_lower)
 
 
 class GetLiveGameDataTests(TestCase):
