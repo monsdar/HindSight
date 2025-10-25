@@ -163,6 +163,55 @@ class SavePredictionAPITests(TestCase):
         data = response.json()
         self.assertEqual(data['error'], 'Missing event_id or option_id')
 
+    def test_save_prediction_with_session_activation(self):
+        """Test saving prediction with session-based activation (no traditional login)."""
+        # Logout the user to simulate no traditional authentication
+        self.client.logout()
+        
+        # Set active user in session (simulating PIN activation)
+        session = self.client.session
+        session['active_user_id'] = self.user.id
+        session.save()
+        
+        response = self.client.post(
+            '/api/save-prediction/',
+            data=json.dumps({
+                'event_id': self.event.id,
+                'option_id': self.prediction_option.id
+            }),
+            content_type='application/json'
+        )
+        
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertTrue(data['success'])
+        self.assertTrue(data['created'])
+        
+        # Check that tip was created
+        tip = UserTip.objects.get(user=self.user, prediction_event=self.event)
+        self.assertEqual(tip.prediction, 'Lakers Win')
+
+    def test_save_prediction_no_authentication_no_session(self):
+        """Test saving prediction with no authentication and no session."""
+        # Logout the user and clear session
+        self.client.logout()
+        session = self.client.session
+        session.pop('active_user_id', None)
+        session.save()
+        
+        response = self.client.post(
+            '/api/save-prediction/',
+            data=json.dumps({
+                'event_id': self.event.id,
+                'option_id': self.prediction_option.id
+            }),
+            content_type='application/json'
+        )
+        
+        self.assertEqual(response.status_code, 401)
+        data = response.json()
+        self.assertEqual(data['error'], 'Authentication required')
+
 
 class ToggleLockAPITests(TestCase):
     def setUp(self):

@@ -580,7 +580,8 @@ def home(request):
 @csrf_exempt
 def save_prediction(request):
     """Save a single prediction immediately via AJAX."""
-    if not request.user.is_authenticated:
+    # Check for either traditional authentication or session-based activation
+    if not request.user.is_authenticated and not request.session.get('active_user_id'):
         return JsonResponse({'error': 'Authentication required'}, status=401)
     
     try:
@@ -645,7 +646,8 @@ def save_prediction(request):
 @csrf_exempt
 def toggle_lock(request):
     """Toggle lock status for a prediction immediately via AJAX."""
-    if not request.user.is_authenticated:
+    # Check for either traditional authentication or session-based activation
+    if not request.user.is_authenticated and not request.session.get('active_user_id'):
         return JsonResponse({'error': 'Authentication required'}, status=401)
     
     try:
@@ -742,7 +744,8 @@ def toggle_lock(request):
 @require_http_methods(["GET"])
 def get_lock_summary(request):
     """Get current lock summary for the active user."""
-    if not request.user.is_authenticated:
+    # Check for either traditional authentication or session-based activation
+    if not request.user.is_authenticated and not request.session.get('active_user_id'):
         return JsonResponse({'error': 'Authentication required'}, status=401)
     
     active_user = _get_active_user(request)
