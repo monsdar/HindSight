@@ -273,8 +273,13 @@ class PrivacyGateViewTests(TestCase):
         
         self.assertEqual(response.status_code, 200)
         # Check that logo URLs are present in the response
-        self.assertContains(response, 'cdn.nba.com')
-        self.assertContains(response, 'logo.svg')
+        # Logos can be either local static files or CDN URLs
+        response_content = response.content.decode('utf-8')
+        has_local_logos = '/static/nba/logos/' in response_content
+        has_cdn_logos = 'cdn.nba.com' in response_content
+        self.assertTrue(has_local_logos or has_cdn_logos, 
+                       "Response should contain either local logo paths (/static/nba/logos/) or CDN URLs (cdn.nba.com)")
+        self.assertContains(response, '.svg')
 
     def test_privacy_gate_redirects_to_admin_when_no_teams(self):
         """Privacy gate should redirect to admin when no NBA teams are available."""
