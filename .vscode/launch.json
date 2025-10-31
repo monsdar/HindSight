@@ -15,6 +15,17 @@
             ]
         },
         {
+            "name": "Python Debugger: process_game_outcomes",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/manage.py",
+            "console": "integratedTerminal",
+            "args": [
+                "process_game_outcomes",
+                "--hours-back=720"
+            ]
+        },
+        {
             "name": "Python Debugger: Django",
             "type": "debugpy",
             "request": "launch",

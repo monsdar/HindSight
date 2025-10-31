@@ -112,6 +112,62 @@ class ProcessGameOutcomesCommandTest(TestCase):
             sort_order=2,
             is_active=True
         )
+    
+    def _mock_batch_fetch_game_data(self, game_data_dict: dict):
+        """
+        Helper method to mock batch_fetch_game_data.
+        
+        Args:
+            game_data_dict: Dictionary mapping game_id to game data dict
+        """
+        def mock_batch_fetch(events):
+            return game_data_dict
+        return patch(
+            'hooptipp.nba.management.commands.process_game_outcomes.Command.batch_fetch_game_data',
+            side_effect=mock_batch_fetch
+        )
+    
+    def _create_mock_game_response(self, game_id: str, home_score: int, away_score: int, status: str = 'Final'):
+        """Helper to create a mock game object from the API response."""
+        mock_game = MagicMock()
+        mock_game.id = int(game_id)
+        mock_game.home_team_score = home_score
+        mock_game.visitor_team_score = away_score
+        mock_game.status = status
+        return mock_game
+    
+    def _mock_build_client_with_games(self, game_data_dict: dict):
+        """
+        Helper to mock _build_bdl_client with games.list() response.
+        
+        Args:
+            game_data_dict: Dictionary mapping game_id to game data dict
+        """
+        # Create mock game objects
+        mock_games = []
+        for game_id, data in game_data_dict.items():
+            mock_game = self._create_mock_game_response(
+                game_id,
+                data.get('home_score', 0),
+                data.get('away_score', 0),
+                data.get('game_status', 'Final')
+            )
+            mock_games.append(mock_game)
+        
+        # Create mock response
+        mock_response = MagicMock()
+        mock_response.data = mock_games
+        mock_response.meta = MagicMock()
+        mock_response.meta.next_cursor = None
+        
+        # Create mock client
+        mock_client = MagicMock()
+        mock_client.nba.games.list.return_value = mock_response
+        
+        return patch(
+            'hooptipp.nba.management.commands.process_game_outcomes._build_bdl_client',
+            return_value=mock_client
+        )
 
     def test_command_help(self):
         """Test that the command help is displayed correctly."""
@@ -120,14 +176,15 @@ class ProcessGameOutcomesCommandTest(TestCase):
 
     def test_dry_run_mode(self):
         """Test dry run mode shows what would be processed."""
-        with patch('hooptipp.nba.management.commands.process_game_outcomes.get_live_game_data') as mock_get_data:
-            mock_get_data.return_value = {
+        game_data = {
+            '12345': {
                 'game_status': 'Final',
                 'home_score': 110,
                 'away_score': 105,
                 'is_live': False
             }
-            
+        }
+        with self._mock_build_client_with_games(game_data):
             # Capture output
             from io import StringIO
             out = StringIO()
@@ -144,14 +201,15 @@ class ProcessGameOutcomesCommandTest(TestCase):
 
     def test_process_final_game_home_winner(self):
         """Test processing a final game with home team winner."""
-        with patch('hooptipp.nba.management.commands.process_game_outcomes.get_live_game_data') as mock_get_data:
-            mock_get_data.return_value = {
+        game_data = {
+            '12345': {
                 'game_status': 'Final',
                 'home_score': 110,
                 'away_score': 105,
                 'is_live': False
             }
-            
+        }
+        with self._mock_build_client_with_games(game_data):
             call_command('process_game_outcomes')
             
             # Verify EventOutcome was created
@@ -170,7 +228,7 @@ class ProcessGameOutcomesCommandTest(TestCase):
             self.assertEqual(outcome.metadata['home_team'], 'LAL')
             self.assertEqual(outcome.metadata['away_team_full'], 'Golden State Warriors')
             self.assertEqual(outcome.metadata['home_team_full'], 'Los Angeles Lakers')
-            self.assertEqual(outcome.metadata['game_status'], 'final')
+            self.assertEqual(outcome.metadata['game_status'], 'Final')
             self.assertEqual(outcome.metadata['nba_game_id'], '12345')
 
     def test_process_final_game_away_winner(self):
@@ -178,14 +236,15 @@ class ProcessGameOutcomesCommandTest(TestCase):
         # Clear any existing outcomes first
         EventOutcome.objects.all().delete()
         
-        with patch('hooptipp.nba.management.commands.process_game_outcomes.get_live_game_data') as mock_get_data:
-            mock_get_data.return_value = {
+        game_data = {
+            '12345': {
                 'game_status': 'Final',
                 'home_score': 105,
                 'away_score': 110,
                 'is_live': False
             }
-            
+        }
+        with self._mock_build_client_with_games(game_data):
             call_command('process_game_outcomes')
             
             # Verify EventOutcome was created
@@ -200,14 +259,15 @@ class ProcessGameOutcomesCommandTest(TestCase):
         # Clear any existing outcomes first
         EventOutcome.objects.all().delete()
         
-        with patch('hooptipp.nba.management.commands.process_game_outcomes.get_live_game_data') as mock_get_data:
-            mock_get_data.return_value = {
+        game_data = {
+            '12345': {
                 'game_status': 'Q3 5:23',
                 'home_score': 80,
                 'away_score': 75,
                 'is_live': True
             }
-            
+        }
+        with self._mock_build_client_with_games(game_data):
             call_command('process_game_outcomes')
             
             # Verify no EventOutcome was created
@@ -218,14 +278,15 @@ class ProcessGameOutcomesCommandTest(TestCase):
         # Clear any existing outcomes first
         EventOutcome.objects.all().delete()
         
-        with patch('hooptipp.nba.management.commands.process_game_outcomes.get_live_game_data') as mock_get_data:
-            mock_get_data.return_value = {
+        game_data = {
+            '12345': {
                 'game_status': 'Final',
                 'home_score': 105,
                 'away_score': 105,
                 'is_live': False
             }
-            
+        }
+        with self._mock_build_client_with_games(game_data):
             call_command('process_game_outcomes')
             
             # Verify no EventOutcome was created
@@ -236,14 +297,22 @@ class ProcessGameOutcomesCommandTest(TestCase):
         # Clear any existing outcomes first
         EventOutcome.objects.all().delete()
         
-        with patch('hooptipp.nba.management.commands.process_game_outcomes.get_live_game_data') as mock_get_data:
-            mock_get_data.return_value = {
-                'game_status': 'Final',
-                'home_score': None,
-                'away_score': 105,
-                'is_live': False
-            }
-            
+        # Create a mock game with missing score
+        mock_game = self._create_mock_game_response('12345', None, 105, 'Final')
+        mock_game.home_team_score = None
+        
+        mock_response = MagicMock()
+        mock_response.data = [mock_game]
+        mock_response.meta = MagicMock()
+        mock_response.meta.next_cursor = None
+        
+        mock_client = MagicMock()
+        mock_client.nba.games.list.return_value = mock_response
+        
+        with patch(
+            'hooptipp.nba.management.commands.process_game_outcomes._build_bdl_client',
+            return_value=mock_client
+        ):
             call_command('process_game_outcomes')
             
             # Verify no EventOutcome was created
@@ -257,14 +326,15 @@ class ProcessGameOutcomesCommandTest(TestCase):
         # Remove the home team option
         self.home_option.delete()
         
-        with patch('hooptipp.nba.management.commands.process_game_outcomes.get_live_game_data') as mock_get_data:
-            mock_get_data.return_value = {
+        game_data = {
+            '12345': {
                 'game_status': 'Final',
                 'home_score': 110,
                 'away_score': 105,
                 'is_live': False
             }
-            
+        }
+        with self._mock_build_client_with_games(game_data):
             call_command('process_game_outcomes')
             
             # Verify no EventOutcome was created
@@ -280,14 +350,15 @@ class ProcessGameOutcomesCommandTest(TestCase):
             resolved_at=timezone.now()
         )
         
-        with patch('hooptipp.nba.management.commands.process_game_outcomes.get_live_game_data') as mock_get_data:
-            mock_get_data.return_value = {
+        game_data = {
+            '12345': {
                 'game_status': 'Final',
                 'home_score': 110,
                 'away_score': 105,
                 'is_live': False
             }
-            
+        }
+        with self._mock_build_client_with_games(game_data):
             call_command('process_game_outcomes')
             
             # Verify only one EventOutcome exists (the original one)
@@ -356,26 +427,21 @@ class ProcessGameOutcomesCommandTest(TestCase):
             is_active=True
         )
         
-        with patch('hooptipp.nba.management.commands.process_game_outcomes.get_live_game_data') as mock_get_data:
-            def mock_get_data_side_effect(game_id):
-                if game_id == '12345':
-                    return {
-                        'game_status': 'Final',
-                        'home_score': 110,
-                        'away_score': 105,
-                        'is_live': False
-                    }
-                elif game_id == '99999':
-                    return {
-                        'game_status': 'Final',
-                        'home_score': 100,
-                        'away_score': 95,
-                        'is_live': False
-                    }
-                return {}
-            
-            mock_get_data.side_effect = mock_get_data_side_effect
-            
+        game_data_all = {
+            '12345': {
+                'game_status': 'Final',
+                'home_score': 110,
+                'away_score': 105,
+                'is_live': False
+            },
+            '99999': {
+                'game_status': 'Final',
+                'home_score': 100,
+                'away_score': 95,
+                'is_live': False
+            }
+        }
+        with self._mock_build_client_with_games(game_data_all):
             # Run with default hours-back (24)
             call_command('process_game_outcomes')
             
@@ -394,15 +460,16 @@ class ProcessGameOutcomesCommandTest(TestCase):
 
     def test_automation_disabled_environment_variable(self):
         """Test that automation can be disabled via environment variable."""
+        game_data = {
+            '12345': {
+                'game_status': 'Final',
+                'home_score': 110,
+                'away_score': 105,
+                'is_live': False
+            }
+        }
         with patch.dict(os.environ, {'AUTO_PROCESS_GAME_OUTCOMES': 'false'}):
-            with patch('hooptipp.nba.management.commands.process_game_outcomes.get_live_game_data') as mock_get_data:
-                mock_get_data.return_value = {
-                    'game_status': 'Final',
-                    'home_score': 110,
-                    'away_score': 105,
-                    'is_live': False
-                }
-                
+            with self._mock_build_client_with_games(game_data):
                 call_command('process_game_outcomes')
                 
                 # Verify no EventOutcome was created
@@ -410,15 +477,16 @@ class ProcessGameOutcomesCommandTest(TestCase):
 
     def test_force_override_environment_variable(self):
         """Test that --force can override the environment variable."""
+        game_data = {
+            '12345': {
+                'game_status': 'Final',
+                'home_score': 110,
+                'away_score': 105,
+                'is_live': False
+            }
+        }
         with patch.dict(os.environ, {'AUTO_PROCESS_GAME_OUTCOMES': 'false'}):
-            with patch('hooptipp.nba.management.commands.process_game_outcomes.get_live_game_data') as mock_get_data:
-                mock_get_data.return_value = {
-                    'game_status': 'Final',
-                    'home_score': 110,
-                    'away_score': 105,
-                    'is_live': False
-                }
-                
+            with self._mock_build_client_with_games(game_data):
                 call_command('process_game_outcomes', '--force')
                 
                 # Verify EventOutcome was created despite disabled automation
@@ -426,15 +494,16 @@ class ProcessGameOutcomesCommandTest(TestCase):
 
     def test_environment_variable_hours_back(self):
         """Test that hours-back can be set via environment variable."""
+        game_data = {
+            '12345': {
+                'game_status': 'Final',
+                'home_score': 110,
+                'away_score': 105,
+                'is_live': False
+            }
+        }
         with patch.dict(os.environ, {'GAME_OUTCOME_PROCESSING_HOURS_BACK': '48'}):
-            with patch('hooptipp.nba.management.commands.process_game_outcomes.get_live_game_data') as mock_get_data:
-                mock_get_data.return_value = {
-                    'game_status': 'Final',
-                    'home_score': 110,
-                    'away_score': 105,
-                    'is_live': False
-                }
-                
+            with self._mock_build_client_with_games(game_data):
                 # This should use the environment variable value
                 call_command('process_game_outcomes')
                 
@@ -454,14 +523,15 @@ class ProcessGameOutcomesCommandTest(TestCase):
             is_locked=False
         )
         
-        with patch('hooptipp.nba.management.commands.process_game_outcomes.get_live_game_data') as mock_get_data:
-            mock_get_data.return_value = {
+        game_data = {
+            '12345': {
                 'game_status': 'Final',
                 'home_score': 110,
                 'away_score': 105,
                 'is_live': False
             }
-            
+        }
+        with self._mock_build_client_with_games(game_data):
             call_command('process_game_outcomes')
             
             # Verify EventOutcome was created and scored
@@ -474,9 +544,10 @@ class ProcessGameOutcomesCommandTest(TestCase):
         # Clear any existing outcomes first
         EventOutcome.objects.all().delete()
         
-        with patch('hooptipp.nba.management.commands.process_game_outcomes.get_live_game_data') as mock_get_data:
-            mock_get_data.side_effect = Exception('API Error')
-            
+        with patch(
+            'hooptipp.nba.management.commands.process_game_outcomes._build_bdl_client',
+            side_effect=Exception('API Error')
+        ):
             # Should not raise an exception
             call_command('process_game_outcomes')
             
@@ -548,26 +619,21 @@ class ProcessGameOutcomesCommandTest(TestCase):
             is_active=True
         )
         
-        with patch('hooptipp.nba.management.commands.process_game_outcomes.get_live_game_data') as mock_get_data:
-            def mock_get_data_side_effect(game_id):
-                if game_id == '12345':
-                    return {
-                        'game_status': 'Final',
-                        'home_score': 110,
-                        'away_score': 105,
-                        'is_live': False
-                    }
-                elif game_id == '54321':
-                    return {
-                        'game_status': 'Final',
-                        'home_score': 100,
-                        'away_score': 95,
-                        'is_live': False
-                    }
-                return {}
-            
-            mock_get_data.side_effect = mock_get_data_side_effect
-            
+        game_data_multi = {
+            '12345': {
+                'game_status': 'Final',
+                'home_score': 110,
+                'away_score': 105,
+                'is_live': False
+            },
+            '54321': {
+                'game_status': 'Final',
+                'home_score': 100,
+                'away_score': 95,
+                'is_live': False
+            }
+        }
+        with self._mock_build_client_with_games(game_data_multi):
             call_command('process_game_outcomes')
             
             # Verify both EventOutcomes were created
