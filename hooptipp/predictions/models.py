@@ -283,6 +283,7 @@ class UserTip(models.Model):
     class LockStatus(models.TextChoices):
         NONE = "none", "No lock"
         ACTIVE = "active", "Active"
+        WAS_LOCKED = "was_locked", "Was locked"
         RETURNED = "returned", "Returned"
         FORFEITED = "forfeited", "Forfeited"
 

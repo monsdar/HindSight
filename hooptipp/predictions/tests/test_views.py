@@ -497,7 +497,7 @@ class HomeViewTests(TestCase):
         self.assertEqual(response.status_code, 302)
         tip.refresh_from_db()
         self.assertFalse(tip.is_locked)
-        self.assertEqual(tip.lock_status, UserTip.LockStatus.RETURNED)
+        self.assertEqual(tip.lock_status, UserTip.LockStatus.NONE)
         self.assertIsNotNone(tip.lock_released_at)
 
     def test_home_view_includes_scoring_summary_for_active_user(self) -> None:

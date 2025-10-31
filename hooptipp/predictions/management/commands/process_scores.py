@@ -212,10 +212,11 @@ class Command(BaseCommand):
                             total_scores_updated += 1
                         
                         # Return lock to user if they had an active lock
+                        # Use WAS_LOCKED status to preserve bonus points for idempotency
                         if tip.lock_status == UserTip.LockStatus.ACTIVE:
                             lock_service = LockService(tip.user)
-                            lock_service.release_lock(tip)
-                            total_locks_returned += 1
+                            if lock_service.release_lock_after_scoring(tip):
+                                total_locks_returned += 1
                     
                     # Mark outcome as scored
                     outcome.scored_at = timezone.now()

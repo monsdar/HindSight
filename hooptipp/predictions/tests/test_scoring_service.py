@@ -123,9 +123,9 @@ class ScoreEventOutcomeTests(TestCase):
         self.assertEqual(awarded_score.points_awarded, self.event.points * LOCK_MULTIPLIER)
         self.assertTrue(awarded_score.is_lock_bonus)
         locked_tip.refresh_from_db()
-        # Lock should be returned to user after scoring
+        # Lock should be returned to user after scoring (status goes to WAS_LOCKED to preserve bonus points)
         self.assertFalse(locked_tip.is_locked)
-        self.assertEqual(locked_tip.lock_status, UserTip.LockStatus.RETURNED)
+        self.assertEqual(locked_tip.lock_status, UserTip.LockStatus.WAS_LOCKED)
         self.assertIsNotNone(locked_tip.lock_released_at)
 
     def test_idempotent_scoring_returns_existing_rows(self) -> None:
@@ -155,6 +155,48 @@ class ScoreEventOutcomeTests(TestCase):
         self.assertEqual(second_result.skipped_tips, 0)
         self.assertEqual(UserEventScore.objects.count(), 1)
 
+    def test_idempotent_scoring_with_locks_maintains_state(self) -> None:
+        """Test that scoring with locks is idempotent and preserves bonus points on subsequent runs."""
+        user = self.user_model.objects.create_user("lockidempotent", "lockidempotent@example.com", "password")
+        tip = UserTip.objects.create(
+            user=user,
+            tip_type=self.tip_type,
+            prediction_event=self.event,
+            prediction_option=self.lakers_option,
+            selected_option=self.lakers_option_obj,
+            prediction="Los Angeles Lakers",
+            is_locked=True,
+            lock_status=UserTip.LockStatus.ACTIVE,
+        )
+        outcome = EventOutcome.objects.create(
+            prediction_event=self.event,
+            winning_option=self.lakers_option,
+            winning_generic_option=self.lakers_option_obj,
+        )
+
+        # First scoring should release the lock and set status to WAS_LOCKED
+        first_result = score_event_outcome(outcome)
+        self.assertEqual(first_result.created_count, 1)
+        self.assertTrue(first_result.awarded_scores[0].score.is_lock_bonus)
+        self.assertEqual(first_result.awarded_scores[0].score.points_awarded, self.event.points * LOCK_MULTIPLIER)
+        tip.refresh_from_db()
+        self.assertFalse(tip.is_locked)
+        self.assertEqual(tip.lock_status, UserTip.LockStatus.WAS_LOCKED)
+        first_lock_status = tip.lock_status
+        first_released_at = tip.lock_released_at
+
+        # Second scoring should be idempotent - bonus points should persist
+        second_result = score_event_outcome(outcome, force=True)
+        self.assertEqual(second_result.created_count, 1)
+        self.assertEqual(second_result.updated_count, 0)
+        tip.refresh_from_db()
+        # Lock status should remain WAS_LOCKED (idempotent)
+        self.assertEqual(tip.lock_status, first_lock_status)
+        self.assertEqual(tip.lock_released_at, first_released_at)
+        # Score should still have lock bonus because WAS_LOCKED status is counted
+        self.assertTrue(second_result.awarded_scores[0].score.is_lock_bonus)
+        self.assertEqual(second_result.awarded_scores[0].score.points_awarded, self.event.points * LOCK_MULTIPLIER)
+
     def test_force_rescore_recalculates_points(self) -> None:
         user = self.user_model.objects.create_user("force", "force@example.com", "password")
         tip = UserTip.objects.create(
@@ -176,8 +218,10 @@ class ScoreEventOutcomeTests(TestCase):
 
         self.event.points = 10
         self.event.save(update_fields=["points"])
-        tip.lock_status = UserTip.LockStatus.RETURNED
-        tip.save(update_fields=["lock_status"])
+        # Set lock status to ACTIVE to test that bonus points are awarded
+        tip.is_locked = True
+        tip.lock_status = UserTip.LockStatus.ACTIVE
+        tip.save(update_fields=["is_locked", "lock_status"])
 
         updated_outcome = EventOutcome.objects.get(pk=outcome.pk)
         result = score_event_outcome(updated_outcome, force=True)
@@ -186,6 +230,39 @@ class ScoreEventOutcomeTests(TestCase):
         awarded = UserEventScore.objects.get()
         self.assertEqual(awarded.points_awarded, 10 * LOCK_MULTIPLIER)
         self.assertTrue(awarded.is_lock_bonus)
+
+    def test_returned_status_does_not_give_bonus_points(self) -> None:
+        """Test that RETURNED lock status does not award bonus points.
+        
+        RETURNED status should only be used when a forfeited lock is automatically
+        returned after cooldown. It should not be confused with manually released locks
+        (which use NONE status) and should not award bonus points.
+        """
+        user = self.user_model.objects.create_user("returned", "returned@example.com", "password")
+        tip = UserTip.objects.create(
+            user=user,
+            tip_type=self.tip_type,
+            prediction_event=self.event,
+            prediction_option=self.lakers_option,
+            selected_option=self.lakers_option_obj,
+            prediction="Los Angeles Lakers",
+            is_locked=False,
+            lock_status=UserTip.LockStatus.RETURNED,  # Simulating a lock that was forfeited and returned
+        )
+        outcome = EventOutcome.objects.create(
+            prediction_event=self.event,
+            winning_option=self.lakers_option,
+            winning_generic_option=self.lakers_option_obj,
+        )
+
+        result = score_event_outcome(outcome)
+
+        self.assertEqual(result.created_count, 1)
+        awarded = UserEventScore.objects.get()
+        # Should get base points only, no bonus (RETURNED status should not give bonus)
+        self.assertEqual(awarded.points_awarded, self.event.points)
+        self.assertFalse(awarded.is_lock_bonus)
+        self.assertEqual(awarded.lock_multiplier, 1)
 
     def test_scores_any_selection_team_event(self) -> None:
         any_event = PredictionEvent.objects.create(
@@ -639,9 +716,9 @@ class ProcessAllUserScoresTests(TestCase):
         tip1.refresh_from_db()
         tip2.refresh_from_db()
         
-        # user1's lock should be returned (correct prediction)
+        # user1's lock should be returned (correct prediction) - status goes to WAS_LOCKED to preserve bonus points
         self.assertFalse(tip1.is_locked)
-        self.assertEqual(tip1.lock_status, UserTip.LockStatus.RETURNED)
+        self.assertEqual(tip1.lock_status, UserTip.LockStatus.WAS_LOCKED)
         self.assertIsNotNone(tip1.lock_released_at)
         
         # user2's lock should be forfeited (wrong prediction)
@@ -697,3 +774,56 @@ class ProcessAllUserScoresTests(TestCase):
         # Verify the release time is set to 30 days after resolution
         expected_release_time = outcome.resolved_at + timedelta(days=30)
         self.assertEqual(tip.lock_releases_at, expected_release_time)
+
+    def test_process_all_user_scores_idempotent_with_locks(self) -> None:
+        """Test that process_all_user_scores maintains bonus points on subsequent runs."""
+        user = self.user_model.objects.create_user("processidempotent", "processidempotent@example.com", "password")
+        
+        # Create tip with active lock
+        tip = UserTip.objects.create(
+            user=user,
+            tip_type=self.tip_type,
+            prediction_event=self.event1,
+            prediction_option=self.lakers_option,
+            selected_option=self.lakers_option_obj,
+            prediction="Los Angeles Lakers",
+            is_locked=True,
+            lock_status=UserTip.LockStatus.ACTIVE,
+        )
+        
+        # Create outcome
+        EventOutcome.objects.create(
+            prediction_event=self.event1,
+            winning_option=self.lakers_option,
+            winning_generic_option=self.lakers_option_obj,
+        )
+        
+        # First run - should create score with bonus points and set status to WAS_LOCKED
+        result1 = process_all_user_scores()
+        self.assertEqual(result1.total_events_processed, 1)
+        self.assertEqual(result1.total_scores_created, 1)
+        self.assertEqual(result1.total_locks_returned, 1)
+        
+        score1 = UserEventScore.objects.get()
+        self.assertEqual(score1.points_awarded, self.event1.points * LOCK_MULTIPLIER)
+        self.assertTrue(score1.is_lock_bonus)
+        
+        tip.refresh_from_db()
+        self.assertEqual(tip.lock_status, UserTip.LockStatus.WAS_LOCKED)
+        
+        # Second run - should update score but preserve bonus points
+        result2 = process_all_user_scores()
+        self.assertEqual(result2.total_events_processed, 1)
+        self.assertEqual(result2.total_scores_created, 0)
+        self.assertEqual(result2.total_scores_updated, 1)
+        self.assertEqual(result2.total_locks_returned, 0)  # Lock already returned, not ACTIVE anymore
+        
+        score2 = UserEventScore.objects.get()
+        # Bonus points should be preserved (idempotent)
+        self.assertEqual(score2.points_awarded, self.event1.points * LOCK_MULTIPLIER)
+        self.assertTrue(score2.is_lock_bonus)
+        self.assertEqual(score2.id, score1.id)  # Same score record updated
+        
+        tip.refresh_from_db()
+        # Status should remain WAS_LOCKED (idempotent)
+        self.assertEqual(tip.lock_status, UserTip.LockStatus.WAS_LOCKED)

@@ -140,7 +140,12 @@ class LockService:
         return True
 
     def release_lock(self, tip: UserTip) -> bool:
-        """Return a lock associated with ``tip`` immediately."""
+        """Return a lock associated with ``tip`` immediately.
+        
+        This is used when a user manually removes a lock. The status is set to NONE
+        to distinguish it from locks that were forfeited and later automatically returned
+        (which use RETURNED status after the cooldown period).
+        """
 
         if not self._initialised:
             self.refresh()
@@ -150,7 +155,37 @@ class LockService:
 
         now = timezone.now()
         tip.is_locked = False
-        tip.lock_status = UserTip.LockStatus.RETURNED
+        tip.lock_status = UserTip.LockStatus.NONE
+        tip.lock_released_at = now
+        tip.lock_releases_at = None
+        tip.save(
+            update_fields=[
+                "is_locked",
+                "lock_status",
+                "lock_released_at",
+                "lock_releases_at",
+            ]
+        )
+        if tip.id in self._active_ids:
+            self._active_ids.remove(tip.id)
+        self.available = min(self.total, self.available + 1)
+        return True
+
+    def release_lock_after_scoring(self, tip: UserTip) -> bool:
+        """Return a lock after scoring when it was active during scoring.
+        
+        This sets the status to WAS_LOCKED to preserve the information that bonus points
+        should be awarded on subsequent scoring runs, maintaining idempotency.
+        """
+        if not self._initialised:
+            self.refresh()
+
+        if tip.id not in self._active_ids and not tip.is_locked:
+            return False
+
+        now = timezone.now()
+        tip.is_locked = False
+        tip.lock_status = UserTip.LockStatus.WAS_LOCKED
         tip.lock_released_at = now
         tip.lock_releases_at = None
         tip.save(

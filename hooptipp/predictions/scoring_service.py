@@ -14,7 +14,7 @@ from .lock_service import LockService
 LOCK_MULTIPLIER = 2
 _LOCK_BONUS_STATUSES = {
     UserTip.LockStatus.ACTIVE,
-    UserTip.LockStatus.RETURNED,
+    UserTip.LockStatus.WAS_LOCKED,
 }
 
 
@@ -114,9 +114,10 @@ def score_event_outcome(outcome: EventOutcome, *, force: bool = False) -> ScoreE
             awarded.append(AwardedScore(score=score, created=created))
             
             # Return lock to user if they had an active lock
+            # Use WAS_LOCKED status to preserve bonus points for idempotency
             if tip.lock_status == UserTip.LockStatus.ACTIVE:
                 lock_service = LockService(tip.user)
-                lock_service.release_lock(tip)
+                lock_service.release_lock_after_scoring(tip)
 
         outcome.scored_at = timezone.now()
         outcome.score_error = ''
@@ -241,9 +242,10 @@ def process_all_user_scores(*, force: bool = False) -> ProcessAllScoresResult:
                         total_scores_updated += 1
                     
                     # Return lock to user if they had an active lock
+                    # Use WAS_LOCKED status to preserve bonus points for idempotency
                     if tip.lock_status == UserTip.LockStatus.ACTIVE:
                         lock_service = LockService(tip.user)
-                        if lock_service.release_lock(tip):
+                        if lock_service.release_lock_after_scoring(tip):
                             total_locks_returned += 1
                 
                 # Mark the outcome as scored if it wasn't already

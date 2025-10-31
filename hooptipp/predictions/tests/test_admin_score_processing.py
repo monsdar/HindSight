@@ -291,10 +291,10 @@ class AdminScoreProcessingTests(TestCase):
         self.assertEqual(score.points_awarded, 6)  # 3 points * 2 (lock multiplier)
         self.assertTrue(score.is_lock_bonus)
         
-        # Should return the lock to the user
+        # Should return the lock to the user (status goes to WAS_LOCKED to preserve bonus points)
         tip.refresh_from_db()
         self.assertFalse(tip.is_locked)
-        self.assertEqual(tip.lock_status, UserTip.LockStatus.RETURNED)
+        self.assertEqual(tip.lock_status, UserTip.LockStatus.WAS_LOCKED)
         self.assertIsNotNone(tip.lock_released_at)
 
     def test_process_all_scores_admin_view_forfeits_locks(self) -> None:
