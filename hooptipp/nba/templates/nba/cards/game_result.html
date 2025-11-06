@@ -94,4 +94,25 @@ NBA game result card - shows the outcome of a completed game prediction.
     {% endif %}
   </div>
 
+  {# User Prediction Badges #}
+  {% if users_who_predicted %}
+    <div class="mt-3 flex flex-wrap items-center gap-1">
+      <span class="text-xs text-slate-500">Predicted by:</span>
+      {% for prediction_data in users_who_predicted %}
+        <span class="inline-flex items-center gap-1 rounded-full border-2 px-2 py-1 text-xs font-medium {% if prediction_data.is_correct %}bg-green-500/20 border-green-500/50 text-green-300{% else %}bg-red-500/20 border-red-500/50 text-red-300{% endif %}">
+          {% if prediction_data.user.display_name %}
+            {{ prediction_data.user.display_name }}
+          {% else %}
+            {{ prediction_data.user.username }}
+          {% endif %}
+          {% if prediction_data.is_correct and prediction_data.was_locked %}
+            <span class="text-xs">🔒</span>
+          {% elif not prediction_data.is_correct and prediction_data.lost_lock %}
+            <span class="text-xs">❌</span>
+          {% endif %}
+        </span>
+      {% endfor %}
+    </div>
+  {% endif %}
+
 </article>

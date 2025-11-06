@@ -56,6 +56,8 @@ def render_result_card(context, outcome, user_tip=None, is_correct=None):
     Usage:
         {% render_result_card outcome user_tip is_correct %}
     """
+    from ..models import UserTip, UserEventScore
+    
     # Find the appropriate renderer
     renderer = registry.get_renderer(outcome.prediction_event)
 
@@ -63,6 +65,69 @@ def render_result_card(context, outcome, user_tip=None, is_correct=None):
     template_name = renderer.get_result_template(outcome)
     card_context = renderer.get_result_context(outcome, user=context.get("active_user"))
 
+    # Get all users who predicted this event with their correctness and lock status
+    users_who_predicted = []
+    event = outcome.prediction_event
+    
+    # Fetch all tips for this event
+    tips = UserTip.objects.filter(prediction_event=event).select_related('user')
+    
+    # Fetch all scores for this event to check lock bonuses
+    scores = {
+        score.user_id: score
+        for score in UserEventScore.objects.filter(prediction_event=event)
+    }
+    
+    # Fetch display names from UserPreferences
+    from ..models import UserPreferences
+    user_ids = [tip.user_id for tip in tips]
+    display_name_map = {}
+    if user_ids:
+        for prefs in UserPreferences.objects.filter(user_id__in=user_ids):
+            nickname = (prefs.nickname or '').strip()
+            if nickname:
+                display_name_map[prefs.user_id] = nickname
+    
+    # Helper function to check if tip matches outcome (same logic as scoring_service)
+    def tip_matches_outcome(tip, outcome):
+        if outcome.winning_option_id:
+            if tip.prediction_option_id == outcome.winning_option_id:
+                return True
+            if tip.selected_option_id and outcome.winning_option and outcome.winning_option.option_id:
+                return tip.selected_option_id == outcome.winning_option.option_id
+            return False
+        if outcome.winning_generic_option_id:
+            return tip.selected_option_id == outcome.winning_generic_option_id
+        return False
+    
+    # Build list of users with their prediction status
+    for tip in tips:
+        is_tip_correct = tip_matches_outcome(tip, outcome)
+        score = scores.get(tip.user_id)
+        was_locked = False
+        lost_lock = False
+        
+        # Check if tip was locked (either via lock_status or is_lock_bonus in score)
+        if tip.lock_status == UserTip.LockStatus.WAS_LOCKED:
+            was_locked = True
+        elif score and score.is_lock_bonus:
+            was_locked = True
+        
+        # Check if user lost a lock due to incorrect prediction
+        if not is_tip_correct and tip.lock_status == UserTip.LockStatus.FORFEITED:
+            lost_lock = True
+        
+        # Apply display name
+        user = tip.user
+        user.display_name = display_name_map.get(user.id, user.username)
+        
+        users_who_predicted.append({
+            'user': user,
+            'is_correct': is_tip_correct,
+            'was_locked': was_locked,
+            'lost_lock': lost_lock,
+        })
+    
     # Build render context
     render_context = {
         "outcome": outcome,
@@ -73,6 +138,7 @@ def render_result_card(context, outcome, user_tip=None, is_correct=None):
         "card_context": card_context,
         "user_score": card_context.get("user_score"),  # Extract user_score from card_context
         "palette": context.get("active_theme_palette"),
+        "users_who_predicted": users_who_predicted,
     }
 
     return render_to_string(template_name, render_context, request=context.get("request"))
