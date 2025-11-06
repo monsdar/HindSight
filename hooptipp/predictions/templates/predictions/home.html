@@ -281,7 +281,7 @@
     <div class="bg-slate-900 rounded-2xl border border-slate-800 p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
       <div class="flex justify-between items-center mb-4">
         <h3 class="text-xl font-semibold theme-accent-text">Enter Activation PIN</h3>
-        <button type="button" id="close-pin-modal" class="text-slate-400 hover:text-slate-200">
+        <button type="button" id="close-pin-modal" class="text-slate-400">
           <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
           </svg>
@@ -309,7 +309,7 @@
             >
             <label 
               for="pin-team-{{ team.id }}" 
-              class="flex flex-col items-center p-3 border-2 border-slate-700 rounded-xl hover:border-blue-400 hover:bg-slate-800 transition-all duration-200 peer-checked:border-blue-500 peer-checked:bg-blue-900/20 peer-checked:shadow-md"
+              class="flex flex-col items-center p-3 border-2 border-slate-700 rounded-xl transition-all duration-200 peer-checked:border-blue-500 peer-checked:bg-blue-900/20 peer-checked:shadow-md"
             >
               <div class="w-12 h-12 mb-1 flex items-center justify-center">
                 <img 
@@ -329,7 +329,7 @@
         </div>
         
         <div class="flex justify-end gap-3">
-          <button type="button" id="cancel-pin" class="px-4 py-2 text-slate-300 hover:text-slate-100 border border-slate-700 rounded-lg hover:border-slate-600 transition">
+          <button type="button" id="cancel-pin" class="px-4 py-2 text-slate-300 border border-slate-700 rounded-lg transition">
             Cancel
           </button>
           <button type="submit" id="submit-pin" class="px-4 py-2 theme-accent-bg theme-accent-shadow rounded-lg font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed" disabled>
@@ -345,7 +345,7 @@
     <div class="bg-slate-900 rounded-2xl border border-slate-800 p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
       <div class="flex justify-between items-center mb-4">
         <h3 class="text-xl font-semibold theme-accent-text">Set Activation PIN</h3>
-        <button type="button" id="close-pin-setup-modal" class="text-slate-400 hover:text-slate-200">
+        <button type="button" id="close-pin-setup-modal" class="text-slate-400">
           <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
           </svg>
@@ -374,7 +374,7 @@
             >
             <label 
               for="pin-setup-team-{{ team.id }}" 
-              class="flex flex-col items-center p-3 border-2 border-slate-700 rounded-xl hover:border-blue-400 hover:bg-slate-800 transition-all duration-200 peer-checked:border-blue-500 peer-checked:bg-blue-900/20 peer-checked:shadow-md"
+              class="flex flex-col items-center p-3 border-2 border-slate-700 rounded-xl transition-all duration-200 peer-checked:border-blue-500 peer-checked:bg-blue-900/20 peer-checked:shadow-md"
             >
               <div class="w-12 h-12 mb-1 flex items-center justify-center">
                 <img 
@@ -394,7 +394,7 @@
         </div>
         
         <div class="flex justify-end gap-3">
-          <button type="button" id="cancel-pin-setup" class="px-4 py-2 text-slate-300 hover:text-slate-100 border border-slate-700 rounded-lg hover:border-slate-600 transition">
+          <button type="button" id="cancel-pin-setup" class="px-4 py-2 text-slate-300 border border-slate-700 rounded-lg transition">
             Cancel
           </button>
           <button type="submit" id="submit-pin-setup" class="px-4 py-2 theme-accent-bg theme-accent-shadow rounded-lg font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed" disabled>

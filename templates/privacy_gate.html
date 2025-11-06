@@ -38,7 +38,7 @@
                         >
                         <label 
                             for="team-{{ team.id }}" 
-                            class="flex flex-col items-center p-4 border-2 border-gray-200 rounded-xl hover:border-blue-300 hover:bg-blue-50 transition-all duration-200 peer-checked:border-blue-500 peer-checked:bg-blue-100 peer-checked:shadow-md"
+                            class="flex flex-col items-center p-4 border-2 border-gray-200 rounded-xl transition-all duration-200 peer-checked:border-blue-500 peer-checked:bg-blue-100 peer-checked:shadow-md"
                         >
                             <div class="w-16 h-16 mb-2 flex items-center justify-center">
                                 <img 
@@ -61,7 +61,7 @@
                     <button 
                         type="submit" 
                         id="submit-btn"
-                        class="bg-blue-600 text-white py-3 px-8 rounded-lg font-semibold hover:bg-blue-700 transition-colors duration-200 disabled:bg-gray-400 disabled:cursor-not-allowed"
+                        class="bg-blue-600 text-white py-3 px-8 rounded-lg font-semibold transition-colors duration-200 disabled:bg-gray-400 disabled:cursor-not-allowed"
                     >
                         Submit Answer
                     </button>
@@ -79,10 +79,6 @@
 <style>
 .team-option label {
     transition: all 0.2s ease;
-}
-
-.team-option label:hover {
-    transform: translateY(-2px);
 }
 
 .team-option input:checked + label {
