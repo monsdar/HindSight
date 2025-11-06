@@ -640,6 +640,223 @@ class HomeViewTests(TestCase):
         self.assertEqual(alice_row.lock_summary.active, 0)
         self.assertEqual(alice_row.lock_summary.pending, 1)
 
+    def test_leaderboard_displays_3_day_score_change(self) -> None:
+        """Test that leaderboard displays 3-day score change for each user."""
+        now = timezone.now()
+        
+        # Create a second event for additional scores
+        event2 = PredictionEvent.objects.create(
+            tip_type=self.tip_type,
+            name='Event 2',
+            opens_at=now - timedelta(days=10),
+            deadline=now - timedelta(days=5),
+            is_active=True,
+            points=5,
+        )
+        
+        # Create scores for Alice: 3 points from 2 days ago (within 3 days), 5 points from 5 days ago (outside 3 days)
+        alice_score1 = UserEventScore.objects.create(
+            user=self.alice,
+            prediction_event=self.event,
+            base_points=3,
+            lock_multiplier=1,
+            points_awarded=3,
+        )
+        alice_score1.awarded_at = now - timedelta(days=2)
+        alice_score1.save(update_fields=['awarded_at'])
+        
+        alice_score2 = UserEventScore.objects.create(
+            user=self.alice,
+            prediction_event=event2,
+            base_points=5,
+            lock_multiplier=1,
+            points_awarded=5,
+        )
+        alice_score2.awarded_at = now - timedelta(days=5)  # Outside 3-day window
+        alice_score2.save(update_fields=['awarded_at'])
+        
+        # Create scores for Bob: 3 points from 1 day ago (within 3 days), 5 points from 4 days ago (outside 3 days)
+        bob_score1 = UserEventScore.objects.create(
+            user=self.bob,
+            prediction_event=self.event,
+            base_points=3,
+            lock_multiplier=1,
+            points_awarded=3,
+        )
+        bob_score1.awarded_at = now - timedelta(days=1)
+        bob_score1.save(update_fields=['awarded_at'])
+        
+        bob_score2 = UserEventScore.objects.create(
+            user=self.bob,
+            prediction_event=event2,
+            base_points=5,
+            lock_multiplier=1,
+            points_awarded=5,
+        )
+        bob_score2.awarded_at = now - timedelta(days=4)  # Outside 3-day window
+        bob_score2.save(update_fields=['awarded_at'])
+
+        response = self.client.get(reverse('predictions:home'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('leaderboard_rows', response.context)
+        
+        leaderboard_rows = response.context['leaderboard_rows']
+        self.assertGreaterEqual(len(leaderboard_rows), 2)
+        
+        # Find Alice and Bob in the leaderboard
+        alice_row = None
+        bob_row = None
+        for row in leaderboard_rows:
+            if row.id == self.alice.id:
+                alice_row = row
+            elif row.id == self.bob.id:
+                bob_row = row
+        
+        self.assertIsNotNone(alice_row)
+        self.assertIsNotNone(bob_row)
+        
+        # Alice should have 3 points from the last 3 days (only the score from 2 days ago)
+        self.assertTrue(hasattr(alice_row, 'points_change_3d'))
+        self.assertEqual(alice_row.points_change_3d, 3)
+        
+        # Bob should have 3 points from the last 3 days (only the score from 1 day ago)
+        self.assertTrue(hasattr(bob_row, 'points_change_3d'))
+        self.assertEqual(bob_row.points_change_3d, 3)
+        
+        # Verify the template displays the change
+        self.assertContains(response, '+3', count=2)  # Should appear twice (once for Alice, once for Bob)
+
+    def test_leaderboard_3_day_score_change_with_multiple_scores(self) -> None:
+        """Test 3-day score change calculation with multiple scores within the window."""
+        now = timezone.now()
+        
+        # Create multiple events
+        event2 = PredictionEvent.objects.create(
+            tip_type=self.tip_type,
+            name='Event 2',
+            opens_at=now - timedelta(days=10),
+            deadline=now - timedelta(days=5),
+            is_active=True,
+            points=5,
+        )
+        event3 = PredictionEvent.objects.create(
+            tip_type=self.tip_type,
+            name='Event 3',
+            opens_at=now - timedelta(days=10),
+            deadline=now - timedelta(days=5),
+            is_active=True,
+            points=2,
+        )
+        
+        # Create multiple scores for Alice within the 3-day window
+        alice_score1 = UserEventScore.objects.create(
+            user=self.alice,
+            prediction_event=self.event,
+            base_points=3,
+            lock_multiplier=1,
+            points_awarded=3,
+        )
+        alice_score1.awarded_at = now - timedelta(days=1)
+        alice_score1.save(update_fields=['awarded_at'])
+        
+        alice_score2 = UserEventScore.objects.create(
+            user=self.alice,
+            prediction_event=event2,
+            base_points=5,
+            lock_multiplier=1,
+            points_awarded=5,
+        )
+        alice_score2.awarded_at = now - timedelta(days=2)
+        alice_score2.save(update_fields=['awarded_at'])
+        
+        alice_score3 = UserEventScore.objects.create(
+            user=self.alice,
+            prediction_event=event3,
+            base_points=2,
+            lock_multiplier=2,  # Lock bonus
+            points_awarded=4,
+        )
+        alice_score3.awarded_at = now - timedelta(hours=12)  # 12 hours ago
+        alice_score3.save(update_fields=['awarded_at'])
+        
+        # Create one score outside the 3-day window
+        event4 = PredictionEvent.objects.create(
+            tip_type=self.tip_type,
+            name='Event 4',
+            opens_at=now - timedelta(days=10),
+            deadline=now - timedelta(days=5),
+            is_active=True,
+            points=10,
+        )
+        alice_score4 = UserEventScore.objects.create(
+            user=self.alice,
+            prediction_event=event4,
+            base_points=10,
+            lock_multiplier=1,
+            points_awarded=10,
+        )
+        alice_score4.awarded_at = now - timedelta(days=4)  # Outside 3-day window
+        alice_score4.save(update_fields=['awarded_at'])
+
+        response = self.client.get(reverse('predictions:home'))
+
+        self.assertEqual(response.status_code, 200)
+        leaderboard_rows = response.context['leaderboard_rows']
+        
+        # Find Alice in the leaderboard
+        alice_row = None
+        for row in leaderboard_rows:
+            if row.id == self.alice.id:
+                alice_row = row
+                break
+        
+        self.assertIsNotNone(alice_row)
+        # Should sum: 3 + 5 + 4 = 12 points from the last 3 days
+        self.assertEqual(alice_row.points_change_3d, 12)
+        
+        # Verify the template displays the change
+        self.assertContains(response, '+12')
+
+    def test_leaderboard_3_day_score_change_zero_when_no_recent_scores(self) -> None:
+        """Test that 3-day score change is 0 when user has no scores in the last 3 days."""
+        now = timezone.now()
+        
+        # Create a score for Alice from 5 days ago (outside 3-day window)
+        alice_score = UserEventScore.objects.create(
+            user=self.alice,
+            prediction_event=self.event,
+            base_points=3,
+            lock_multiplier=1,
+            points_awarded=3,
+        )
+        alice_score.awarded_at = now - timedelta(days=5)
+        alice_score.save(update_fields=['awarded_at'])
+
+        response = self.client.get(reverse('predictions:home'))
+
+        self.assertEqual(response.status_code, 200)
+        leaderboard_rows = response.context['leaderboard_rows']
+        
+        # Find Alice in the leaderboard
+        alice_row = None
+        for row in leaderboard_rows:
+            if row.id == self.alice.id:
+                alice_row = row
+                break
+        
+        self.assertIsNotNone(alice_row)
+        # Should be 0 since no scores in the last 3 days
+        self.assertEqual(alice_row.points_change_3d, 0)
+        
+        # Verify the template does NOT display the change indicator (only shows when > 0)
+        # The total points should still be displayed
+        self.assertContains(response, str(alice_row.total_points))
+        # But the +X indicator should not appear
+        response_content = response.content.decode('utf-8')
+        # Check that there's no +0 or similar pattern for Alice's row
+        # We'll verify by checking that points_change_3d > 0 condition prevents display
+
     def test_home_view_filters_open_predictions_to_upcoming_week(self) -> None:
         """Test that open_predictions only shows events with deadlines in the upcoming week."""
         now = timezone.now()

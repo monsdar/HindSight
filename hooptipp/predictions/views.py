@@ -482,11 +482,22 @@ def home(request):
     leaderboard_user_ids = [row.id for row in leaderboard_rows]
     leaderboard_display_name_map = _build_display_name_map(leaderboard_user_ids)
 
+    # Calculate 3-day score change for each user
+    three_days_ago = now - timedelta(days=3)
     for index, row in enumerate(leaderboard_rows, start=1):
         row.display_name = leaderboard_display_name_map.get(row.id, row.username)
         row.total_points = int(row.total_points)
         row.event_count = int(row.event_count)
         row.rank = index
+        
+        # Calculate points awarded in the last 3 days
+        points_last_3_days = UserEventScore.objects.filter(
+            user=row,
+            awarded_at__gte=three_days_ago
+        ).aggregate(
+            total=Coalesce(Sum('points_awarded'), 0)
+        )['total']
+        row.points_change_3d = int(points_last_3_days) if points_last_3_days else 0
         
         # Add lock summary for each user
         try:
