@@ -3,7 +3,7 @@ Generic default result card template for resolved predictions.
 This is used as a fallback when no specific card renderer is registered for a result.
 {% endcomment %}
 
-<article class="rounded-xl border {% if active_user %}{% if user_tip %}{% if is_correct %}border-green-500/50 bg-green-500/5{% else %}border-red-500/50 bg-red-500/5{% endif %}{% else %}border-slate-800 bg-slate-950{% endif %}{% else %}border-slate-800 bg-slate-950{% endif %} p-4">
+<article class="rounded-xl {% if is_recent %}border-2{% else %}border{% endif %} {% if active_user %}{% if user_tip %}{% if is_correct %}border-green-500/50 bg-green-500/5{% else %}border-red-500/50 bg-red-500/5{% endif %}{% else %}border-slate-800 bg-slate-950{% endif %}{% else %}border-slate-800 bg-slate-950{% endif %} p-4">
   
   {# Header #}
   <header class="space-y-1">

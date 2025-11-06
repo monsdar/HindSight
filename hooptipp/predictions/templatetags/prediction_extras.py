@@ -1,5 +1,8 @@
+from datetime import timedelta
+
 from django import template
 from django.template.loader import render_to_string
+from django.utils import timezone
 
 from ..card_renderers.registry import registry
 
@@ -128,6 +131,11 @@ def render_result_card(context, outcome, user_tip=None, is_correct=None):
             'lost_lock': lost_lock,
         })
     
+    # Check if outcome was resolved in the last 24 hours
+    now = timezone.now()
+    twenty_four_hours_ago = now - timedelta(hours=24)
+    is_recent = outcome.resolved_at and outcome.resolved_at >= twenty_four_hours_ago
+    
     # Build render context
     render_context = {
         "outcome": outcome,
@@ -139,6 +147,7 @@ def render_result_card(context, outcome, user_tip=None, is_correct=None):
         "user_score": card_context.get("user_score"),  # Extract user_score from card_context
         "palette": context.get("active_theme_palette"),
         "users_who_predicted": users_who_predicted,
+        "is_recent": is_recent,
     }
 
     return render_to_string(template_name, render_context, request=context.get("request"))

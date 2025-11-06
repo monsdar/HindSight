@@ -521,6 +521,52 @@ class RenderResultCardTemplateTagTests(TestCase):
             # Should contain event name
             self.assertIn("Custom Result Event", rendered)
 
+    def test_render_result_card_with_recent_outcome(self):
+        """Tag should add thicker border for outcomes resolved in the last 24 hours."""
+        now = timezone.now()
+        
+        # Update existing outcome to be resolved 12 hours ago (within 24 hours)
+        self.outcome.resolved_at = now - timedelta(hours=12)
+        self.outcome.save(update_fields=['resolved_at'])
+
+        template = Template(
+            "{% load prediction_extras %}"
+            "{% render_result_card outcome %}"
+        )
+        context = Context({
+            "outcome": self.outcome,
+            "active_user": self.user,
+        })
+
+        rendered = template.render(context)
+
+        # Should have border-2 class for recent outcome
+        self.assertIn("border-2", rendered)
+
+    def test_render_result_card_with_old_outcome(self):
+        """Tag should use default border for outcomes resolved more than 24 hours ago."""
+        now = timezone.now()
+        
+        # Update existing outcome to be resolved 2 days ago (outside 24 hours)
+        self.outcome.resolved_at = now - timedelta(days=2)
+        self.outcome.save(update_fields=['resolved_at'])
+
+        template = Template(
+            "{% load prediction_extras %}"
+            "{% render_result_card outcome %}"
+        )
+        context = Context({
+            "outcome": self.outcome,
+            "active_user": self.user,
+        })
+
+        rendered = template.render(context)
+
+        # Should have default border class (not border-2)
+        # The template uses conditional: {% if is_recent %}border-2{% else %}border{% endif %}
+        # So we check that border-2 is NOT present for old outcomes
+        self.assertNotIn("border-2", rendered)
+
 
 class GetItemFilterTests(TestCase):
     """Tests for the get_item filter."""
