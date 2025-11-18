@@ -14,7 +14,31 @@
           <a href="/" class="text-2xl font-extrabold tracking-tight text-amber-400">{{ PAGE_TITLE }}</a>
           <p class="text-sm text-slate-400">{{ PAGE_SLOGAN }}</p>
         </div>
-        {% block nav %}{% endblock %}
+        <div class="flex items-center gap-4">
+          {% block nav %}
+            {# Check if we're in user selection mode or authentication mode #}
+            {% if not enable_user_selection %}
+              {# Authentication Mode - show login/logout #}
+              {% if user.is_authenticated %}
+                <span class="text-slate-300">{{ user.username }}</span>
+                <form method="post" action="{% url 'logout' %}" class="inline">
+                  {% csrf_token %}
+                  <button type="submit" class="text-slate-400 hover:text-slate-200 transition-colors">Logout</button>
+                </form>
+              {% else %}
+                <a href="{% url 'login' %}" class="text-slate-400 hover:text-slate-200 transition-colors">Login</a>
+                <a href="{% url 'signup' %}" class="bg-amber-400 text-slate-900 px-4 py-2 rounded-lg font-semibold hover:bg-amber-300 transition-colors">Sign Up</a>
+              {% endif %}
+            {% else %}
+              {# User Selection Mode - show active user if any #}
+              {% if active_user %}
+                <span class="text-slate-300 text-sm">
+                  Active: <span class="font-semibold">{{ active_user.username }}</span>
+                </span>
+              {% endif %}
+            {% endif %}
+          {% endblock %}
+        </div>
       </div>
     </nav>
     <main class="max-w-5xl mx-auto px-4 py-8">

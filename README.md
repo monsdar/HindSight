@@ -158,17 +158,64 @@ Flexible organization system:
 
 ---
 
+## Deployment Modes
+
+HindSight supports two deployment modes to fit different use cases:
+
+### Mode 1: User Selection (Private/Family Use)
+**Best for:** Private family deployments, small trusted groups
+
+Set `ENABLE_USER_SELECTION=True` (default)
+
+**Features:**
+- Simple, family-friendly approach
+- No authentication required on main page
+- Users select themselves from a dropdown
+- Optional privacy gate with NBA team challenge
+- Optional per-user PIN protection
+- Perfect for households where everyone is trusted
+
+**Workflow:**
+1. Admin creates users via Django admin panel
+2. Users pass privacy gate (one-time NBA team challenge)
+3. Users select themselves from dropdown
+4. Make predictions
+5. "Finish Round" to clear selection
+6. Next user can then select themselves
+
+### Mode 2: Authentication (Public Use)
+**Best for:** Public-facing deployments, larger communities
+
+Set `ENABLE_USER_SELECTION=False`
+
+**Features:**
+- Standard signup/login system
+- Users create their own accounts
+- Email-based password reset
+- Each user has private, secure access
+- Traditional web app authentication
+- Suitable for public internet deployment
+
+**Workflow:**
+1. Users sign up with username, email, and password
+2. Users log in with credentials
+3. Make predictions (automatically tied to logged-in user)
+4. Log out when done
+
+### Switching Between Modes
+
+Simply change the `ENABLE_USER_SELECTION` environment variable:
+```bash
+# For private/family mode
+ENABLE_USER_SELECTION=True
+
+# For public authentication mode
+ENABLE_USER_SELECTION=False
+```
+
+Both modes use the same codebase and database schema - no migrations needed!
+
 ## How Predictions Work
-
-### User Activation Model
-Simple, family-friendly approach:
-1. **No authentication required** on the main page
-2. Select a user from the dropdown
-3. Make predictions
-4. "Finish Round" to clear selection
-5. Next user can then select themselves
-
-**Note:** The user selection interface can be disabled by setting the `ENABLE_USER_SELECTION` environment variable to `False`. This is useful when you want to implement traditional user authentication instead of the family-friendly selection model.
 
 ### Lock System
 - Each user has a limited number of "locks" (default: 1)
@@ -186,24 +233,77 @@ Simple, family-friendly approach:
 
 ## Production Deployment
 
-HindSight is designed for Railway deployment:
+HindSight is designed for Railway deployment and supports both deployment modes:
 
-1. **Environment Variables:**
-   ```bash
-   BALLDONTLIE_API_TOKEN=your_token
-   DATABASE_URL=postgresql://...
-   SECRET_KEY=your_secret_key
-   ALLOWED_HOSTS=yourdomain.com
-   CSRF_TRUSTED_ORIGINS=https://yourdomain.com
-   ENABLE_USER_SELECTION=True
-   PAGE_TITLE=HindSight
-   PAGE_SLOGAN=Find out who's always right!
-   ```
+### Private/Family Deployment (User Selection Mode)
 
-2. **Deploy to Railway:**
-   - Connect your repository
-   - Set environment variables
-   - Deploy!
+```bash
+# Core Settings
+SECRET_KEY=your_secret_key_here
+DATABASE_URL=postgresql://...
+DJANGO_ALLOWED_HOSTS=yourdomain.com
+CSRF_TRUSTED_ORIGINS=https://yourdomain.com
+
+# User Selection Mode
+ENABLE_USER_SELECTION=True
+
+# Privacy Gate (recommended for private deployments)
+PRIVACY_GATE_ENABLED=True
+PRIVACY_GATE_ANSWER=GSW,LAL,BOS,OKC
+
+# NBA API (optional)
+BALLDONTLIE_API_TOKEN=your_token
+
+# Customization
+PAGE_TITLE=Family Predictions
+PAGE_SLOGAN=Who knows sports best?
+
+# Admin Setup
+HOOPTIPP_ADMIN_USER=admin
+HOOPTIPP_ADMIN_PASSWORD=secure_password_here
+```
+
+### Public Deployment (Authentication Mode)
+
+```bash
+# Core Settings
+SECRET_KEY=your_secret_key_here
+DATABASE_URL=postgresql://...
+DJANGO_ALLOWED_HOSTS=yourdomain.com
+CSRF_TRUSTED_ORIGINS=https://yourdomain.com
+
+# Authentication Mode
+ENABLE_USER_SELECTION=False
+
+# Privacy Gate (disable for public sites)
+PRIVACY_GATE_ENABLED=False
+
+# Email Configuration (for password reset)
+EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
+EMAIL_HOST=smtp.gmail.com
+EMAIL_PORT=587
+EMAIL_USE_TLS=True
+EMAIL_HOST_USER=noreply@yourdomain.com
+EMAIL_HOST_PASSWORD=your_email_password
+DEFAULT_FROM_EMAIL=noreply@yourdomain.com
+
+# NBA API (optional)
+BALLDONTLIE_API_TOKEN=your_token
+
+# Customization
+PAGE_TITLE=HindSight
+PAGE_SLOGAN=Predict. Compete. Win!
+
+# Admin Setup
+HOOPTIPP_ADMIN_USER=admin
+HOOPTIPP_ADMIN_PASSWORD=secure_password_here
+```
+
+### Deploy to Railway
+
+1. Connect your repository
+2. Set environment variables based on your desired mode
+3. Deploy!
 
 The included `Dockerfile` and `docker-entrypoint.sh` handle the setup automatically.
 

@@ -15,6 +15,7 @@ from django.views.decorators.http import require_http_methods
 import json
 
 from hooptipp.nba.managers import NbaPlayerManager, NbaTeamManager
+from hooptipp.user_context import get_active_user, set_active_user, clear_active_user
 
 from .forms import UserPreferencesForm
 from .lock_service import LockLimitError, LockService
@@ -30,18 +31,6 @@ from .models import (
     UserTip,
 )
 from .theme_palettes import DEFAULT_THEME_KEY, get_theme_palette
-
-
-def _get_active_user(request):
-    user_id = request.session.get('active_user_id')
-    if not user_id:
-        return None
-    User = get_user_model()
-    try:
-        return User.objects.get(pk=user_id)
-    except User.DoesNotExist:
-        request.session.pop('active_user_id', None)
-        return None
 
 
 def _build_display_name_map(user_ids: Iterable[int]) -> dict[int, str]:
@@ -69,7 +58,7 @@ def _apply_display_metadata(user, display_name_map: dict[int, str]) -> None:
 def home(request):
     # Sync events via event sources if needed
     # Event sources can be triggered manually via admin or scheduled tasks
-    active_user = _get_active_user(request)
+    active_user = get_active_user(request)
     preferences = None
     preferences_form = None
 
@@ -142,7 +131,7 @@ def home(request):
                 and active_user is not None
                 and user_id == str(active_user.id)
             ):
-                request.session.pop('active_user_id', None)
+                clear_active_user(request)
                 messages.success(request, 'Active user cleared successfully.')
                 return redirect('predictions:home')
 
@@ -161,16 +150,21 @@ def home(request):
                                 messages.error(request, 'Invalid PIN. Please select the correct NBA teams.')
                                 return redirect('predictions:home')
                         
-                        request.session['active_user_id'] = int(user_id)
+                        set_active_user(request, target_user)
                         messages.success(request, 'Active user selected successfully.')
                     except User.DoesNotExist:
                         messages.error(request, 'User not found.')
                 else:
                     # For other actions, just set the user (this handles the case where PIN was already validated)
-                    request.session['active_user_id'] = int(user_id)
-                    messages.success(request, 'Active user selected successfully.')
+                    User = get_user_model()
+                    try:
+                        target_user = User.objects.get(pk=user_id)
+                        set_active_user(request, target_user)
+                        messages.success(request, 'Active user selected successfully.')
+                    except User.DoesNotExist:
+                        messages.error(request, 'User not found.')
             else:
-                request.session.pop('active_user_id', None)
+                clear_active_user(request)
                 messages.info(request, 'No active user selected.')
             return redirect('predictions:home')
 
@@ -593,8 +587,9 @@ def home(request):
 @csrf_exempt
 def save_prediction(request):
     """Save a single prediction immediately via AJAX."""
-    # Check for either traditional authentication or session-based activation
-    if not request.user.is_authenticated and not request.session.get('active_user_id'):
+    # Get the active user (works in both authentication modes)
+    active_user = get_active_user(request)
+    if not active_user:
         return JsonResponse({'error': 'Authentication required'}, status=401)
     
     try:
@@ -604,11 +599,6 @@ def save_prediction(request):
         
         if not event_id or not option_id:
             return JsonResponse({'error': 'Missing event_id or option_id'}, status=400)
-        
-        # Get the active user from session
-        active_user = _get_active_user(request)
-        if not active_user:
-            return JsonResponse({'error': 'No active user'}, status=400)
         
         # Get the event
         event = get_object_or_404(PredictionEvent, id=event_id)
@@ -659,8 +649,9 @@ def save_prediction(request):
 @csrf_exempt
 def toggle_lock(request):
     """Toggle lock status for a prediction immediately via AJAX."""
-    # Check for either traditional authentication or session-based activation
-    if not request.user.is_authenticated and not request.session.get('active_user_id'):
+    # Get the active user (works in both authentication modes)
+    active_user = get_active_user(request)
+    if not active_user:
         return JsonResponse({'error': 'Authentication required'}, status=401)
     
     try:
@@ -670,11 +661,6 @@ def toggle_lock(request):
         
         if not event_id:
             return JsonResponse({'error': 'Missing event_id'}, status=400)
-        
-        # Get the active user from session
-        active_user = _get_active_user(request)
-        if not active_user:
-            return JsonResponse({'error': 'No active user'}, status=400)
         
         # Get the event
         event = get_object_or_404(PredictionEvent, id=event_id)
@@ -757,13 +743,10 @@ def toggle_lock(request):
 @require_http_methods(["GET"])
 def get_lock_summary(request):
     """Get current lock summary for the active user."""
-    # Check for either traditional authentication or session-based activation
-    if not request.user.is_authenticated and not request.session.get('active_user_id'):
-        return JsonResponse({'error': 'Authentication required'}, status=401)
-    
-    active_user = _get_active_user(request)
+    # Get the active user (works in both authentication modes)
+    active_user = get_active_user(request)
     if not active_user:
-        return JsonResponse({'error': 'No active user'}, status=400)
+        return JsonResponse({'error': 'Authentication required'}, status=401)
     
     lock_service = LockService(active_user)
     summary = lock_service.refresh()
