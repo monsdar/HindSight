@@ -2,6 +2,7 @@ from collections import defaultdict
 from datetime import timedelta
 from typing import Iterable
 
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.db.models import Case, Count, F, IntegerField, Q, Sum, When
@@ -583,6 +584,7 @@ def home(request):
         'leaderboard_rows': leaderboard_rows,
         'resolved_predictions': resolved_predictions_data,
         'open_predictions': open_predictions,
+        'enable_user_selection': settings.ENABLE_USER_SELECTION,
     }
     return render(request, 'predictions/home.html', context)
 

@@ -111,6 +111,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'hooptipp.context_processors.page_customization',
             ],
         },
     },
@@ -255,6 +256,13 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # Privacy Gate Configuration
 PRIVACY_GATE_ENABLED = os.environ.get('PRIVACY_GATE_ENABLED', 'True').lower() == 'true'
 PRIVACY_GATE_CORRECT_ANSWER = os.environ.get('PRIVACY_GATE_ANSWER', 'ORL,GSW,BOS,OKC').split(',')
+
+# User Selection Configuration
+ENABLE_USER_SELECTION = os.environ.get('ENABLE_USER_SELECTION', 'True').lower() == 'true'
+
+# Page Customization
+PAGE_TITLE = os.environ.get('PAGE_TITLE', 'HindSight')
+PAGE_SLOGAN = os.environ.get('PAGE_SLOGAN', "Find out who's always right!")
 
 # Test Configuration
 TESTING = 'test' in sys.argv or 'pytest' in sys.argv[0] if sys.argv else False

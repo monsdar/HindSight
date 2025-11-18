@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>{% block title %}HindSight{% endblock %}</title>
+    <title>{% block title %}{{ PAGE_TITLE }}{% endblock %}</title>
     <script src="https://cdn.tailwindcss.com"></script>
     {% block head %}{% endblock %}
   </head>
@@ -11,8 +11,8 @@
     <nav class="bg-slate-900 border-b border-slate-800">
       <div class="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between">
         <div>
-          <a href="/" class="text-2xl font-extrabold tracking-tight text-amber-400">HindSight</a>
-          <p class="text-sm text-slate-400">Find out who's always right!</p>
+          <a href="/" class="text-2xl font-extrabold tracking-tight text-amber-400">{{ PAGE_TITLE }}</a>
+          <p class="text-sm text-slate-400">{{ PAGE_SLOGAN }}</p>
         </div>
         {% block nav %}{% endblock %}
       </div>

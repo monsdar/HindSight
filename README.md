@@ -103,6 +103,13 @@ Flexible organization system:
    # NBA API Configuration
    BALLDONTLIE_API_TOKEN=YOUR_TOKEN_HERE
 
+   # User Selection (defaults to True if not set)
+   ENABLE_USER_SELECTION=True
+
+   # Page Customization (optional)
+   PAGE_TITLE=HindSight
+   PAGE_SLOGAN=Find out who's always right!
+
    HOOPTIPP_ADMIN_USER=hoop
    HOOPTIPP_ADMIN_PASSWORD=hoop
    PRIVACY_GATE_ANSWER=GSW,CLE,MIA
@@ -161,6 +168,8 @@ Simple, family-friendly approach:
 4. "Finish Round" to clear selection
 5. Next user can then select themselves
 
+**Note:** The user selection interface can be disabled by setting the `ENABLE_USER_SELECTION` environment variable to `False`. This is useful when you want to implement traditional user authentication instead of the family-friendly selection model.
+
 ### Lock System
 - Each user has a limited number of "locks" (default: 1)
 - Locked picks multiply points if correct
@@ -186,6 +195,9 @@ HindSight is designed for Railway deployment:
    SECRET_KEY=your_secret_key
    ALLOWED_HOSTS=yourdomain.com
    CSRF_TRUSTED_ORIGINS=https://yourdomain.com
+   ENABLE_USER_SELECTION=True
+   PAGE_TITLE=HindSight
+   PAGE_SLOGAN=Find out who's always right!
    ```
 
 2. **Deploy to Railway:**
