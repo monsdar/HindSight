@@ -590,7 +590,7 @@ def save_prediction(request):
     # Get the active user (works in both authentication modes)
     active_user = get_active_user(request)
     if not active_user:
-        return JsonResponse({'error': 'Authentication required'}, status=401)
+        return JsonResponse({'error': 'No active user'}, status=400)
     
     try:
         data = json.loads(request.body)
@@ -746,7 +746,7 @@ def get_lock_summary(request):
     # Get the active user (works in both authentication modes)
     active_user = get_active_user(request)
     if not active_user:
-        return JsonResponse({'error': 'Authentication required'}, status=401)
+        return JsonResponse({'error': 'No active user'}, status=400)
     
     lock_service = LockService(active_user)
     summary = lock_service.refresh()

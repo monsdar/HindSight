@@ -2,7 +2,7 @@ from datetime import timedelta
 from unittest import mock
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
@@ -19,6 +19,7 @@ from hooptipp.predictions.models import (
 )
 
 
+@override_settings(ENABLE_USER_SELECTION=True)
 class HomeViewTests(TestCase):
     def setUp(self) -> None:
         user_model = get_user_model()
@@ -945,6 +946,7 @@ class HomeViewTests(TestCase):
         self.assertEqual(our_events[2].id, event_6_days.id)
 
 
+@override_settings(ENABLE_USER_SELECTION=True)
 class UserActivationPinTests(TestCase):
     """Tests for PIN-based user activation functionality."""
     

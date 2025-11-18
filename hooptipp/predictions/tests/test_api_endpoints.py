@@ -1,7 +1,7 @@
 """Tests for the new API endpoints for immediate prediction saving."""
 import json
 from django.contrib.auth import get_user_model
-from django.test import TestCase, Client
+from django.test import TestCase, Client, override_settings
 from django.utils import timezone
 from datetime import timedelta
 
@@ -16,6 +16,7 @@ from hooptipp.predictions.models import (
 from hooptipp.predictions.lock_service import LockService
 
 
+@override_settings(ENABLE_USER_SELECTION=True)
 class SavePredictionAPITests(TestCase):
     def setUp(self):
         self.client = Client()
@@ -194,6 +195,7 @@ class SavePredictionAPITests(TestCase):
     def test_save_prediction_no_authentication_no_session(self):
         """Test saving prediction with no authentication and no session."""
         # Logout the user and clear session
+        # In user selection mode, this should behave the same as no active user
         self.client.logout()
         session = self.client.session
         session.pop('active_user_id', None)
@@ -208,9 +210,11 @@ class SavePredictionAPITests(TestCase):
             content_type='application/json'
         )
         
-        self.assertEqual(response.status_code, 401)
+        # In user selection mode, authentication status doesn't matter
+        # Only session-based active user matters, so expect 400 not 401
+        self.assertEqual(response.status_code, 400)
         data = response.json()
-        self.assertEqual(data['error'], 'Authentication required')
+        self.assertEqual(data['error'], 'No active user')
 
 
 class ToggleLockAPITests(TestCase):
@@ -393,6 +397,7 @@ class ToggleLockAPITests(TestCase):
         self.assertIn('lock_summary', data)
 
 
+@override_settings(ENABLE_USER_SELECTION=True)
 class GetLockSummaryAPITests(TestCase):
     def setUp(self):
         self.client = Client()

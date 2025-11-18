@@ -35,7 +35,7 @@ class PrivacyGateMiddleware:
         
         # Skip privacy gate for authenticated users even in selection mode
         # This allows admins to bypass the gate
-        if request.user.is_authenticated:
+        if hasattr(request, 'user') and request.user.is_authenticated:
             return self.get_response(request)
             
         # Skip privacy gate check for these paths
