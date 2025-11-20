@@ -19,8 +19,10 @@ class UserPreferencesModelTests(TestCase):
     def test_theme_palette_provides_defaults(self) -> None:
         preferences = UserPreferences.objects.create(user=self.user)
         palette = preferences.theme_palette()
-        self.assertEqual(palette['primary'], '#f59e0b')
-        self.assertEqual(palette['secondary'], '#0f172a')
+        # Get the expected palette from the default theme
+        expected_palette = get_theme_palette(DEFAULT_THEME_KEY)
+        self.assertEqual(palette['primary'], expected_palette['primary'])
+        self.assertEqual(palette['secondary'], expected_palette['secondary'])
         self.assertEqual(str(preferences), f'Preferences for {self.user}')
         self.assertEqual(preferences.theme, DEFAULT_THEME_KEY)
 

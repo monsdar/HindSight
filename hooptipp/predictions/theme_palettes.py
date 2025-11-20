@@ -1,6 +1,7 @@
 """Theme definitions for HindSight user customization."""
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from typing import Dict, Iterable, Tuple
 
@@ -17,6 +18,7 @@ class ThemePalette:
 
 _THEMES: Tuple[ThemePalette, ...] = (
     ThemePalette("classic", "HindSight Classic (Gold & Midnight)", "#f59e0b", "#0f172a"),
+    ThemePalette("bg-biba", "BG Biba (Red & Purple)", "#E2322A", "#412774"),
     ThemePalette("atlanta-hawks", "Atlanta Hawks (Red & Black)", "#c8102e", "#000000"),
     ThemePalette("boston-celtics", "Boston Celtics (Green & Black)", "#007a33", "#000000"),
     ThemePalette("brooklyn-nets", "Brooklyn Nets (Black & White)", "#000000", "#ffffff"),
@@ -49,7 +51,7 @@ _THEMES: Tuple[ThemePalette, ...] = (
     ThemePalette("washington-wizards", "Washington Wizards (Navy & Red)", "#002b5c", "#e31837"),
 )
 
-DEFAULT_THEME_KEY = "classic"
+DEFAULT_THEME_KEY = os.environ.get("DEFAULT_THEME_KEY", "classic")
 
 THEME_CHOICES: Tuple[Tuple[str, str], ...] = tuple((theme.key, theme.label) for theme in _THEMES)
 

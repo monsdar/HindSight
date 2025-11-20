@@ -5,13 +5,30 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>{% block title %}{{ PAGE_TITLE }}{% endblock %}</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      :root {
+        --accent-color: {{ active_theme_palette.primary }};
+        --accent-contrast: {{ active_theme_palette.secondary }};
+      }
+      .theme-accent-text { color: var(--accent-color); }
+      .theme-accent-bg { background-color: var(--accent-color); color: var(--accent-contrast); }
+      .theme-accent-outline:focus { outline: 2px solid var(--accent-color); outline-offset: 2px; }
+      .theme-accent-border { border-color: color-mix(in srgb, var(--accent-color) 35%, transparent); }
+      .theme-accent-surface { background-color: color-mix(in srgb, var(--accent-color) 12%, transparent); }
+      .theme-accent-hover:hover { border-color: var(--accent-color); }
+      .theme-accent-shadow { box-shadow: 0 10px 25px color-mix(in srgb, var(--accent-color) 35%, transparent); }
+      .theme-accent-pill { background-color: color-mix(in srgb, var(--accent-color) 12%, transparent); border-color: color-mix(in srgb, var(--accent-color) 30%, transparent); color: color-mix(in srgb, var(--accent-color) 80%, white); }
+      .theme-accent-radio input[type="radio"] { accent-color: var(--accent-color); }
+      .theme-accent-muted { color: color-mix(in srgb, var(--accent-color) 45%, white); }
+      .text-theme-accent-contrast { color: var(--accent-contrast); }
+    </style>
     {% block head %}{% endblock %}
   </head>
   <body class="bg-slate-950 text-slate-100 min-h-screen">
     <nav class="bg-slate-900 border-b border-slate-800">
       <div class="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between">
         <div>
-          <a href="/" class="text-2xl font-extrabold tracking-tight text-amber-400">{{ PAGE_TITLE }}</a>
+          <a href="/" class="text-2xl font-extrabold tracking-tight theme-accent-text">{{ PAGE_TITLE }}</a>
           <p class="text-sm text-slate-400">{{ PAGE_SLOGAN }}</p>
         </div>
         <div class="flex items-center gap-4">
@@ -27,7 +44,7 @@
                 </form>
               {% else %}
                 <a href="{% url 'login' %}" class="text-slate-400 hover:text-slate-200 transition-colors">Login</a>
-                <a href="{% url 'signup' %}" class="bg-amber-400 text-slate-900 px-4 py-2 rounded-lg font-semibold hover:bg-amber-300 transition-colors">Sign Up</a>
+                <a href="{% url 'signup' %}" class="theme-accent-bg px-4 py-2 rounded-lg font-semibold hover:opacity-90 transition-all">Sign Up</a>
               {% endif %}
             {% else %}
               {# User Selection Mode - show active user if any #}

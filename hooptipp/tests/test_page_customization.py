@@ -53,7 +53,7 @@ class PageCustomizationIntegrationTestCase(TestCase):
         response = self.client.get('/')
         
         self.assertEqual(response.status_code, 200)
-        # Check that the title appears in the nav bar as a link
-        self.assertContains(response, 'class="text-2xl font-extrabold tracking-tight text-amber-400">Hoops Tips</a>')
+        # Check that the title appears in the nav bar with theme-specific styling
+        self.assertContains(response, 'class="text-2xl font-extrabold tracking-tight theme-accent-text">Hoops Tips</a>')
         self.assertContains(response, 'class="text-sm text-slate-400">Make your predictions count!</p>')
 

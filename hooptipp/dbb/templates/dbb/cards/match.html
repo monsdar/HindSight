@@ -11,7 +11,7 @@ Teams are directly selectable for predictions.
     <div>
       <p class="text-xs uppercase tracking-wide text-slate-500">{{ event.tip_type.name }}</p>
       {% if card_context.league_name %}
-        <p class="mt-1 text-xs font-semibold text-amber-400">
+        <p class="mt-1 text-xs font-semibold theme-accent-text">
           {{ card_context.league_name }}
         </p>
       {% endif %}
@@ -125,7 +125,7 @@ Teams are directly selectable for predictions.
         {{ event.points }} pt{{ event.points|pluralize }}
       </span>
       {% if event.is_bonus_event %}
-        <span class="text-xs font-semibold text-amber-400">⭐ Bonus Event</span>
+        <span class="text-xs font-semibold theme-accent-text">⭐ Bonus Event</span>
       {% endif %}
     </div>
     

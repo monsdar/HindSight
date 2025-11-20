@@ -4,20 +4,7 @@
 {% block title %}{{ PAGE_TITLE }} &ndash; Dashboard{% endblock %}
 
 {% block content %}
-  {% with palette=active_theme_palette %}
-    <div class="space-y-8" style="--accent-color: {{ palette.primary }}; --accent-contrast: {{ palette.secondary }};">
-      <style>
-        .theme-accent-text { color: var(--accent-color); }
-        .theme-accent-bg { background-color: var(--accent-color); color: var(--accent-contrast); }
-        .theme-accent-outline:focus { outline: 2px solid var(--accent-color); outline-offset: 2px; }
-        .theme-accent-border { border-color: color-mix(in srgb, var(--accent-color) 35%, transparent); }
-        .theme-accent-surface { background-color: color-mix(in srgb, var(--accent-color) 12%, transparent); }
-        .theme-accent-hover:hover { border-color: var(--accent-color); }
-        .theme-accent-shadow { box-shadow: 0 10px 25px color-mix(in srgb, var(--accent-color) 35%, transparent); }
-        .theme-accent-pill { background-color: color-mix(in srgb, var(--accent-color) 12%, transparent); border-color: color-mix(in srgb, var(--accent-color) 30%, transparent); color: color-mix(in srgb, var(--accent-color) 80%, white); }
-        .theme-accent-radio input[type="radio"] { accent-color: var(--accent-color); }
-        .theme-accent-muted { color: color-mix(in srgb, var(--accent-color) 45%, white); }
-      </style>
+    <div class="space-y-8">
 
       {# 1. CURRENT RANKING #}
       <section class="space-y-4 rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-lg shadow-slate-900/30">
@@ -276,7 +263,6 @@
         {% endif %}
       </section>
     </div>
-  {% endwith %}
 
   {% if enable_user_selection %}
   {# PIN Entry Modal #}

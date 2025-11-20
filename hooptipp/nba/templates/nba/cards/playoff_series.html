@@ -27,8 +27,8 @@ Shows series information and matchup context.
   
   {# Series Context - if available #}
   {% if card_context.playoff_context %}
-    <div class="mt-4 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3">
-      <p class="text-xs font-semibold text-amber-400">{{ card_context.playoff_context.series_name }}</p>
+    <div class="mt-4 rounded-lg border theme-accent-border theme-accent-surface p-3">
+      <p class="text-xs font-semibold theme-accent-text">{{ card_context.playoff_context.series_name }}</p>
       {% if card_context.playoff_context.series_score %}
         <p class="mt-1 text-sm text-slate-300">Series: {{ card_context.playoff_context.series_score }}</p>
       {% endif %}
@@ -131,7 +131,7 @@ Shows series information and matchup context.
         {{ event.points }} pt{{ event.points|pluralize }}
       </span>
       {% if event.is_bonus_event %}
-        <span class="text-xs font-semibold text-amber-400">⭐ Bonus Event</span>
+        <span class="text-xs font-semibold theme-accent-text">⭐ Bonus Event</span>
       {% endif %}
     </div>
     

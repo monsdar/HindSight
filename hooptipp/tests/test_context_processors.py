@@ -44,3 +44,17 @@ class PageCustomizationContextProcessorTestCase(TestCase):
         self.assertEqual(context['PAGE_TITLE'], 'NBA Predictions')
         self.assertEqual(context['PAGE_SLOGAN'], 'Who will win?')
 
+    def test_theme_palette_included(self):
+        """Test that active_theme_palette is included in context."""
+        context = page_customization(self.request)
+        
+        self.assertIn('active_theme_palette', context)
+        self.assertIn('primary', context['active_theme_palette'])
+        self.assertIn('secondary', context['active_theme_palette'])
+        
+        # Verify colors are hex codes
+        primary = context['active_theme_palette']['primary']
+        secondary = context['active_theme_palette']['secondary']
+        self.assertTrue(primary.startswith('#'))
+        self.assertTrue(secondary.startswith('#'))
+
