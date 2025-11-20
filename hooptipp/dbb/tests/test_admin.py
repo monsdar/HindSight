@@ -75,9 +75,17 @@ class DbbAdminViewsTest(TestCase):
             {'liga_id': 48693, 'liganame': 'Regionsliga Süd Herren'},
             {'liga_id': 48694, 'liganame': 'Regionsliga Mixed'}
         ]
-        mock_client.get_league_standings.return_value = [
-            {'position': 1, 'team': {'id': 't1', 'name': 'BG Test Team 1'}},
-            {'position': 2, 'team': {'id': 't2', 'name': 'BG Test Team 2'}}
+        mock_client.get_league_matches.return_value = [
+            {
+                'match_id': 1,
+                'home_team': {'id': 't1', 'name': 'BG Test Team 1'},
+                'away_team': {'id': 't2', 'name': 'BG Test Team 2'}
+            },
+            {
+                'match_id': 2,
+                'home_team': {'id': 't3', 'name': 'BG Test Team 3'},
+                'away_team': {'id': 't1', 'name': 'BG Test Team 1'}
+            }
         ]
         mock_build_client.return_value = mock_client
 
@@ -91,6 +99,73 @@ class DbbAdminViewsTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Regionsliga Süd Herren')
         self.assertContains(response, 'BG Test Team 1')
+
+    @patch('hooptipp.dbb.admin.build_slapi_client')
+    def test_search_clubs_shows_all_leagues(self, mock_build_client):
+        """Test that all leagues from API are shown, even if team names don't match search term."""
+        mock_client = MagicMock()
+        
+        # API returns 3 leagues for the club
+        mock_client.get_club_leagues.return_value = [
+            {'liga_id': 1, 'liganame': 'League 1'},
+            {'liga_id': 2, 'liganame': 'League 2'},
+            {'liga_id': 3, 'liganame': 'League 3'}
+        ]
+        
+        # Set up different matches for each league
+        def get_matches_side_effect(league_id):
+            if league_id == '1':
+                # League 1: has team matching "Bierden-Bassen"
+                return [
+                    {
+                        'match_id': 1,
+                        'home_team': {'id': 't1', 'name': 'TSV Bierden-Bassen'},
+                        'away_team': {'id': 't2', 'name': 'Other Team'}
+                    }
+                ]
+            elif league_id == '2':
+                # League 2: team name doesn't match but club participates
+                return [
+                    {
+                        'match_id': 2,
+                        'home_team': {'id': 't3', 'name': 'Bassen Youth'},
+                        'away_team': {'id': 't4', 'name': 'Another Team'}
+                    }
+                ]
+            elif league_id == '3':
+                # League 3: team name completely different but club participates
+                return [
+                    {
+                        'match_id': 3,
+                        'home_team': {'id': 't5', 'name': 'TSV 1'},
+                        'away_team': {'id': 't6', 'name': 'TSV 2'}
+                    }
+                ]
+            return []
+        
+        mock_client.get_league_matches.side_effect = get_matches_side_effect
+        mock_build_client.return_value = mock_client
+
+        url = reverse('admin:dbb_search_clubs')
+        response = self.client.get(url, {
+            'verband_id': '7',
+            'verband_name': 'Test Verband',
+            'query': 'Bierden-Bassen'
+        })
+
+        self.assertEqual(response.status_code, 200)
+        
+        # All 3 leagues should be shown
+        self.assertContains(response, 'League 1')
+        self.assertContains(response, 'League 2')
+        self.assertContains(response, 'League 3')
+        
+        # League 1 should show the matching team
+        self.assertContains(response, 'TSV Bierden-Bassen')
+        
+        # League 2 and 3 should show their teams even though they don't match the search
+        self.assertContains(response, 'Bassen Youth')
+        self.assertContains(response, 'TSV 1')
 
 
     def test_import_leagues_view(self):

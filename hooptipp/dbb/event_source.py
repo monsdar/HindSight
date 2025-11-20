@@ -208,6 +208,23 @@ class DbbEventSource(EventSource):
                         if match_date < timezone.now():
                             continue
 
+                        # Check if match is cancelled
+                        is_cancelled = match_data.get('is_cancelled', False)
+                        
+                        # If match is cancelled, deactivate existing event (if any) and skip
+                        if is_cancelled:
+                            existing_event = PredictionEvent.objects.filter(
+                                source_id=self.source_id,
+                                source_event_id=match_id
+                            ).first()
+                            
+                            if existing_event and existing_event.is_active:
+                                existing_event.is_active = False
+                                existing_event.save(update_fields=['is_active'])
+                                logger.info(f"Deactivated cancelled match event: {match_id}")
+                            
+                            continue
+
                         # Create or update DbbMatch
                         dbb_match, match_created = DbbMatch.objects.update_or_create(
                             external_match_id=match_id,

@@ -293,3 +293,77 @@ class DbbEventSourceTest(TestCase):
                 # Should have auto-discovered logo
                 self.assertEqual(opponent_option.metadata.get('logo'), 'opponent.svg')
 
+    @patch('hooptipp.dbb.event_source.build_slapi_client')
+    def test_sync_events_filters_cancelled_matches(self, mock_build_client):
+        """Test that cancelled matches are not synced."""
+        mock_client = MagicMock()
+        mock_build_client.return_value = mock_client
+        
+        # Sync options first
+        self.event_source.sync_options()
+
+        # Mock cancelled match data
+        future_date = (timezone.now() + timedelta(days=7)).isoformat()
+        mock_client.get_league_matches.return_value = [
+            {
+                'match_id': 1,
+                'home_team': {'id': 't1', 'name': 'BG Test Team 1'},
+                'away_team': {'id': 't2', 'name': 'BG Test Team 2'},
+                'datetime': future_date,
+                'location': 'Test Arena',
+                'is_cancelled': True
+            }
+        ]
+
+        result = self.event_source.sync_events()
+
+        # Should not create events for cancelled matches
+        self.assertEqual(result.events_created, 0)
+        self.assertFalse(PredictionEvent.objects.filter(source_id='dbb-slapi').exists())
+
+    @patch('hooptipp.dbb.event_source.build_slapi_client')
+    def test_sync_events_deactivates_cancelled_matches(self, mock_build_client):
+        """Test that existing events are deactivated when match becomes cancelled."""
+        mock_client = MagicMock()
+        mock_build_client.return_value = mock_client
+        
+        # Sync options first
+        self.event_source.sync_options()
+
+        # First sync: create an active match
+        future_date = (timezone.now() + timedelta(days=7)).isoformat()
+        mock_client.get_league_matches.return_value = [
+            {
+                'match_id': 1,
+                'home_team': {'id': 't1', 'name': 'BG Test Team 1'},
+                'away_team': {'id': 't2', 'name': 'BG Test Team 2'},
+                'datetime': future_date,
+                'location': 'Test Arena',
+                'is_cancelled': False
+            }
+        ]
+
+        result = self.event_source.sync_events()
+        self.assertEqual(result.events_created, 1)
+        
+        event = PredictionEvent.objects.get(source_id='dbb-slapi', source_event_id='1')
+        self.assertTrue(event.is_active)
+
+        # Second sync: same match is now cancelled
+        mock_client.get_league_matches.return_value = [
+            {
+                'match_id': 1,
+                'home_team': {'id': 't1', 'name': 'BG Test Team 1'},
+                'away_team': {'id': 't2', 'name': 'BG Test Team 2'},
+                'datetime': future_date,
+                'location': 'Test Arena',
+                'is_cancelled': True
+            }
+        ]
+
+        result = self.event_source.sync_events()
+        
+        # Event should now be deactivated
+        event.refresh_from_db()
+        self.assertFalse(event.is_active)
+

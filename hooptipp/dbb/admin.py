@@ -217,7 +217,7 @@ def search_clubs_view(request: HttpRequest):
             leagues = client.get_club_leagues(verband_id, search_query)
             logger.info(f'Found {len(leagues)} leagues for club search "{search_query}" in {verband_name}')
             
-            # For each league, fetch teams from standings
+            # For each league, fetch teams from matches
             for league in leagues:
                 league_id = str(league.get('liga_id', ''))
                 league_name = league.get('liganame', '')
@@ -226,40 +226,61 @@ def search_clubs_view(request: HttpRequest):
                     continue
 
                 try:
-                    standings = client.get_league_standings(league_id)
+                    matches = client.get_league_matches(league_id)
                     
-                    # Extract unique team names from standings
-                    # Note: team is an object with structure {"id": "...", "name": "...", ...}
+                    # Extract unique team names from matches
+                    # Note: home_team and away_team are objects with structure {"id": "...", "name": "...", ...}
                     teams = []
                     seen_teams = set()
-                    for standing in standings:
-                        team_obj = standing.get('team', {})
-                        if isinstance(team_obj, dict):
-                            team_name = team_obj.get('name', '')
-                            team_id = team_obj.get('id', '')
-                        else:
-                            # Fallback for legacy format
-                            team_name = standing.get('team_name', '')
-                            team_id = standing.get('team_id', '')
-                        
-                        if team_name and team_name not in seen_teams:
-                            # Filter teams that match the club search term
-                            if search_query.lower() in team_name.lower():
-                                teams.append({
-                                    'name': team_name,
-                                    'id': team_id,
-                                })
-                                seen_teams.add(team_name)
+                    matching_teams = []
                     
-                    if teams:  # Only include leagues with matching teams
+                    for match in matches:
+                        # Process home team
+                        home_team_obj = match.get('home_team', {})
+                        if isinstance(home_team_obj, dict):
+                            home_team_name = home_team_obj.get('name', '')
+                            home_team_id = home_team_obj.get('id', '')
+                            
+                            if home_team_name and home_team_name not in seen_teams:
+                                team_data = {
+                                    'name': home_team_name,
+                                    'id': home_team_id,
+                                }
+                                teams.append(team_data)
+                                seen_teams.add(home_team_name)
+                                
+                                # Track teams that match the club search term
+                                if search_query.lower() in home_team_name.lower():
+                                    matching_teams.append(team_data)
+                        
+                        # Process away team
+                        away_team_obj = match.get('away_team', {})
+                        if isinstance(away_team_obj, dict):
+                            away_team_name = away_team_obj.get('name', '')
+                            away_team_id = away_team_obj.get('id', '')
+                            
+                            if away_team_name and away_team_name not in seen_teams:
+                                team_data = {
+                                    'name': away_team_name,
+                                    'id': away_team_id,
+                                }
+                                teams.append(team_data)
+                                seen_teams.add(away_team_name)
+                                
+                                # Track teams that match the club search term
+                                if search_query.lower() in away_team_name.lower():
+                                    matching_teams.append(team_data)
+                    
+                    # Include league if it has any teams (use matching teams if found, otherwise all teams)
+                    if teams:
                         leagues_with_teams.append({
                             'id': league_id,
                             'name': league_name,
-                            'teams': teams,
+                            'teams': matching_teams if matching_teams else teams,
                             'metadata': league,
                         })
                 except Exception as e:
-                    logger.warning(f'Failed to fetch standings for league {league_id}: {e}')
+                    logger.warning(f'Failed to fetch matches for league {league_id}: {e}')
                     continue
                     
         except Exception as e:
