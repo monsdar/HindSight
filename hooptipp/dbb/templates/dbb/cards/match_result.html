@@ -1,0 +1,145 @@
+{% comment %}
+DBB match result card - shows the outcome of a completed match prediction.
+{% endcomment %}
+
+<article class="rounded-xl {% if is_recent %}border-4{% else %}border{% endif %} {% if active_user %}{% if user_tip %}{% if is_correct %}border-green-500/50 bg-green-500/5{% else %}border-red-500/50 bg-red-500/5{% endif %}{% else %}border-slate-800 bg-slate-950{% endif %}{% else %}border-slate-800 bg-slate-950{% endif %} p-4">
+  
+  {# Header #}
+  <header class="space-y-1">
+    <p class="text-xs uppercase tracking-wide text-slate-500">{{ event.tip_type.name }}</p>
+    {% if card_context.league_name %}
+      <p class="text-xs font-semibold text-amber-400">
+        {{ card_context.league_name }}
+      </p>
+    {% endif %}
+    {% if card_context.verband_name %}
+      <p class="text-xs text-slate-500">
+        {{ card_context.verband_name }}
+      </p>
+    {% endif %}
+  </header>
+
+  {# Final Score #}
+  <div class="mt-3 rounded-lg border border-slate-800 bg-slate-900 p-3">
+    <div class="flex items-center justify-between gap-4">
+      
+      {# Away Team #}
+      <div class="flex-1 text-center">
+        {# Team logo or placeholder #}
+        {% if card_context.away_team_logo %}
+          {% load static %}
+          <img src="{% static 'dbb/'|add:card_context.away_team_logo %}" alt="{{ card_context.away_team }}" class="mx-auto h-16 w-16 object-contain">
+        {% else %}
+          <div class="mx-auto h-12 w-12 flex items-center justify-center bg-slate-800 rounded-lg">
+            <span class="text-lg font-bold text-slate-500">{{ card_context.away_team|slice:":2"|upper }}</span>
+          </div>
+        {% endif %}
+        <div class="flex items-center justify-center gap-2">
+          {% if active_user and user_tip and user_tip.prediction == card_context.away_team %}
+            <span class="text-lg {% if is_correct %}text-green-400{% else %}text-red-400{% endif %}">
+              {% if is_correct %}✅{% else %}❌{% endif %}
+            </span>
+          {% endif %}
+          <p class="mt-1 text-sm font-bold text-slate-200 leading-tight">
+            {{ card_context.away_team }}
+          </p>
+        </div>
+        {% if card_context.away_score is not None %}
+          <p class="mt-1 text-2xl font-bold text-slate-300">
+            {{ card_context.away_score | floatformat }}
+          </p>
+        {% endif %}
+      </div>
+      
+      {# Final indicator #}
+      <div class="text-center">
+        <span class="text-xs uppercase tracking-wide text-slate-500">
+          {{ card_context.match_status|default:"Final" }}
+        </span>
+      </div>
+      
+      {# Home Team #}
+      <div class="flex-1 text-center">
+        {# Team logo or placeholder #}
+        {% if card_context.home_team_logo %}
+          {% load static %}
+          <img src="{% static 'dbb/'|add:card_context.home_team_logo %}" alt="{{ card_context.home_team }}" class="mx-auto h-16 w-16 object-contain">
+        {% else %}
+          <div class="mx-auto h-12 w-12 flex items-center justify-center bg-slate-800 rounded-lg">
+            <span class="text-lg font-bold text-slate-500">{{ card_context.home_team|slice:":2"|upper }}</span>
+          </div>
+        {% endif %}
+        <div class="flex items-center justify-center gap-2">
+          <p class="mt-1 text-sm font-bold text-slate-200 leading-tight">
+            {{ card_context.home_team }}
+          </p>
+          {% if active_user and user_tip and user_tip.prediction == card_context.home_team %}
+            <span class="text-lg {% if is_correct %}text-green-400{% else %}text-red-400{% endif %}">
+              {% if is_correct %}✅{% else %}❌{% endif %}
+            </span>
+          {% endif %}
+        </div>
+        {% if card_context.home_score is not None %}
+          <p class="mt-1 text-2xl font-bold text-slate-300">
+            {{ card_context.home_score | floatformat }}
+          </p>
+        {% endif %}
+      </div>
+      
+    </div>
+    
+    {# Venue Information #}
+    {% if card_context.venue %}
+      <div class="mt-3 text-center border-t border-slate-800 pt-2">
+        <p class="text-xs text-slate-500">
+          📍 {{ card_context.venue }}
+        </p>
+      </div>
+    {% endif %}
+  </div>
+
+  {# Footer #}
+  <div class="mt-3 flex items-center justify-between text-xs text-slate-500">
+    <span>Resolved {{ outcome.resolved_at|date:"M d, H:i" }}</span>
+    {% if active_user %}
+      {% if user_score %}
+        <span class="theme-accent-pill inline-flex items-center gap-1 rounded-full px-2 py-1 font-semibold">
+          {{ user_score.points_awarded }} pt{{ user_score.points_awarded|pluralize }}
+          {% if user_score.is_lock_bonus %}
+            <span class="text-xs">({{ user_score.lock_multiplier }}x lock)</span>
+          {% endif %}
+        </span>
+      {% else %}
+        <span class="theme-accent-pill inline-flex items-center gap-1 rounded-full px-2 py-1 font-semibold">
+          0 pt
+        </span>
+      {% endif %}
+    {% else %}
+      <span class="theme-accent-pill inline-flex items-center gap-1 rounded-full px-2 py-1 font-semibold">
+        {{ event.points }} pt{{ event.points|pluralize }}
+      </span>
+    {% endif %}
+  </div>
+
+  {# User Prediction Badges #}
+  {% if users_who_predicted %}
+    <div class="mt-3 flex flex-wrap items-center gap-1">
+      <span class="text-xs text-slate-500">Predicted by:</span>
+      {% for prediction_data in users_who_predicted %}
+        <span class="inline-flex items-center gap-1 rounded-full border-2 px-2 py-1 text-xs font-medium {% if prediction_data.is_correct %}bg-green-500/20 border-green-500/50 text-green-300{% else %}bg-red-500/20 border-red-500/50 text-red-300{% endif %}">
+          {% if prediction_data.user.display_name %}
+            {{ prediction_data.user.display_name }}
+          {% else %}
+            {{ prediction_data.user.username }}
+          {% endif %}
+          {% if prediction_data.is_correct and prediction_data.was_locked %}
+            <span class="text-xs">🔒</span>
+          {% elif not prediction_data.is_correct and prediction_data.lost_lock %}
+            <span class="text-xs">❌</span>
+          {% endif %}
+        </span>
+      {% endfor %}
+    </div>
+  {% endif %}
+
+</article>

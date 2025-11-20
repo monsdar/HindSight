@@ -1,0 +1,50 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+
+{% block title %}Select Verband{% endblock %}
+
+{% block content %}
+<h1>Select Verband</h1>
+
+<p class="help">Select a Verband to search for clubs within it.</p>
+
+<div class="module">
+    <table>
+        <thead>
+            <tr>
+                <th>Verband Name</th>
+                <th>Verband ID</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for verband in verbaende %}
+            <tr>
+                <td>{{ verband.label|default:"N/A" }}</td>
+                <td><code>{{ verband.id|default:"N/A" }}</code></td>
+                <td>
+                    {% if verband.id and verband.label %}
+                    <a href="{% url 'admin:dbb_search_clubs' %}?verband_id={{ verband.id }}&verband_name={{ verband.label|urlencode }}" class="button">
+                        Search Clubs
+                    </a>
+                    {% else %}
+                    <em>Invalid data</em>
+                    {% endif %}
+                </td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="3">
+                    <em>No Verbände found. Check the SLAPI API configuration and logs.</em>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<div class="submit-row">
+    <a href="{% url 'admin:dbb_trackedleague_changelist' %}" class="button">Back to Tracked Leagues</a>
+</div>
+{% endblock %}
+

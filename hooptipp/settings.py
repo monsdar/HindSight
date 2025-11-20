@@ -83,6 +83,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'hooptipp.predictions',
     'hooptipp.nba',
+    'hooptipp.dbb',
     'hooptipp.demo',
 ]
 

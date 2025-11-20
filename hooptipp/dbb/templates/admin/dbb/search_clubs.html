@@ -1,0 +1,74 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+
+{% block title %}Search Clubs in {{ verband_name }}{% endblock %}
+
+{% block content %}
+<h1>Search Clubs in {{ verband_name }}</h1>
+
+<p class="help">Enter a search term to find clubs (e.g., "Bierden-Bassen").</p>
+
+<form method="get" action="{% url 'admin:dbb_search_clubs' %}">
+    <input type="hidden" name="verband_id" value="{{ verband_id }}">
+    <input type="hidden" name="verband_name" value="{{ verband_name }}">
+    
+    <div class="form-row">
+        <div>
+            <label for="query">Club Search Term:</label>
+            <input type="text" name="query" id="query" value="{{ search_query }}" required>
+        </div>
+    </div>
+    
+    <div class="submit-row">
+        <input type="submit" value="Search" class="default">
+        <a href="{% url 'admin:dbb_select_verband' %}" class="button">Back</a>
+    </div>
+</form>
+
+{% if leagues %}
+<form method="post" action="{% url 'admin:dbb_import_leagues' %}">
+    {% csrf_token %}
+    <input type="hidden" name="verband_id" value="{{ verband_id }}">
+    <input type="hidden" name="verband_name" value="{{ verband_name }}">
+    <input type="hidden" name="club_search_term" value="{{ club_search_term }}">
+    
+    <div class="module" style="margin-top: 20px;">
+        <h2>Leagues and Teams for "{{ club_search_term }}"</h2>
+        <p class="help">Select the leagues and teams you want to track.</p>
+        
+        {% for league in leagues %}
+        <fieldset class="module" style="margin-top: 15px;">
+            <h3>
+                <label>
+                    <input type="checkbox" name="league_{{ league.id }}" value="{{ league.name }}" checked>
+                    {{ league.name }}
+                </label>
+            </h3>
+            
+            <div style="margin-left: 30px;">
+                <p><strong>Select teams from this league:</strong></p>
+                {% for team in league.teams %}
+                <div style="margin: 5px 0;">
+                    <label>
+                        <input type="checkbox" name="team_{{ league.id }}_{{ forloop.counter }}" 
+                               value='{"name": "{{ team.name|escapejs }}", "id": "{{ team.id|escapejs }}"}' checked>
+                        {{ team.name }}
+                    </label>
+                </div>
+                {% endfor %}
+            </div>
+        </fieldset>
+        {% endfor %}
+    </div>
+    
+    <div class="submit-row">
+        <input type="submit" value="Import Selected Leagues and Teams" class="default">
+        <a href="{% url 'admin:dbb_select_verband' %}" class="button">Cancel</a>
+    </div>
+</form>
+{% elif search_query %}
+<p class="errornote">No leagues found for club search "{{ search_query }}". Try a different search term.</p>
+{% endif %}
+
+{% endblock %}
+

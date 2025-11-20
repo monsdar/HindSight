@@ -1,0 +1,73 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+
+{% block title %}Select Leagues and Teams for {{ club_name }}{% endblock %}
+
+{% block content %}
+<h1>Select Leagues and Teams for {{ club_name }}</h1>
+
+<p class="help">
+    Select the leagues and teams you want to track. Only teams matching "{{ club_search_term }}" are shown.
+</p>
+
+<form method="post" action="{% url 'admin:dbb_import_leagues' %}">
+    {% csrf_token %}
+    <input type="hidden" name="verband_id" value="{{ verband_id }}">
+    <input type="hidden" name="verband_name" value="{{ verband_name }}">
+    <input type="hidden" name="club_search_term" value="{{ club_search_term }}">
+
+    {% if leagues %}
+        {% for league in leagues %}
+        <div class="module" style="margin-bottom: 20px;">
+            <h2>
+                <label>
+                    <input type="checkbox" name="league_{{ league.id }}" value="{{ league.name }}" id="league_{{ league.id }}" checked>
+                    {{ league.name }}
+                </label>
+            </h2>
+            
+            <div style="margin-left: 30px;">
+                <h3>Teams ({{ league.teams|length }})</h3>
+                <ul style="list-style: none; padding-left: 0;">
+                    {% for team in league.teams %}
+                    <li style="margin-bottom: 5px;">
+                        <label>
+                            <input type="checkbox" name="team_{{ league.id }}_{{ forloop.counter }}" 
+                                   value='{"name": "{{ team.name|escapejs }}", "id": "{{ team.id|escapejs }}"}' 
+                                   checked>
+                            {{ team.name }}
+                        </label>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+        {% endfor %}
+
+        <div class="submit-row">
+            <input type="submit" value="Import Selected Leagues and Teams" class="default">
+            <a href="{% url 'admin:dbb_search_clubs' %}?verband_id={{ verband_id }}&verband_name={{ verband_name|urlencode }}&query={{ club_search_term|urlencode }}" class="button">Back</a>
+        </div>
+    {% else %}
+        <p class="errornote">No leagues found with teams matching "{{ club_search_term }}"</p>
+        <div class="submit-row">
+            <a href="{% url 'admin:dbb_search_clubs' %}?verband_id={{ verband_id }}&verband_name={{ verband_name|urlencode }}&query={{ club_search_term|urlencode }}" class="button">Back</a>
+        </div>
+    {% endif %}
+</form>
+
+<script>
+// Toggle all teams when league checkbox is clicked
+document.querySelectorAll('[id^="league_"]').forEach(function(leagueCheckbox) {
+    leagueCheckbox.addEventListener('change', function() {
+        const leagueId = this.name.replace('league_', '');
+        const teamCheckboxes = document.querySelectorAll('[name^="team_' + leagueId + '_"]');
+        teamCheckboxes.forEach(function(teamCheckbox) {
+            teamCheckbox.checked = leagueCheckbox.checked;
+        });
+    });
+});
+</script>
+
+{% endblock %}
+
