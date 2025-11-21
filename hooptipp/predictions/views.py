@@ -502,6 +502,68 @@ def home(request):
             # If there's any issue getting lock data, default to all locks available
             from .lock_service import LockSummary
             row.lock_summary = LockSummary(total=3, available=3, active=0, pending=0, next_return_at=None)
+    
+    # Filter leaderboard rows based on requirements:
+    # - If active_user exists and is in leaderboard: show top 3 + divider + users around active user (max 10 total)
+    # - If active_user exists but not in leaderboard: show top 10
+    # - If no active_user: show top 10
+    if active_user and leaderboard_rows:
+        # Find active user's rank in leaderboard
+        active_user_rank = None
+        for idx, row in enumerate(leaderboard_rows, start=1):
+            if row.id == active_user.id:
+                active_user_rank = idx
+                break
+        
+        if active_user_rank and active_user_rank > 3:
+            # Active user is not in top 3, so show top 3 + users around active user
+            top_3 = leaderboard_rows[:3]
+            
+            # Show 2 users before and 2 users after the active user (if available)
+            # This gives us: 2 before + 1 active + 2 after = 5 users around active user
+            # Total: 3 top + 1 divider + 5 around = 9 rows (within max of 10)
+            users_before = 2
+            users_after = 2
+            
+            # Adjust based on what's available
+            max_before = active_user_rank - 4  # Can't show users before rank 4 (since we show top 3)
+            max_after = len(leaderboard_rows) - active_user_rank
+            
+            users_before = min(users_before, max_before)
+            users_after = min(users_after, max_after)
+            
+            # Calculate indices (0-based)
+            start_idx = active_user_rank - 1 - users_before  # -1 because index is 0-based
+            end_idx = active_user_rank + users_after  # +1 because slice is exclusive
+            users_around = leaderboard_rows[start_idx:end_idx]
+            
+            # Mark active user for highlighting
+            for row in users_around:
+                if row.id == active_user.id:
+                    row.is_active_user = True
+                    break
+            
+            # Create a divider marker
+            class DividerMarker:
+                def __init__(self):
+                    self.is_divider = True
+            
+            filtered_leaderboard = top_3 + [DividerMarker()] + users_around
+        elif active_user_rank and active_user_rank <= 3:
+            # Active user is in top 3, just show top 10
+            filtered_leaderboard = leaderboard_rows[:10]
+            for row in filtered_leaderboard:
+                if row.id == active_user.id:
+                    row.is_active_user = True
+                    break
+        else:
+            # Active user not in leaderboard, show top 10
+            filtered_leaderboard = leaderboard_rows[:10]
+    else:
+        # No active user, show top 10
+        filtered_leaderboard = leaderboard_rows[:10]
+    
+    leaderboard_rows = filtered_leaderboard
 
     # Fetch recently resolved predictions (last 5)
     resolved_predictions = list(

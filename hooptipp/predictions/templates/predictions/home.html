@@ -11,9 +11,7 @@
         <header>
           <h2 class="text-xl font-semibold theme-accent-text">Leaderboard</h2>
           <p class="text-sm text-slate-400">
-            {% if leaderboard_rows %}
-              {{ leaderboard_rows|length }} player{{ leaderboard_rows|length|pluralize }} ranked
-            {% else %}
+            {% if not leaderboard_rows %}
               No scores yet
             {% endif %}
           </p>
@@ -22,39 +20,49 @@
         {% if leaderboard_rows %}
           <div class="space-y-2">
             {% for row in leaderboard_rows %}
-              <div class="flex items-center justify-between gap-3 rounded-lg border border-slate-800 bg-slate-950 px-4 py-3">
-                <div class="flex items-center gap-3">
-                  <span class="flex h-8 w-8 items-center justify-center rounded-full theme-accent-pill font-bold text-sm">
-                    {{ row.rank }}
-                  </span>
-                  <div>
-                    <div class="flex items-center gap-2">
-                      <p class="font-semibold text-slate-200">{{ row.display_name }}</p>
-                      <div class="flex items-center gap-1" title="Lock status: Available (🔒), Active (🔒 greyed), Forfeited (❌)">
-                        {% for i in "123"|make_list %}
-                          {% if forloop.counter0 < row.lock_summary.available %}
-                            <span title="Available lock">🔒</span>
-                          {% elif forloop.counter0 < row.lock_summary.available|add:row.lock_summary.active %}
-                            <span title="Active lock (in use)" class="opacity-40">🔒</span>
-                          {% else %}
-                            <span title="Forfeited lock (on cooldown)">❌</span>
-                          {% endif %}
-                        {% endfor %}
+              {% if row.is_divider %}
+                {# Visual divider #}
+                <div class="flex items-center justify-center py-2">
+                  <div class="flex-1 border-t border-slate-700"></div>
+                  <div class="flex-1 border-t border-slate-700"></div>
+                </div>
+              {% else %}
+                <div class="flex items-center justify-between gap-3 rounded-lg border border-slate-800 bg-slate-950 px-4 py-3 {% if row.is_active_user %}ring-2 ring-blue-500{% endif %}">
+                  <div class="flex items-center gap-3">
+                    <span class="flex h-8 w-8 items-center justify-center rounded-full theme-accent-pill font-bold text-sm">
+                      {{ row.rank }}
+                    </span>
+                    <div>
+                      <div class="flex items-center gap-2">
+                        <p class="font-semibold {% if row.is_active_user %}text-blue-400{% else %}text-slate-200{% endif %}">
+                          {{ row.display_name }}
+                        </p>
+                        <div class="flex items-center gap-1" title="Lock status: Available (🔒), Active (🔒 greyed), Forfeited (❌)">
+                          {% for i in "123"|make_list %}
+                            {% if forloop.counter0 < row.lock_summary.available %}
+                              <span title="Available lock">🔒</span>
+                            {% elif forloop.counter0 < row.lock_summary.available|add:row.lock_summary.active %}
+                              <span title="Active lock (in use)" class="opacity-40">🔒</span>
+                            {% else %}
+                              <span title="Forfeited lock (on cooldown)">❌</span>
+                            {% endif %}
+                          {% endfor %}
+                        </div>
                       </div>
+                      <p class="text-xs text-slate-500">{{ row.event_count }} event{{ row.event_count|pluralize }} scored</p>
                     </div>
-                    <p class="text-xs text-slate-500">{{ row.event_count }} event{{ row.event_count|pluralize }} scored</p>
+                  </div>
+                  <div class="text-right">
+                    <div class="flex items-baseline justify-end gap-2">
+                      <p class="text-2xl font-bold theme-accent-text">{{ row.total_points }}</p>
+                      {% if row.points_change_3d > 0 %}
+                        <span class="text-sm font-semibold text-green-400" title="Points gained in the last 3 days">+{{ row.points_change_3d }}</span>
+                      {% endif %}
+                    </div>
+                    <p class="text-xs text-slate-500">points</p>
                   </div>
                 </div>
-                <div class="text-right">
-                  <div class="flex items-baseline justify-end gap-2">
-                    <p class="text-2xl font-bold theme-accent-text">{{ row.total_points }}</p>
-                    {% if row.points_change_3d > 0 %}
-                      <span class="text-sm font-semibold text-green-400" title="Points gained in the last 3 days">+{{ row.points_change_3d }}</span>
-                    {% endif %}
-                  </div>
-                  <p class="text-xs text-slate-500">points</p>
-                </div>
-              </div>
+              {% endif %}
             {% endfor %}
           </div>
         {% else %}
