@@ -132,16 +132,24 @@ Teams are directly selectable for predictions.
     {# User Prediction Badges #}
     {% if users_who_predicted %}
       <div class="flex flex-wrap items-center gap-1">
-        <span class="text-xs text-slate-500">Predicted by:</span>
-        {% for user in users_who_predicted %}
-          <span class="inline-flex items-center gap-1 rounded-full border-2 px-2 py-1 text-xs font-medium {% if user == active_user %}theme-accent-bg theme-accent-border text-theme-accent-contrast{% else %}bg-slate-700/50 border-slate-600/50 text-slate-300{% endif %}">
-            {% if user.display_name %}
-              {{ user.display_name }}
-            {% else %}
-              {{ user.username }}
-            {% endif %}
+        {% if users_who_predicted|length <= 4 %}
+          {# Show individual bubbles for 4 or fewer users #}
+          <span class="text-xs text-slate-500">Predicted by:</span>
+          {% for user in users_who_predicted %}
+            <span class="inline-flex items-center gap-1 rounded-full border-2 px-2 py-1 text-xs font-medium {% if user == active_user %}theme-accent-bg theme-accent-border text-theme-accent-contrast{% else %}bg-slate-700/50 border-slate-600/50 text-slate-300{% endif %}">
+              {% if user.display_name %}
+                {{ user.display_name }}
+              {% else %}
+                {{ user.username }}
+              {% endif %}
+            </span>
+          {% endfor %}
+        {% else %}
+          {# Show count for more than 4 users #}
+          <span class="text-xs text-slate-500">
+            Predicted by: {{ users_who_predicted|length }} user{{ users_who_predicted|length|pluralize }}
           </span>
-        {% endfor %}
+        {% endif %}
       </div>
     {% endif %}
   </div>
