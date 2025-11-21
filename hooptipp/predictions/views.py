@@ -503,65 +503,113 @@ def home(request):
             from .lock_service import LockSummary
             row.lock_summary = LockSummary(total=3, available=3, active=0, pending=0, next_return_at=None)
     
-    # Filter leaderboard rows based on requirements:
-    # - If active_user exists and is in leaderboard: show top 3 + divider + users around active user (max 10 total)
-    # - If active_user exists but not in leaderboard: show top 10
-    # - If no active_user: show top 10
-    if active_user and leaderboard_rows:
-        # Find active user's rank in leaderboard
+    # Filter leaderboard rows based on requirements (max 6 users):
+    # - If less than 6 users total: show all users
+    # - If 6 or more users:
+    #   - Always show 1st place
+    #   - Show nearest 4 users around the active user
+    #   - Examples:
+    #     - User in 1st: Show 1st + 5 users after = 6 total
+    #     - User in last: Show 1st + 4 before + active = 6 total
+    #     - User in 3rd: Show places 1-6 = 6 total
+    #     - User in 6th: Show 1st + 2 before + active + 2 after = 6 total
+    #     - User in 21st: Show 1st + 2 before + active + 2 after = 6 total
+    if len(leaderboard_rows) <= 6:
+        # Less than or equal to 6 users, show all
+        filtered_leaderboard = leaderboard_rows
+        if active_user:
+            # Mark active user if present
+            for row in filtered_leaderboard:
+                if row.id == active_user.id:
+                    row.is_active_user = True
+                    break
+    elif active_user and leaderboard_rows:
+        # More than 6 users, find active user's rank
         active_user_rank = None
         for idx, row in enumerate(leaderboard_rows, start=1):
             if row.id == active_user.id:
                 active_user_rank = idx
                 break
         
-        if active_user_rank and active_user_rank > 3:
-            # Active user is not in top 3, so show top 3 + users around active user
-            top_3 = leaderboard_rows[:3]
+        if active_user_rank:
+            total_users = len(leaderboard_rows)
             
-            # Show 2 users before and 2 users after the active user (if available)
-            # This gives us: 2 before + 1 active + 2 after = 5 users around active user
-            # Total: 3 top + 1 divider + 5 around = 9 rows (within max of 10)
-            users_before = 2
-            users_after = 2
-            
-            # Adjust based on what's available
-            max_before = active_user_rank - 4  # Can't show users before rank 4 (since we show top 3)
-            max_after = len(leaderboard_rows) - active_user_rank
-            
-            users_before = min(users_before, max_before)
-            users_after = min(users_after, max_after)
-            
-            # Calculate indices (0-based)
-            start_idx = active_user_rank - 1 - users_before  # -1 because index is 0-based
-            end_idx = active_user_rank + users_after  # +1 because slice is exclusive
-            users_around = leaderboard_rows[start_idx:end_idx]
-            
-            # Mark active user for highlighting
-            for row in users_around:
-                if row.id == active_user.id:
-                    row.is_active_user = True
-                    break
-            
-            # Create a divider marker
-            class DividerMarker:
-                def __init__(self):
-                    self.is_divider = True
-            
-            filtered_leaderboard = top_3 + [DividerMarker()] + users_around
-        elif active_user_rank and active_user_rank <= 3:
-            # Active user is in top 3, just show top 10
-            filtered_leaderboard = leaderboard_rows[:10]
-            for row in filtered_leaderboard:
-                if row.id == active_user.id:
-                    row.is_active_user = True
-                    break
+            if active_user_rank == 1:
+                # User is 1st: Show 1st + 5 users after = 6 total
+                filtered_leaderboard = leaderboard_rows[:6]
+                filtered_leaderboard[0].is_active_user = True
+            elif active_user_rank == total_users:
+                # User is last: Show 1st + 4 before + active = 6 total
+                rank_1 = [leaderboard_rows[0]]
+                # Show 4 users before active (positions active-4 to active-1)
+                start_idx = active_user_rank - 4 - 1  # -1 because index is 0-based
+                users_before = leaderboard_rows[start_idx:active_user_rank - 1]  # 4 users before active
+                active_user_row = [leaderboard_rows[active_user_rank - 1]]
+                active_user_row[0].is_active_user = True
+                
+                # Add divider if rank 1 is not adjacent to the users before section
+                class DividerMarker:
+                    def __init__(self):
+                        self.is_divider = True
+                filtered_leaderboard = rank_1 + [DividerMarker()] + users_before + active_user_row
+            else:
+                # User is in the middle: Show 1st + nearest 4 users around active (2 before + 2 after when possible)
+                rank_1 = [leaderboard_rows[0]]
+                
+                # Try to show 2 before and 2 after (4 users around active)
+                # Examples:
+                # - User in 3rd: Show 1-6 (rank 1 + positions 2,3,4,5,6)
+                # - User in 6th: Show 1st + 4,5,6,7,8 (2 before + active + 2 after)
+                # - User in 21st: Show 1st + 19,20,21,22,23 (2 before + active + 2 after)
+                
+                # Start with ideal: 2 before + active + 2 after = 5 users (plus 1st = 6 total)
+                users_before_count = 2
+                users_after_count = 2
+                
+                # Check if active is in positions 2-5 (can show continuous 1-6)
+                # Position 6+ should show with divider to match example: "User in 6th? Show 2 users before + 2 users after + 1st"
+                if active_user_rank <= 5:
+                    # Can show continuous range 1-6 for positions 2-5 (cleaner UX, no divider needed)
+                    filtered_leaderboard = leaderboard_rows[:6]
+                    for row in filtered_leaderboard:
+                        if row.id == active_user.id:
+                            row.is_active_user = True
+                            break
+                else:
+                    # Active is position 7 or later - need divider
+                    # Adjust if we're too close to the end
+                    max_after = total_users - active_user_rank
+                    if max_after < 2:
+                        # Can't show 2 after, show more before
+                        users_after_count = max_after
+                        users_before_count = 4 - users_after_count
+                    
+                    # Adjust if we're too close to rank 1 (shouldn't happen since rank > 6)
+                    if active_user_rank - users_before_count <= 1:
+                        # Edge case: active is at position 2-5 but somehow got here
+                        users_before_count = max(0, active_user_rank - 2)
+                        users_after_count = 4 - users_before_count
+                    
+                    start_idx = active_user_rank - 1 - users_before_count
+                    users_before = leaderboard_rows[start_idx:active_user_rank - 1]
+                    
+                    active_user_row = [leaderboard_rows[active_user_rank - 1]]
+                    active_user_row[0].is_active_user = True
+                    
+                    end_idx = active_user_rank + users_after_count
+                    users_after = leaderboard_rows[active_user_rank:end_idx]
+                    
+                    # Add divider since rank 1 is not adjacent
+                    class DividerMarker:
+                        def __init__(self):
+                            self.is_divider = True
+                    filtered_leaderboard = rank_1 + [DividerMarker()] + users_before + active_user_row + users_after
         else:
-            # Active user not in leaderboard, show top 10
-            filtered_leaderboard = leaderboard_rows[:10]
+            # Active user not in leaderboard, show top 6
+            filtered_leaderboard = leaderboard_rows[:6]
     else:
-        # No active user, show top 10
-        filtered_leaderboard = leaderboard_rows[:10]
+        # No active user, show top 6
+        filtered_leaderboard = leaderboard_rows[:6]
     
     leaderboard_rows = filtered_leaderboard
 

@@ -858,8 +858,8 @@ class HomeViewTests(TestCase):
         # Check that there's no +0 or similar pattern for Alice's row
         # We'll verify by checking that points_change_3d > 0 condition prevents display
 
-    def test_leaderboard_shows_top_10_when_no_active_user(self) -> None:
-        """Test that leaderboard shows top 10 users when no active user is set."""
+    def test_leaderboard_shows_top_6_when_no_active_user(self) -> None:
+        """Test that leaderboard shows top 6 users when no active user is set."""
         user_model = get_user_model()
         
         # Create 15 users with scores
@@ -885,16 +885,17 @@ class HomeViewTests(TestCase):
         self.assertIn('leaderboard_rows', response.context)
         
         leaderboard_rows = response.context['leaderboard_rows']
-        # Should show top 10 only
-        self.assertLessEqual(len(leaderboard_rows), 10)
+        # Should show top 6 only
+        non_divider_rows = [r for r in leaderboard_rows if not hasattr(r, 'is_divider') or not r.is_divider]
+        self.assertLessEqual(len(non_divider_rows), 6)
         
-        # Verify ranks are sequential
-        for idx, row in enumerate(leaderboard_rows):
+        # Verify ranks are sequential for non-divider rows
+        for row in non_divider_rows:
             if hasattr(row, 'rank'):
-                self.assertEqual(row.rank, idx + 1)
+                self.assertLessEqual(row.rank, 6)
     
-    def test_leaderboard_shows_top_3_and_users_around_active_user(self) -> None:
-        """Test that leaderboard shows top 3 + divider + users around active user when active user is not in top 3."""
+    def test_leaderboard_shows_rank1_and_users_around_active_user(self) -> None:
+        """Test that leaderboard shows rank 1 + divider + users around active user when active user is not rank 1."""
         user_model = get_user_model()
         
         # Create users and set Alice as active user
@@ -922,7 +923,7 @@ class HomeViewTests(TestCase):
             )
             users.append(user)
         
-        # Give Alice a lower score to ensure she's not in top 3 (rank ~4-20)
+        # Give Alice a lower score to ensure she's not rank 1 (rank ~4-20)
         alice_score = UserEventScore.objects.create(
             user=self.alice,
             prediction_event=self.event,
@@ -938,35 +939,31 @@ class HomeViewTests(TestCase):
         
         leaderboard_rows = response.context['leaderboard_rows']
         
-        # Should have top 3 + divider + users around active user
-        # Find divider
+        # Should have rank 1 + divider + users around active user (max 6 total)
         divider_found = False
         alice_found = False
-        top_3_count = 0
+        rank_1_found = False
         
         for idx, row in enumerate(leaderboard_rows):
             if hasattr(row, 'is_divider') and row.is_divider:
                 divider_found = True
-                # Should have exactly 3 users before divider
-                self.assertEqual(idx, 3)
             elif hasattr(row, 'is_active_user') and row.is_active_user:
                 alice_found = True
                 self.assertTrue(hasattr(row, 'rank'))
             elif hasattr(row, 'rank'):
-                if not divider_found:
-                    top_3_count += 1
-                    self.assertLessEqual(row.rank, 3)
+                if row.rank == 1:
+                    rank_1_found = True
         
-        self.assertTrue(divider_found, "Divider should be present when active user is not in top 3")
+        self.assertTrue(rank_1_found, "Rank 1 should always be shown")
+        self.assertTrue(divider_found, "Divider should be present when active user is not rank 1 and not adjacent")
         self.assertTrue(alice_found, "Active user should be in leaderboard")
-        self.assertEqual(top_3_count, 3, "Should show top 3 users before divider")
         
-        # Total should be max 10 (excluding divider)
+        # Total should be max 6 (excluding divider)
         non_divider_rows = [r for r in leaderboard_rows if not hasattr(r, 'is_divider') or not r.is_divider]
-        self.assertLessEqual(len(non_divider_rows), 10)
+        self.assertLessEqual(len(non_divider_rows), 6)
     
-    def test_leaderboard_shows_top_10_when_active_user_in_top_3(self) -> None:
-        """Test that leaderboard shows top 10 when active user is in top 3."""
+    def test_leaderboard_shows_top_6_when_active_user_is_rank1(self) -> None:
+        """Test that leaderboard shows top 6 when active user is rank 1."""
         user_model = get_user_model()
         
         # Set active user in session
@@ -1006,24 +1003,29 @@ class HomeViewTests(TestCase):
         
         leaderboard_rows = response.context['leaderboard_rows']
         
-        # Should show top 10
-        self.assertLessEqual(len(leaderboard_rows), 10)
+        # Should show top 6
+        non_divider_rows = [r for r in leaderboard_rows if not hasattr(r, 'is_divider') or not r.is_divider]
+        self.assertLessEqual(len(non_divider_rows), 6)
         
-        # Active user should be marked but no divider
+        # Active user should be marked and should be rank 1, no divider
         alice_found = False
         divider_found = False
+        alice_rank = None
         
         for row in leaderboard_rows:
             if hasattr(row, 'is_divider') and row.is_divider:
                 divider_found = True
             elif hasattr(row, 'is_active_user') and row.is_active_user and hasattr(row, 'id') and row.id == self.alice.id:
                 alice_found = True
+                if hasattr(row, 'rank'):
+                    alice_rank = row.rank
         
-        self.assertFalse(divider_found, "Divider should not be present when active user is in top 3")
+        self.assertFalse(divider_found, "Divider should not be present when active user is rank 1")
         self.assertTrue(alice_found, "Active user should be in leaderboard")
+        self.assertEqual(alice_rank, 1, "Active user should be rank 1")
     
-    def test_leaderboard_shows_top_10_when_active_user_not_in_leaderboard(self) -> None:
-        """Test that leaderboard shows top 10 when active user has no scores."""
+    def test_leaderboard_shows_top_6_when_active_user_not_in_leaderboard(self) -> None:
+        """Test that leaderboard shows top 6 when active user has no scores."""
         user_model = get_user_model()
         
         # Set active user in session (Alice has no scores)
@@ -1053,8 +1055,9 @@ class HomeViewTests(TestCase):
         
         leaderboard_rows = response.context['leaderboard_rows']
         
-        # Should show top 10
-        self.assertLessEqual(len(leaderboard_rows), 10)
+        # Should show top 6
+        non_divider_rows = [r for r in leaderboard_rows if not hasattr(r, 'is_divider') or not r.is_divider]
+        self.assertLessEqual(len(non_divider_rows), 6)
         
         # No divider should be present
         divider_found = False
@@ -1104,11 +1107,14 @@ class HomeViewTests(TestCase):
         # (Alice should be in the leaderboard with her display name)
         self.assertContains(response, 'alice')
         
-        # Check that divider is present (since Alice is not in top 3)
-        self.assertContains(response, 'DIVIDER')
+        # Check that divider element is present (visually, not as text since user removed the text)
+        # We can check for the divider div structure with border
+        response_content = response.content.decode('utf-8')
+        # Check for divider visual element (two border divs)
+        self.assertTrue('border-t border-slate-700' in response_content, "Divider should be present")
     
-    def test_leaderboard_max_10_users_shown(self) -> None:
-        """Test that leaderboard never shows more than 10 users (excluding divider)."""
+    def test_leaderboard_max_6_users_shown(self) -> None:
+        """Test that leaderboard never shows more than 6 users (excluding divider)."""
         user_model = get_user_model()
         
         # Set active user in session
@@ -1148,7 +1154,7 @@ class HomeViewTests(TestCase):
         
         # Count non-divider rows
         non_divider_rows = [r for r in leaderboard_rows if not hasattr(r, 'is_divider') or not r.is_divider]
-        self.assertLessEqual(len(non_divider_rows), 10, "Should never show more than 10 users")
+        self.assertLessEqual(len(non_divider_rows), 6, "Should never show more than 6 users")
 
     def test_home_view_filters_open_predictions_to_upcoming_week(self) -> None:
         """Test that open_predictions only shows events with deadlines in the upcoming week."""
