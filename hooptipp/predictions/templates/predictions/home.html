@@ -11,15 +11,10 @@
         <header>
           <h2 class="text-xl font-semibold theme-accent-text">
             Leaderboard
-            {% if active_season %}
-              - {{ active_season.name }}
-            {% else %}
-              - All-Time
-            {% endif %}
           </h2>
           <p class="text-sm text-slate-400">
             {% if active_season %}
-              {{ active_season.start_date|date:"M d, Y" }} - {{ active_season.end_date|date:"M d, Y" }}
+            Season: <b>{{ active_season.name }}</b> from <b>{{ active_season.start_date|date:"M d, Y" }}</b> to <b>{{ active_season.end_date|date:"M d, Y" }}</b>
             {% elif not leaderboard_rows %}
               No scores yet
             {% else %}
