@@ -27,14 +27,14 @@
                   <div class="flex-1 border-t border-slate-700"></div>
                 </div>
               {% else %}
-                <div class="flex items-center justify-between gap-3 rounded-lg border border-slate-800 bg-slate-950 px-4 py-3 {% if row.is_active_user %}ring-2 ring-blue-500{% endif %}">
+                <div class="flex items-center justify-between gap-3 rounded-lg border bg-slate-950 px-4 py-3 {% if row.is_active_user %}border-2 theme-accent-border{% else %}border-slate-800{% endif %}">
                   <div class="flex items-center gap-3">
                     <span class="flex h-8 w-8 items-center justify-center rounded-full theme-accent-pill font-bold text-sm">
                       {{ row.rank }}
                     </span>
                     <div>
                       <div class="flex items-center gap-2">
-                        <p class="font-semibold {% if row.is_active_user %}text-blue-400{% else %}text-slate-200{% endif %}">
+                        <p class="font-semibold {% if row.is_active_user %}theme-accent-text{% else %}text-slate-200{% endif %}">
                           {{ row.display_name }}
                         </p>
                         <div class="flex items-center gap-1" title="Lock status: Available (🔒), Active (🔒 greyed), Forfeited (❌)">
