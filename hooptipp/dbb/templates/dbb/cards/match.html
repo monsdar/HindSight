@@ -29,7 +29,7 @@ Teams are directly selectable for predictions.
       {# Lock Button #}
       {% if active_user %}
         <button type="button" 
-                class="lock-toggle-btn flex items-center justify-center w-8 h-8 rounded-full border-2 transition-all duration-200 {% if user_tip and user_tip.is_locked %}theme-accent-border theme-accent-bg{% else %}border-slate-600{% endif %}"
+                class="lock-toggle-btn flex items-center justify-center w-8 h-8 rounded-full border-2 transition-all duration-200 {% if user_tip and user_tip.is_locked %}theme-accent-border theme-accent-bg-subtle{% else %}border-slate-600{% endif %}"
                 data-event-id="{{ event.id }}"
                 {% if lock_summary and lock_summary.available == 0 and not user_tip.is_locked %}disabled{% endif %}
                 title="{% if user_tip and user_tip.is_locked %}Unlock this pick{% else %}Lock this pick{% endif %}">
@@ -46,7 +46,7 @@ Teams are directly selectable for predictions.
       {# Away Team - Selectable #}
       {% if active_user %}
         <button type="button" 
-                class="team-select-btn flex-1 text-center p-3 rounded-lg border-2 transition-all duration-200 {% if user_tip and user_tip.prediction_option_id == card_context.away_team_option_id %}theme-accent-border theme-accent-bg{% else %}border-slate-600{% endif %}"
+                class="team-select-btn flex-1 text-center p-3 rounded-lg border-2 transition-all duration-200 {% if user_tip and user_tip.prediction_option_id == card_context.away_team_option_id %}theme-accent-border theme-accent-bg-subtle{% else %}border-slate-600{% endif %}"
                 data-event-id="{{ event.id }}"
                 data-option-id="{{ card_context.away_team_option_id }}"
                 data-team-name="{{ card_context.away_team }}">
@@ -76,7 +76,7 @@ Teams are directly selectable for predictions.
       {# Home Team - Selectable #}
       {% if active_user %}
         <button type="button" 
-                class="team-select-btn flex-1 text-center p-3 rounded-lg border-2 transition-all duration-200 {% if user_tip and user_tip.prediction_option_id == card_context.home_team_option_id %}theme-accent-border theme-accent-bg{% else %}border-slate-600{% endif %}"
+                class="team-select-btn flex-1 text-center p-3 rounded-lg border-2 transition-all duration-200 {% if user_tip and user_tip.prediction_option_id == card_context.home_team_option_id %}theme-accent-border theme-accent-bg-subtle{% else %}border-slate-600{% endif %}"
                 data-event-id="{{ event.id }}"
                 data-option-id="{{ card_context.home_team_option_id }}"
                 data-team-name="{{ card_context.home_team }}">
@@ -183,14 +183,14 @@ if (!window.hooptippDbbMatchCardInitialized) {
           const allTeamButtons = document.querySelectorAll(`[data-event-id="${eventId}"]`);
           allTeamButtons.forEach(btn => {
             if (btn.classList.contains('team-select-btn')) {
-              btn.classList.remove('theme-accent-border', 'theme-accent-bg');
+              btn.classList.remove('theme-accent-border', 'theme-accent-bg-subtle');
               btn.classList.add('border-slate-600');
             }
           });
           
           // Add selection to clicked team
           this.classList.remove('border-slate-600');
-          this.classList.add('theme-accent-border', 'theme-accent-bg');
+          this.classList.add('theme-accent-border', 'theme-accent-bg-subtle');
                     
           // Save prediction immediately via AJAX
           savePredictionImmediately(eventId, optionId);
@@ -278,11 +278,11 @@ if (!window.hooptippDbbMatchCardInitialized) {
           if (data.is_locked) {
             lockSpan.textContent = '🔒';
             buttonElement.classList.remove('border-slate-600', 'border-2');
-            buttonElement.classList.add('theme-accent-border', 'theme-accent-bg', 'border-2');
+            buttonElement.classList.add('theme-accent-border', 'theme-accent-bg-subtle', 'border-2');
             buttonElement.title = 'Unlock this pick';
           } else {
             lockSpan.textContent = '🔓';
-            buttonElement.classList.remove('theme-accent-border', 'theme-accent-bg', 'border-2');
+            buttonElement.classList.remove('theme-accent-border', 'theme-accent-bg-subtle', 'border-2');
             buttonElement.classList.add('border-slate-600', 'border-2');
             buttonElement.title = 'Lock this pick';
           }
