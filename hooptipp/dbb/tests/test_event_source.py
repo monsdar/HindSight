@@ -170,20 +170,20 @@ class DbbEventSourceTest(TestCase):
 
     def test_parse_score_string(self):
         """Test parsing score strings in various formats."""
-        # Test colon format (away:home)
+        # Test colon format (home:away - European order)
         home, away = self.event_source._parse_score_string('75:90')
-        self.assertEqual(home, 90)
-        self.assertEqual(away, 75)
+        self.assertEqual(home, 75)
+        self.assertEqual(away, 90)
         
         # Test dash format
         home, away = self.event_source._parse_score_string('85 - 78')
-        self.assertEqual(home, 78)
-        self.assertEqual(away, 85)
+        self.assertEqual(home, 85)
+        self.assertEqual(away, 78)
         
         # Test hyphen format
         home, away = self.event_source._parse_score_string('80-82')
-        self.assertEqual(home, 82)
-        self.assertEqual(away, 80)
+        self.assertEqual(home, 80)
+        self.assertEqual(away, 82)
         
         # Test empty string
         home, away = self.event_source._parse_score_string('')
@@ -415,7 +415,9 @@ class DbbEventSourceTest(TestCase):
                 'away_team': {'id': 't2', 'name': 'BG Test Team 2'},
                 'datetime': past_date,
                 'location': 'Test Arena',
-                'score': '78:85',  # away:home format (away 78, home 85)
+                'score': '85:78',  # home:away format (home=85, away=78)
+                'score_home': 85,  # explicit home score
+                'score_away': 78,  # explicit away score
                 'is_finished': True,
                 'is_cancelled': False
             }
@@ -449,7 +451,7 @@ class DbbEventSourceTest(TestCase):
         # Sync options first
         self.event_source.sync_options()
 
-        # Mock past match data with score string (format: away:home)
+        # Mock past match data with score string (format: home:away - European order)
         past_date = (timezone.now() - timedelta(days=7)).isoformat()
         mock_client.get_league_matches.return_value = [
             {
@@ -458,7 +460,9 @@ class DbbEventSourceTest(TestCase):
                 'away_team': {'id': 't2', 'name': 'BG Test Team 2'},
                 'datetime': past_date,
                 'location': 'Test Arena',
-                'score': '75:90',  # away:home format
+                'score': '75:90',  # home:away format (home=75, away=90)
+                'score_home': 75,  # explicit home score
+                'score_away': 90,  # explicit away score
                 'is_finished': True,
                 'is_cancelled': False
             }
@@ -473,9 +477,85 @@ class DbbEventSourceTest(TestCase):
         # Should create outcome with parsed scores
         self.assertTrue(EventOutcome.objects.filter(prediction_event=event).exists())
         outcome = EventOutcome.objects.get(prediction_event=event)
-        self.assertEqual(outcome.metadata['home_score'], 90)  # Home team score
-        self.assertEqual(outcome.metadata['away_score'], 75)  # Away team score
+        self.assertEqual(outcome.metadata['home_score'], 75)  # Home team score
+        self.assertEqual(outcome.metadata['away_score'], 90)  # Away team score
         self.assertEqual(outcome.metadata['score_string'], '75:90')
+
+    @patch('hooptipp.dbb.event_source.build_slapi_client')
+    def test_sync_events_uses_explicit_score_fields(self, mock_build_client):
+        """Test that explicit score_home and score_away fields are used when available."""
+        mock_client = MagicMock()
+        mock_build_client.return_value = mock_client
+        
+        # Sync options first
+        self.event_source.sync_options()
+
+        # Mock past match data with explicit score fields (no score string)
+        past_date = (timezone.now() - timedelta(days=7)).isoformat()
+        mock_client.get_league_matches.return_value = [
+            {
+                'match_id': 1,
+                'home_team': {'id': 't1', 'name': 'BG Test Team 1'},
+                'away_team': {'id': 't2', 'name': 'BG Test Team 2'},
+                'datetime': past_date,
+                'location': 'Test Arena',
+                'score_home': 87,  # explicit home score
+                'score_away': 51,  # explicit away score
+                'is_finished': True,
+                'is_cancelled': False
+            }
+        ]
+
+        result = self.event_source.sync_events()
+
+        # Should create event
+        self.assertEqual(result.events_created, 1)
+        event = PredictionEvent.objects.get(source_id='dbb-slapi', source_event_id='1')
+        
+        # Should create outcome with explicit scores
+        self.assertTrue(EventOutcome.objects.filter(prediction_event=event).exists())
+        outcome = EventOutcome.objects.get(prediction_event=event)
+        self.assertEqual(outcome.metadata['home_score'], 87)  # Home team score from explicit field
+        self.assertEqual(outcome.metadata['away_score'], 51)  # Away team score from explicit field
+        # Score string should be generated from explicit fields
+        self.assertEqual(outcome.metadata['score_string'], '87:51')
+
+    @patch('hooptipp.dbb.event_source.build_slapi_client')
+    def test_sync_events_fallback_to_score_string(self, mock_build_client):
+        """Test that score string parsing is used as fallback when explicit fields are missing."""
+        mock_client = MagicMock()
+        mock_build_client.return_value = mock_client
+        
+        # Sync options first
+        self.event_source.sync_options()
+
+        # Mock past match data with only score string (no explicit fields)
+        past_date = (timezone.now() - timedelta(days=7)).isoformat()
+        mock_client.get_league_matches.return_value = [
+            {
+                'match_id': 1,
+                'home_team': {'id': 't1', 'name': 'BG Test Team 1'},
+                'away_team': {'id': 't2', 'name': 'BG Test Team 2'},
+                'datetime': past_date,
+                'location': 'Test Arena',
+                'score': '92:68',  # only score string, no explicit fields
+                'is_finished': True,
+                'is_cancelled': False
+            }
+        ]
+
+        result = self.event_source.sync_events()
+
+        # Should create event
+        self.assertEqual(result.events_created, 1)
+        event = PredictionEvent.objects.get(source_id='dbb-slapi', source_event_id='1')
+        
+        # Should create outcome with parsed scores from string
+        self.assertTrue(EventOutcome.objects.filter(prediction_event=event).exists())
+        outcome = EventOutcome.objects.get(prediction_event=event)
+        self.assertEqual(outcome.metadata['home_score'], 92)  # Parsed from string
+        self.assertEqual(outcome.metadata['away_score'], 68)  # Parsed from string
+        self.assertEqual(outcome.metadata['score_string'], '92:68')
 
     @patch('hooptipp.dbb.event_source.build_slapi_client')
     def test_sync_events_skips_outcome_for_past_match_without_result(self, mock_build_client):
@@ -528,6 +608,8 @@ class DbbEventSourceTest(TestCase):
                 'datetime': past_date,
                 'location': 'Test Arena',
                 'score': '80:80',  # tie
+                'score_home': 80,  # explicit home score
+                'score_away': 80,  # explicit away score
                 'is_finished': True,
                 'is_cancelled': False
             }
@@ -560,7 +642,9 @@ class DbbEventSourceTest(TestCase):
                 'away_team': {'id': 't2', 'name': 'BG Test Team 2'},
                 'datetime': past_date,
                 'location': 'Test Arena',
-                'score': '78:85',  # away:home
+                'score': '85:78',  # home:away format (home=85, away=78)
+                'score_home': 85,  # explicit home score
+                'score_away': 78,  # explicit away score
                 'is_finished': True,
                 'is_cancelled': False
             }

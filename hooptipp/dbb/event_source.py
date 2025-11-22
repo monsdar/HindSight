@@ -250,7 +250,7 @@ class DbbEventSource(EventSource):
                         if existing_event:
                             # Update existing event
                             existing_event.deadline = match_date
-                            existing_event.name = f"{away_team} @ {home_team}"
+                            existing_event.name = f"{home_team} vs. {away_team}"
                             existing_event.save()
                             event = existing_event
                             result.events_updated += 1
@@ -258,8 +258,8 @@ class DbbEventSource(EventSource):
                             # Create new prediction event
                             event = PredictionEvent.objects.create(
                                 tip_type=tip_type,
-                                name=f"{away_team} @ {home_team}",
-                                description=f"{away_team} at {home_team} ({league.league_name})",
+                                name=f"{home_team} vs. {away_team}",
+                                description=f"{home_team} vs. {away_team} ({league.league_name})",
                                 target_kind=PredictionEvent.TargetKind.TEAM,
                                 selection_mode=PredictionEvent.SelectionMode.CURATED,
                                 source_id=self.source_id,
@@ -360,9 +360,9 @@ class DbbEventSource(EventSource):
                                 is_active=True,
                             )
 
-                        # For past matches, check if we need to create an outcome
+                        # For past matches, check if we need to create an outcome or fix swapped scores
                         if is_past_match:
-                            self._create_outcome_for_past_match(
+                            self._create_or_fix_outcome_for_past_match(
                                 event, match_id, match_data, client, home_team, away_team, result
                             )
 
@@ -419,14 +419,49 @@ class DbbEventSource(EventSource):
 
         raise ValueError(f"Unable to parse datetime: {date_str}")
 
+    def _extract_scores(self, match_data: dict) -> tuple[Optional[int], Optional[int]]:
+        """
+        Extract home_score and away_score from match data.
+        
+        Prioritizes explicit score_home and score_away fields from the API,
+        with fallback to parsing the score string.
+        
+        According to SLAPI API spec, matches now include:
+        - score_home: integer (nullable) - explicit home team score
+        - score_away: integer (nullable) - explicit away team score
+        - score: string (nullable) - score string for backwards compatibility
+        
+        Args:
+            match_data: Match data dictionary from SLAPI
+            
+        Returns:
+            Tuple of (home_score, away_score) or (None, None) if scores unavailable
+        """
+        # First, try to use explicit score fields (preferred method)
+        score_home = match_data.get('score_home')
+        score_away = match_data.get('score_away')
+        
+        if score_home is not None and score_away is not None:
+            try:
+                return int(score_home), int(score_away)
+            except (ValueError, TypeError):
+                logger.warning(f"Invalid score_home or score_away values: {score_home}, {score_away}")
+        
+        # Fallback to parsing score string (for backwards compatibility)
+        score_str = match_data.get('score')
+        if score_str:
+            return self._parse_score_string(score_str)
+        
+        return None, None
+    
     def _parse_score_string(self, score_str: str) -> tuple[Optional[int], Optional[int]]:
         """
         Parse a score string from SLAPI into home_score and away_score.
         
-        The score field from SLAPI is a string that may be in formats like:
-        - "85:78" (typically away:home)
+        The score field from SLAPI is in European order (home:away), so formats like:
+        - "85:78" (home:away, meaning home=85, away=78)
         - "78 - 85" (home - away)
-        - "85-78" (away-home)
+        - "85-78" (home-away)
         
         Args:
             score_str: The score string from the API
@@ -443,9 +478,9 @@ class DbbEventSource(EventSource):
                 parts = score_str.split(separator, 1)
                 if len(parts) == 2:
                     try:
-                        # Try both orders - typically format is away:home
-                        away_score = int(parts[0].strip())
-                        home_score = int(parts[1].strip())
+                        # European order: first part is home, second part is away
+                        home_score = int(parts[0].strip())
+                        away_score = int(parts[1].strip())
                         return home_score, away_score
                     except (ValueError, TypeError):
                         continue
@@ -454,7 +489,98 @@ class DbbEventSource(EventSource):
         logger.warning(f"Could not parse score string: {score_str}")
         return None, None
 
-    def _create_outcome_for_past_match(
+    def _fix_swapped_scores_if_needed(
+        self,
+        outcome: EventOutcome,
+        match_data: dict,
+        home_team: str,
+        away_team: str,
+    ) -> bool:
+        """
+        Check if scores in an existing outcome are swapped and fix them if needed.
+        
+        Args:
+            outcome: Existing EventOutcome to check
+            match_data: Match data from SLAPI API
+            home_team: Home team name
+            away_team: Away team name
+            
+        Returns:
+            True if scores were fixed, False otherwise
+        """
+        metadata = outcome.metadata or {}
+        stored_home_score = metadata.get('home_score')
+        stored_away_score = metadata.get('away_score')
+        
+        if stored_home_score is None or stored_away_score is None:
+            return False
+        
+        # Extract correct scores from API data
+        correct_home_score, correct_away_score = self._extract_scores(match_data)
+        
+        if correct_home_score is None or correct_away_score is None:
+            return False
+        
+        # Check if scores are swapped
+        if stored_home_score != correct_home_score or stored_away_score != correct_away_score:
+            # Scores are swapped - fix them
+            logger.info(
+                f'Fixing swapped scores for {outcome.prediction_event.name}: '
+                f'old home={stored_home_score}, away={stored_away_score} -> '
+                f'new home={correct_home_score}, away={correct_away_score}'
+            )
+            
+            # Update metadata with correct scores
+            metadata['home_score'] = correct_home_score
+            metadata['away_score'] = correct_away_score
+            
+            # Update score string if it exists
+            score_str = match_data.get('score')
+            if score_str:
+                metadata['score_string'] = score_str
+            else:
+                metadata['score_string'] = f"{correct_home_score}:{correct_away_score}"
+            
+            # Recalculate winner if needed
+            if correct_home_score > correct_away_score:
+                winning_team_name = home_team
+            elif correct_away_score > correct_home_score:
+                winning_team_name = away_team
+            else:
+                # Tie - shouldn't happen if we have an outcome, but handle it
+                logger.warning(f'Match {outcome.prediction_event.name} has a tie score')
+                return False
+            
+            # Find the correct winning option
+            winning_option = outcome.prediction_event.options.filter(
+                option__name=winning_team_name,
+                is_active=True
+            ).first()
+            
+            if winning_option:
+                # Update outcome with correct scores and winner
+                outcome.metadata = metadata
+                outcome.winning_option = winning_option
+                outcome.winning_generic_option = winning_option.option
+                outcome.notes = (
+                    f'Auto-generated from match result. Final score: '
+                    f'{home_team} {correct_home_score}, {away_team} {correct_away_score}'
+                )
+                outcome.save(update_fields=['metadata', 'winning_option', 'winning_generic_option', 'notes'])
+                
+                # Re-score the event since the winner might have changed
+                try:
+                    from hooptipp.predictions.scoring_service import score_event_outcome
+                    score_event_outcome(outcome)
+                    logger.info(f'Re-scored event after fixing swapped scores: {outcome.prediction_event.name}')
+                except Exception as e:
+                    logger.warning(f'Failed to re-score event after fixing swapped scores: {e}')
+                
+                return True
+        
+        return False
+
+    def _create_or_fix_outcome_for_past_match(
         self,
         event: PredictionEvent,
         match_id: str,
@@ -466,9 +592,12 @@ class DbbEventSource(EventSource):
     ) -> None:
         """
         Create an outcome for a past match if it has results and no outcome exists.
+        If an outcome exists, check and fix swapped scores if needed.
         
         According to SLAPI API spec, matches from /leagues/{league_id}/matches include:
-        - score: nullable string (e.g., "85:78")
+        - score_home: nullable integer - explicit home team score
+        - score_away: nullable integer - explicit away team score
+        - score: nullable string (e.g., "85:78") - score string for backwards compatibility
         - is_finished: boolean
         - is_cancelled: boolean
         
@@ -482,7 +611,10 @@ class DbbEventSource(EventSource):
             result: EventSourceResult to track outcome creation
         """
         # Check if outcome already exists
-        if EventOutcome.objects.filter(prediction_event=event).exists():
+        existing_outcome = EventOutcome.objects.filter(prediction_event=event).first()
+        if existing_outcome:
+            # Check and fix swapped scores if needed
+            self._fix_swapped_scores_if_needed(existing_outcome, match_data, home_team, away_team)
             return
 
         # Check if match is finished using is_finished flag from API
@@ -495,8 +627,8 @@ class DbbEventSource(EventSource):
         # If not finished, check if match is past deadline (might be finished but flag not set)
         if not is_finished:
             if event.deadline < timezone.now() - timedelta(hours=3):
-                # Match is past deadline, consider it finished if we have a score
-                if match_data.get('score'):
+                # Match is past deadline, consider it finished if we have scores
+                if match_data.get('score_home') is not None or match_data.get('score') or match_data.get('score_away') is not None:
                     is_finished = True
                 else:
                     return  # No score available, can't create outcome
@@ -506,16 +638,15 @@ class DbbEventSource(EventSource):
         if not is_finished:
             return
 
-        # Parse score from the score string field
-        score_str = match_data.get('score')
-        if not score_str:
-            return
-
-        home_score, away_score = self._parse_score_string(score_str)
+        # Extract scores using explicit fields (preferred) or parsing score string (fallback)
+        home_score, away_score = self._extract_scores(match_data)
         
         if home_score is None or away_score is None:
-            logger.warning(f'Could not parse scores for match {match_id} (score: {score_str})')
+            logger.warning(f'Could not extract scores for match {match_id}')
             return
+        
+        # Get score string for metadata (use explicit fields if available, otherwise use score string)
+        score_str = match_data.get('score') or f"{home_score}:{away_score}"
 
         # Determine winner
         if home_score > away_score:
@@ -559,7 +690,7 @@ class DbbEventSource(EventSource):
                     winning_generic_option=winning_option.option,
                     resolved_at=timezone.now(),
                     metadata=match_result_metadata,
-                    notes=f'Auto-generated from match result. Final score: {away_team} {away_score}, {home_team} {home_score}'
+                    notes=f'Auto-generated from match result. Final score: {home_team} {home_score}, {away_team} {away_score}'
                 )
                 
                 logger.info(f'Created outcome for past match: {event.name} -> {winning_option.label}')

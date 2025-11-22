@@ -144,14 +144,49 @@ class Command(BaseCommand):
             )
         )
 
+    def _extract_scores(self, match_data: dict) -> tuple[Optional[int], Optional[int]]:
+        """
+        Extract home_score and away_score from match data.
+        
+        Prioritizes explicit score_home and score_away fields from the API,
+        with fallback to parsing the score string.
+        
+        According to SLAPI API spec, matches now include:
+        - score_home: integer (nullable) - explicit home team score
+        - score_away: integer (nullable) - explicit away team score
+        - score: string (nullable) - score string for backwards compatibility
+        
+        Args:
+            match_data: Match data dictionary from SLAPI
+            
+        Returns:
+            Tuple of (home_score, away_score) or (None, None) if scores unavailable
+        """
+        # First, try to use explicit score fields (preferred method)
+        score_home = match_data.get('score_home')
+        score_away = match_data.get('score_away')
+        
+        if score_home is not None and score_away is not None:
+            try:
+                return int(score_home), int(score_away)
+            except (ValueError, TypeError):
+                logger.warning(f"Invalid score_home or score_away values: {score_home}, {score_away}")
+        
+        # Fallback to parsing score string (for backwards compatibility)
+        score_str = match_data.get('score')
+        if score_str:
+            return self._parse_score_string(score_str)
+        
+        return None, None
+    
     def _parse_score_string(self, score_str: str) -> tuple[Optional[int], Optional[int]]:
         """
         Parse a score string from SLAPI into home_score and away_score.
         
-        The score field from SLAPI is a string that may be in formats like:
-        - "85:78" (typically away:home)
+        The score field from SLAPI is in European order (home:away), so formats like:
+        - "85:78" (home:away, meaning home=85, away=78)
         - "78 - 85" (home - away)
-        - "85-78" (away-home)
+        - "85-78" (home-away)
         
         Args:
             score_str: The score string from the API
@@ -168,9 +203,9 @@ class Command(BaseCommand):
                 parts = score_str.split(separator, 1)
                 if len(parts) == 2:
                     try:
-                        # Try both orders - typically format is away:home
-                        away_score = int(parts[0].strip())
-                        home_score = int(parts[1].strip())
+                        # European order: first part is home, second part is away
+                        home_score = int(parts[0].strip())
+                        away_score = int(parts[1].strip())
                         return home_score, away_score
                     except (ValueError, TypeError):
                         continue
@@ -186,7 +221,9 @@ class Command(BaseCommand):
         Process a single match and create EventOutcome if match is final.
 
         According to SLAPI API spec, matches from /leagues/{league_id}/matches include:
-        - score: nullable string (e.g., "85:78")
+        - score_home: nullable integer - explicit home team score
+        - score_away: nullable integer - explicit away team score
+        - score: nullable string (e.g., "85:78") - score string for backwards compatibility
         - is_finished: boolean
         - is_cancelled: boolean
 
@@ -210,8 +247,8 @@ class Command(BaseCommand):
         # If not finished, check if match is past deadline (might be finished but flag not set)
         if not is_finished:
             if event.deadline < timezone.now() - timedelta(hours=3):
-                # Match is past deadline, consider it finished if we have a score
-                if match_data.get('score'):
+                # Match is past deadline, consider it finished if we have scores
+                if match_data.get('score_home') is not None or match_data.get('score') or match_data.get('score_away') is not None:
                     is_finished = True
                 else:
                     return 'skipped'  # No score available, can't create outcome
@@ -221,17 +258,15 @@ class Command(BaseCommand):
         if not is_finished:
             return 'skipped'
 
-        # Parse score from the score string field
-        score_str = match_data.get('score')
-        if not score_str:
-            logger.warning(f'Match {match_data.get("match_id")} is final but missing score')
-            return 'skipped'
-
-        home_score, away_score = self._parse_score_string(score_str)
+        # Extract scores using explicit fields (preferred) or parsing score string (fallback)
+        home_score, away_score = self._extract_scores(match_data)
         
         if home_score is None or away_score is None:
-            logger.warning(f'Could not parse scores for match {match_data.get("match_id")} (score: {score_str})')
+            logger.warning(f'Could not extract scores for match {match_data.get("match_id")}')
             return 'skipped'
+        
+        # Get score string for metadata (use explicit fields if available, otherwise use score string)
+        score_str = match_data.get('score') or f"{home_score}:{away_score}"
 
         # Determine winner
         # Note: home_team and away_team are objects with structure {"id": "...", "name": "...", ...}
@@ -269,7 +304,7 @@ class Command(BaseCommand):
         if dry_run:
             self.stdout.write(
                 f'  Would create outcome: {event.name} -> {winning_option.label} '
-                f'(Final: {away_team} {away_score}, {home_team} {home_score})'
+                f'(Final: {home_team} {home_score}, {away_team} {away_score})'
             )
             return 'processed'
 
@@ -294,7 +329,7 @@ class Command(BaseCommand):
                 winning_generic_option=winning_option.option,
                 resolved_at=timezone.now(),
                 metadata=match_result_metadata,
-                notes=f'Auto-generated from match result. Final score: {away_team} {away_score}, {home_team} {home_score}'
+                notes=f'Auto-generated from match result. Final score: {home_team} {home_score}, {away_team} {away_score}'
             )
 
             # Auto-score the event

@@ -150,7 +150,7 @@ class DbbMatchModelTest(TestCase):
         self.assertEqual(match.home_team, 'Home Team')
         self.assertEqual(match.away_team, 'Away Team')
         self.assertEqual(match.league_name, 'Test League')
-        self.assertEqual(str(match), 'Away Team @ Home Team')
+        self.assertEqual(str(match), 'Home Team vs. Away Team')
 
     def test_create_dbb_match_without_venue(self):
         """Test creating a DBB match without venue (nullable field)."""

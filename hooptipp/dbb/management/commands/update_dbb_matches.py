@@ -16,6 +16,7 @@ from django.utils import timezone
 from hooptipp.dbb.client import build_slapi_client
 from hooptipp.dbb.models import TrackedLeague
 from hooptipp.dbb.event_source import DbbEventSource
+from hooptipp.predictions.models import EventOutcome
 
 logger = logging.getLogger(__name__)
 
@@ -107,5 +108,111 @@ class Command(BaseCommand):
             else:
                 self.stdout.write('  No event changes')
 
+            # Check for and fix swapped scores in existing outcomes
+            self.stdout.write('Checking for swapped scores in existing outcomes...')
+            fixed_count = self._fix_swapped_scores(event_source, dry_run)
+            
+            if fixed_count > 0:
+                self.stdout.write(
+                    self.style.SUCCESS(f'  Fixed {fixed_count} outcome(s) with swapped scores')
+                )
+            else:
+                self.stdout.write('  No swapped scores found')
+
             self.stdout.write(self.style.SUCCESS('Match update completed'))
+
+    def _fix_swapped_scores(self, event_source: DbbEventSource, dry_run: bool) -> int:
+        """
+        Check all DBB outcomes and fix swapped scores using fresh data from SLAPI.
+        
+        Args:
+            event_source: DbbEventSource instance
+            dry_run: If True, only report what would be fixed
+            
+        Returns:
+            Number of outcomes fixed
+        """
+        if not event_source.is_configured():
+            return 0
+        
+        client = build_slapi_client()
+        if not client:
+            return 0
+        
+        fixed_count = 0
+        
+        # Get all DBB outcomes
+        outcomes = EventOutcome.objects.filter(
+            prediction_event__source_id='dbb-slapi'
+        ).select_related('prediction_event')
+        
+        # Group outcomes by league for efficient API calls
+        outcomes_by_league = {}
+        for outcome in outcomes:
+            event = outcome.prediction_event
+            league_id = event.metadata.get('league_id')
+            if league_id:
+                if league_id not in outcomes_by_league:
+                    outcomes_by_league[league_id] = []
+                outcomes_by_league[league_id].append(outcome)
+        
+        # Process each league
+        for league_id, league_outcomes in outcomes_by_league.items():
+            try:
+                # Fetch current match data from API
+                matches = client.get_league_matches(league_id)
+                match_dict = {str(m.get('match_id', '')): m for m in matches}
+                
+                # Check each outcome
+                for outcome in league_outcomes:
+                    event = outcome.prediction_event
+                    match_id = event.source_event_id
+                    match_data = match_dict.get(str(match_id))
+                    
+                    if not match_data:
+                        continue
+                    
+                    # Extract team names from match data
+                    home_team_obj = match_data.get('home_team', {})
+                    away_team_obj = match_data.get('away_team', {})
+                    
+                    if isinstance(home_team_obj, dict):
+                        home_team = home_team_obj.get('name', '')
+                    else:
+                        home_team = home_team_obj or ''
+                    
+                    if isinstance(away_team_obj, dict):
+                        away_team = away_team_obj.get('name', '')
+                    else:
+                        away_team = away_team_obj or ''
+                    
+                    if not home_team or not away_team:
+                        continue
+                    
+                    # Check and fix swapped scores
+                    if not dry_run:
+                        if event_source._fix_swapped_scores_if_needed(outcome, match_data, home_team, away_team):
+                            fixed_count += 1
+                    else:
+                        # In dry-run, just check if scores would be fixed
+                        metadata = outcome.metadata or {}
+                        stored_home = metadata.get('home_score')
+                        stored_away = metadata.get('away_score')
+                        
+                        if stored_home is not None and stored_away is not None:
+                            correct_home, correct_away = event_source._extract_scores(match_data)
+                            if correct_home is not None and correct_away is not None:
+                                if stored_home != correct_home or stored_away != correct_away:
+                                    self.stdout.write(
+                                        f'  Would fix: {event.name} '
+                                        f'(home: {stored_home}->{correct_home}, '
+                                        f'away: {stored_away}->{correct_away})'
+                                    )
+                                    fixed_count += 1
+                        
+            except Exception as e:
+                logger.warning(f'Error checking swapped scores for league {league_id}: {e}')
+                continue
+        
+        return fixed_count
 

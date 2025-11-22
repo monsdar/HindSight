@@ -124,5 +124,5 @@ class DbbMatch(models.Model):
         app_label = 'dbb'
 
     def __str__(self) -> str:
-        return f"{self.away_team} @ {self.home_team}"
+        return f"{self.home_team} vs. {self.away_team}"
 

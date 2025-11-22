@@ -43,36 +43,6 @@ Teams are directly selectable for predictions.
   <div class="mt-4 rounded-lg border border-slate-800 bg-gradient-to-b from-slate-950 to-slate-900 p-4">
     <div class="flex items-center justify-between gap-4">
       
-      {# Away Team - Selectable #}
-      {% if active_user %}
-        <button type="button" 
-                class="team-select-btn flex-1 text-center p-3 rounded-lg border-2 transition-all duration-200 {% if user_tip and user_tip.prediction_option_id == card_context.away_team_option_id %}theme-accent-border theme-accent-bg-subtle{% else %}border-slate-600{% endif %}"
-                data-event-id="{{ event.id }}"
-                data-option-id="{{ card_context.away_team_option_id }}"
-                data-team-name="{{ card_context.away_team }}">
-      {% else %}
-        <div class="flex-1 text-center p-3 rounded-lg border-2 border-slate-700">
-      {% endif %}
-        {# Team logo or placeholder #}
-        {% if card_context.away_team_logo %}
-          {% load static %}
-          <img src="{% static 'dbb/'|add:card_context.away_team_logo %}" alt="{{ card_context.away_team }}" class="mx-auto h-20 w-20 object-contain">
-        {% else %}
-          <div class="mx-auto h-16 w-16 flex items-center justify-center bg-slate-800 rounded-lg">
-            <span class="text-2xl font-bold text-slate-500">{{ card_context.away_team|slice:":2"|upper }}</span>
-          </div>
-        {% endif %}
-        <p class="mt-2 text-sm font-bold text-slate-200 leading-tight">
-          {{ card_context.away_team }}
-        </p>
-        <p class="mt-1 text-xs text-slate-500 uppercase">Away</p>
-      {% if active_user %}</button>{% else %}</div>{% endif %}
-      
-      {# Separator #}
-      <div class="flex flex-col items-center gap-1">
-        <span class="text-2xl font-bold theme-accent-text">@</span>
-      </div>
-      
       {# Home Team - Selectable #}
       {% if active_user %}
         <button type="button" 
@@ -96,6 +66,36 @@ Teams are directly selectable for predictions.
           {{ card_context.home_team }}
         </p>
         <p class="mt-1 text-xs text-slate-500 uppercase">Home</p>
+      {% if active_user %}</button>{% else %}</div>{% endif %}
+      
+      {# Separator #}
+      <div class="flex flex-col items-center gap-1">
+        <span class="text-2xl font-bold theme-accent-text">vs.</span>
+      </div>
+      
+      {# Away Team - Selectable #}
+      {% if active_user %}
+        <button type="button" 
+                class="team-select-btn flex-1 text-center p-3 rounded-lg border-2 transition-all duration-200 {% if user_tip and user_tip.prediction_option_id == card_context.away_team_option_id %}theme-accent-border theme-accent-bg-subtle{% else %}border-slate-600{% endif %}"
+                data-event-id="{{ event.id }}"
+                data-option-id="{{ card_context.away_team_option_id }}"
+                data-team-name="{{ card_context.away_team }}">
+      {% else %}
+        <div class="flex-1 text-center p-3 rounded-lg border-2 border-slate-700">
+      {% endif %}
+        {# Team logo or placeholder #}
+        {% if card_context.away_team_logo %}
+          {% load static %}
+          <img src="{% static 'dbb/'|add:card_context.away_team_logo %}" alt="{{ card_context.away_team }}" class="mx-auto h-20 w-20 object-contain">
+        {% else %}
+          <div class="mx-auto h-16 w-16 flex items-center justify-center bg-slate-800 rounded-lg">
+            <span class="text-2xl font-bold text-slate-500">{{ card_context.away_team|slice:":2"|upper }}</span>
+          </div>
+        {% endif %}
+        <p class="mt-2 text-sm font-bold text-slate-200 leading-tight">
+          {{ card_context.away_team }}
+        </p>
+        <p class="mt-1 text-xs text-slate-500 uppercase">Away</p>
       {% if active_user %}</button>{% else %}</div>{% endif %}
       
     </div>

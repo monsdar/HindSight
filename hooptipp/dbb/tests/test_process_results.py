@@ -60,7 +60,7 @@ class ProcessDbbResultsCommandTest(TestCase):
         past_time = timezone.now() - timedelta(hours=3)
         self.event = PredictionEvent.objects.create(
             tip_type=self.tip_type,
-            name='Team 1 @ Team 2',
+            name='Team 2 vs. Team 1',
             source_id='dbb-slapi',
             source_event_id='123',  # match_id as string
             metadata={'league_id': 'test_league_123'},  # Add league_id for fetching matches
@@ -118,7 +118,9 @@ class ProcessDbbResultsCommandTest(TestCase):
                 'match_id': 123,
                 'home_team': {'name': 'Team 2'},
                 'away_team': {'name': 'Team 1'},
-                'score': '78:85',  # away:home format
+                'score': '85:78',  # home:away format (home=85, away=78, so Team 2 wins 85-78)
+                'score_home': 85,  # explicit home score
+                'score_away': 78,  # explicit away score
                 'is_finished': True,
                 'is_cancelled': False
             }
@@ -141,7 +143,9 @@ class ProcessDbbResultsCommandTest(TestCase):
                 'match_id': 123,
                 'home_team': {'name': 'Team 2'},
                 'away_team': {'name': 'Team 1'},
-                'score': '78:85',  # away:home format (Team 2 wins 85-78)
+                'score': '85:78',  # home:away format (home=85, away=78, so Team 2 wins 85-78)
+                'score_home': 85,  # explicit home score
+                'score_away': 78,  # explicit away score
                 'is_finished': True,
                 'is_cancelled': False
             }
