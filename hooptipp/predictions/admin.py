@@ -20,6 +20,7 @@ from .models import (
     OptionCategory,
     PredictionEvent,
     PredictionOption,
+    Season,
     TipType,
     UserEventScore,
     UserFavorite,
@@ -740,6 +741,56 @@ class UserPreferencesAdmin(admin.ModelAdmin):
         return bool(obj.activation_pin)
     has_pin.boolean = True
     has_pin.short_description = 'Has PIN'
+
+
+@admin.register(Season)
+class SeasonAdmin(admin.ModelAdmin):
+    list_display = ('name', 'start_date', 'end_date', 'is_active_display', 'created_at')
+    list_filter = ('start_date', 'end_date')
+    search_fields = ('name', 'description')
+    date_hierarchy = 'start_date'
+    
+    fieldsets = (
+        (None, {
+            'fields': ('name', 'description')
+        }),
+        ('Timeframe', {
+            'fields': ('start_date', 'end_date'),
+            'description': 'The season is active when the current date falls within this range. Seasons must not overlap.'
+        }),
+        ('Timestamps', {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',),
+        }),
+    )
+    readonly_fields = ('created_at', 'updated_at')
+    
+    def is_active_display(self, obj):
+        """Display whether the season is currently active."""
+        is_active = obj.is_active()
+        if is_active:
+            return format_html('<span style="color: green;">● Active</span>')
+        return format_html('<span style="color: gray;">○ Inactive</span>')
+    is_active_display.short_description = 'Status'
+    is_active_display.boolean = False
+    
+    def save_model(self, request, obj, form, change):
+        """Override save to show helpful messages."""
+        try:
+            super().save_model(request, obj, form, change)
+            if obj.is_active():
+                messages.success(
+                    request,
+                    f'Season "{obj.name}" is now active. Leaderboards will show scores from {obj.start_date} to {obj.end_date}.'
+                )
+            else:
+                messages.info(
+                    request,
+                    f'Season "{obj.name}" saved. It will be active from {obj.start_date} to {obj.end_date}.'
+                )
+        except Exception as e:
+            messages.error(request, f'Error saving season: {str(e)}')
+            raise
 
 
 # Register the EventSourceAdmin manually

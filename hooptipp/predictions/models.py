@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import date
 from django.conf import settings
 from django.db import models
 from django.utils import timezone
@@ -520,6 +521,90 @@ class UserPreferences(models.Model):
         if not pin_teams:
             return False
         return set(team.strip().upper() for team in submitted_teams) == set(pin_teams)
+
+
+class Season(models.Model):
+    """
+    Represents a time-bounded scoring period.
+    
+    Only one season can be active at a time (determined by current date
+    falling within start_date and end_date). When a season is active,
+    leaderboards show only scores from that season's timeframe.
+    """
+    name = models.CharField(max_length=200)
+    start_date = models.DateField()
+    end_date = models.DateField()
+    description = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-start_date', 'name']
+        verbose_name = 'Season'
+        verbose_name_plural = 'Seasons'
+        indexes = [
+            models.Index(fields=['start_date', 'end_date']),
+        ]
+
+    def __str__(self) -> str:
+        return self.name
+
+    def clean(self) -> None:
+        """Validate that end_date >= start_date and no overlapping seasons."""
+        from django.utils import timezone as tz
+        
+        if self.end_date < self.start_date:
+            raise ValidationError({
+                'end_date': 'End date must be on or after start date.'
+            })
+        
+        # Check for overlapping seasons (excluding self if updating)
+        overlapping = Season.objects.filter(
+            models.Q(start_date__lte=self.end_date) & models.Q(end_date__gte=self.start_date)
+        )
+        if self.pk:
+            overlapping = overlapping.exclude(pk=self.pk)
+        
+        if overlapping.exists():
+            overlapping_seasons = ', '.join(s.name for s in overlapping)
+            raise ValidationError(
+                f'This season overlaps with existing season(s): {overlapping_seasons}. '
+                f'Seasons must have non-overlapping timeframes.'
+            )
+
+    def save(self, *args, **kwargs) -> None:
+        """Override save to call clean() for validation."""
+        self.full_clean()
+        super().save(*args, **kwargs)
+
+    def is_active(self, check_date: date | timezone.datetime | None = None) -> bool:
+        """Check if this season is active on the given date (or today if not provided)."""
+        if check_date is None:
+            check_date = timezone.now()
+        date_only = check_date.date() if isinstance(check_date, timezone.datetime) else check_date
+        return self.start_date <= date_only <= self.end_date
+
+    @classmethod
+    def get_active_season(cls, check_date: date | timezone.datetime | None = None) -> 'Season | None':
+        """Get the currently active season, if any."""
+        if check_date is None:
+            check_date = timezone.now()
+        date_only = check_date.date() if isinstance(check_date, timezone.datetime) else check_date
+        
+        try:
+            return cls.objects.get(
+                start_date__lte=date_only,
+                end_date__gte=date_only
+            )
+        except cls.DoesNotExist:
+            return None
+        except cls.MultipleObjectsReturned:
+            # This shouldn't happen if validation works, but handle it gracefully
+            # Return the first one found
+            return cls.objects.filter(
+                start_date__lte=date_only,
+                end_date__gte=date_only
+            ).first()
 
 
 @receiver(post_save, sender=UserPreferences)

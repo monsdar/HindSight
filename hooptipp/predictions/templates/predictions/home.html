@@ -9,10 +9,21 @@
       {# 1. CURRENT RANKING #}
       <section class="space-y-4 rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-lg shadow-slate-900/30">
         <header>
-          <h2 class="text-xl font-semibold theme-accent-text">Leaderboard</h2>
+          <h2 class="text-xl font-semibold theme-accent-text">
+            Leaderboard
+            {% if active_season %}
+              - {{ active_season.name }}
+            {% else %}
+              - All-Time
+            {% endif %}
+          </h2>
           <p class="text-sm text-slate-400">
-            {% if not leaderboard_rows %}
+            {% if active_season %}
+              {{ active_season.start_date|date:"M d, Y" }} - {{ active_season.end_date|date:"M d, Y" }}
+            {% elif not leaderboard_rows %}
               No scores yet
+            {% else %}
+              All-time scores
             {% endif %}
           </p>
         </header>

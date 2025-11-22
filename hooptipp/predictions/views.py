@@ -25,6 +25,7 @@ from .models import (
     OptionCategory,
     PredictionEvent,
     PredictionOption,
+    Season,
     TipType,
     UserPreferences,
     UserEventScore,
@@ -323,6 +324,10 @@ def home(request):
             return redirect('predictions:home')
 
     all_users = list(get_user_model().objects.select_related('preferences').order_by('username'))
+    
+    # Get active season (if any) - needed for scoreboard filtering
+    active_season = Season.get_active_season()
+    
     lock_summary = None
     scoreboard_summary = None
     recent_scores: list[UserEventScore] = []
@@ -334,6 +339,14 @@ def home(request):
             .select_related('prediction_event__tip_type')
             .order_by('-awarded_at', '-id')
         )
+        
+        # Filter by active season if one exists
+        if active_season:
+            score_queryset = score_queryset.filter(
+                awarded_at__date__gte=active_season.start_date,
+                awarded_at__date__lte=active_season.end_date
+            )
+        
         recent_scores = list(score_queryset[:5])
         for score in recent_scores:
             score.lock_bonus_value = max(score.points_awarded - score.base_points, 0)
@@ -450,6 +463,7 @@ def home(request):
     _apply_display_metadata(active_user, display_name_map)
 
     # Fetch leaderboard data for dashboard
+    # (active_season already retrieved above for scoreboard_summary)
     User = get_user_model()
     bonus_event_points_expr = Case(
         When(
@@ -468,7 +482,17 @@ def home(request):
         output_field=IntegerField(),
     )
 
-    leaderboard_users = User.objects.filter(usereventscore__isnull=False).annotate(
+    # Build base queryset for leaderboard
+    leaderboard_score_filter = Q(usereventscore__isnull=False)
+    
+    # If active season exists, filter scores by season timeframe
+    if active_season:
+        leaderboard_score_filter &= Q(
+            usereventscore__awarded_at__date__gte=active_season.start_date,
+            usereventscore__awarded_at__date__lte=active_season.end_date
+        )
+
+    leaderboard_users = User.objects.filter(leaderboard_score_filter).annotate(
         total_points=Coalesce(Sum('usereventscore__points_awarded'), 0),
         event_count=Coalesce(Count('usereventscore__prediction_event', distinct=True), 0),
     ).order_by('-total_points', '-event_count', 'username')
@@ -486,10 +510,13 @@ def home(request):
         row.rank = index
         
         # Calculate points awarded in the last 3 days
-        points_last_3_days = UserEventScore.objects.filter(
-            user=row,
-            awarded_at__gte=three_days_ago
-        ).aggregate(
+        points_filter = Q(user=row, awarded_at__gte=three_days_ago)
+        if active_season:
+            points_filter &= Q(
+                awarded_at__date__gte=active_season.start_date,
+                awarded_at__date__lte=active_season.end_date
+            )
+        points_last_3_days = UserEventScore.objects.filter(points_filter).aggregate(
             total=Coalesce(Sum('points_awarded'), 0)
         )['total']
         row.points_change_3d = int(points_last_3_days) if points_last_3_days else 0
@@ -689,6 +716,7 @@ def home(request):
         'resolved_predictions': resolved_predictions_data,
         'open_predictions': open_predictions,
         'enable_user_selection': settings.ENABLE_USER_SELECTION,
+        'active_season': active_season,
     }
     return render(request, 'predictions/home.html', context)
 
