@@ -76,10 +76,33 @@ class Command(BaseCommand):
         for event in events_to_process:
             try:
                 match_id = event.source_event_id
+                league_id = event.metadata.get('league_id')
                 
-                # Fetch match details from SLAPI
+                if not league_id:
+                    logger.warning(f'Event {event.name} missing league_id in metadata')
+                    skipped_count += 1
+                    self.stdout.write(
+                        self.style.WARNING(f'[SKIP] Skipped: {event.name} (missing league_id)')
+                    )
+                    continue
+                
+                # Fetch matches for the league and find the specific match
+                # Note: SLAPI doesn't have a /matches/{match_id} endpoint, so we fetch all league matches
                 try:
-                    match_data = client.get_match_details(match_id)
+                    all_matches = client.get_league_matches(league_id)
+                    match_data = None
+                    for match in all_matches:
+                        if str(match.get('match_id', '')) == str(match_id):
+                            match_data = match
+                            break
+                    
+                    if not match_data:
+                        logger.warning(f'Match {match_id} not found in league {league_id}')
+                        skipped_count += 1
+                        self.stdout.write(
+                            self.style.WARNING(f'[SKIP] Skipped: {event.name} (match not found)')
+                        )
+                        continue
                 except Exception as e:
                     logger.warning(f'Failed to fetch match data for {match_id}: {e}')
                     skipped_count += 1
@@ -121,11 +144,51 @@ class Command(BaseCommand):
             )
         )
 
+    def _parse_score_string(self, score_str: str) -> tuple[Optional[int], Optional[int]]:
+        """
+        Parse a score string from SLAPI into home_score and away_score.
+        
+        The score field from SLAPI is a string that may be in formats like:
+        - "85:78" (typically away:home)
+        - "78 - 85" (home - away)
+        - "85-78" (away-home)
+        
+        Args:
+            score_str: The score string from the API
+            
+        Returns:
+            Tuple of (home_score, away_score) or (None, None) if parsing fails
+        """
+        if not score_str:
+            return None, None
+        
+        # Try common separators: colon, dash, hyphen
+        for separator in [':', ' - ', '-', '–', '—']:
+            if separator in score_str:
+                parts = score_str.split(separator, 1)
+                if len(parts) == 2:
+                    try:
+                        # Try both orders - typically format is away:home
+                        away_score = int(parts[0].strip())
+                        home_score = int(parts[1].strip())
+                        return home_score, away_score
+                    except (ValueError, TypeError):
+                        continue
+        
+        # If no separator found or parsing failed, return None
+        logger.warning(f"Could not parse score string: {score_str}")
+        return None, None
+
     def process_single_match(
         self, event: PredictionEvent, match_data: dict, dry_run: bool = False
     ) -> Optional[str]:
         """
         Process a single match and create EventOutcome if match is final.
+
+        According to SLAPI API spec, matches from /leagues/{league_id}/matches include:
+        - score: nullable string (e.g., "85:78")
+        - is_finished: boolean
+        - is_cancelled: boolean
 
         Args:
             event: PredictionEvent to process
@@ -137,37 +200,37 @@ class Command(BaseCommand):
             'skipped' if match is not final or no valid outcome
             None if there was an error
         """
-        # Check if match is finished
-        status = match_data.get('status', '').lower()
-        is_final = 'final' in status or 'finished' in status or 'ended' in status
+        # Check if match is cancelled (cancelled matches shouldn't have outcomes)
+        if match_data.get('is_cancelled', False):
+            return 'skipped'
         
-        if not is_final:
-            # Also check if we have scores
-            home_score = match_data.get('home_score') or match_data.get('homeScore')
-            away_score = match_data.get('away_score') or match_data.get('awayScore')
-            
-            # If we have scores and the match is past its time, consider it finished
-            if home_score is not None and away_score is not None:
-                if event.deadline < timezone.now() - timedelta(hours=3):
-                    is_final = True
+        # Check if match is finished using is_finished flag from API
+        is_finished = match_data.get('is_finished', False)
+        
+        # If not finished, check if match is past deadline (might be finished but flag not set)
+        if not is_finished:
+            if event.deadline < timezone.now() - timedelta(hours=3):
+                # Match is past deadline, consider it finished if we have a score
+                if match_data.get('score'):
+                    is_finished = True
+                else:
+                    return 'skipped'  # No score available, can't create outcome
+            else:
+                return 'skipped'  # Match not finished and not past deadline
 
-        if not is_final:
+        if not is_finished:
             return 'skipped'
 
-        # Get scores
-        home_score = match_data.get('home_score') or match_data.get('homeScore')
-        away_score = match_data.get('away_score') or match_data.get('awayScore')
+        # Parse score from the score string field
+        score_str = match_data.get('score')
+        if not score_str:
+            logger.warning(f'Match {match_data.get("match_id")} is final but missing score')
+            return 'skipped'
 
+        home_score, away_score = self._parse_score_string(score_str)
+        
         if home_score is None or away_score is None:
-            logger.warning(f'Match {match_data.get("id")} is final but missing scores')
-            return 'skipped'
-
-        # Convert to int
-        try:
-            home_score = int(home_score)
-            away_score = int(away_score)
-        except (ValueError, TypeError):
-            logger.warning(f'Invalid scores for match {match_data.get("id")}')
+            logger.warning(f'Could not parse scores for match {match_data.get("match_id")} (score: {score_str})')
             return 'skipped'
 
         # Determine winner
@@ -218,8 +281,11 @@ class Command(BaseCommand):
                 'home_score': home_score,
                 'away_team': away_team,
                 'home_team': home_team,
-                'match_status': match_data.get('status', 'Final'),
-                'match_id': match_data.get('id', ''),
+                'is_finished': match_data.get('is_finished', True),
+                'is_cancelled': match_data.get('is_cancelled', False),
+                'is_confirmed': match_data.get('is_confirmed', False),
+                'match_id': match_data.get('match_id', ''),
+                'score_string': score_str,
             }
 
             outcome = EventOutcome.objects.create(

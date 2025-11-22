@@ -7,13 +7,15 @@ This source provides German basketball teams and match predictions.
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
 
+from django.db import transaction
 from django.utils import timezone
 
 from hooptipp.predictions.event_sources.base import EventSource, EventSourceResult
 from hooptipp.predictions.models import (
+    EventOutcome,
     Option,
     OptionCategory,
     PredictionEvent,
@@ -204,9 +206,8 @@ class DbbEventSource(EventSource):
                             logger.warning(f"Failed to parse date '{match_date_str}': {e}")
                             continue
 
-                        # Skip past matches
-                        if match_date < timezone.now():
-                            continue
+                        # Track if this is a past match (for outcome creation)
+                        is_past_match = match_date < timezone.now()
 
                         # Check if match is cancelled
                         is_cancelled = match_data.get('is_cancelled', False)
@@ -359,6 +360,12 @@ class DbbEventSource(EventSource):
                                 is_active=True,
                             )
 
+                        # For past matches, check if we need to create an outcome
+                        if is_past_match:
+                            self._create_outcome_for_past_match(
+                                event, match_id, match_data, client, home_team, away_team, result
+                            )
+
                 except Exception as e:
                     logger.exception(f"Error syncing matches for league {league.league_name}: {e}")
                     result.add_error(f"Failed to sync league {league.league_name}: {str(e)}")
@@ -411,4 +418,151 @@ class DbbEventSource(EventSource):
                 continue
 
         raise ValueError(f"Unable to parse datetime: {date_str}")
+
+    def _parse_score_string(self, score_str: str) -> tuple[Optional[int], Optional[int]]:
+        """
+        Parse a score string from SLAPI into home_score and away_score.
+        
+        The score field from SLAPI is a string that may be in formats like:
+        - "85:78" (typically away:home)
+        - "78 - 85" (home - away)
+        - "85-78" (away-home)
+        
+        Args:
+            score_str: The score string from the API
+            
+        Returns:
+            Tuple of (home_score, away_score) or (None, None) if parsing fails
+        """
+        if not score_str:
+            return None, None
+        
+        # Try common separators: colon, dash, hyphen
+        for separator in [':', ' - ', '-', '–', '—']:
+            if separator in score_str:
+                parts = score_str.split(separator, 1)
+                if len(parts) == 2:
+                    try:
+                        # Try both orders - typically format is away:home
+                        away_score = int(parts[0].strip())
+                        home_score = int(parts[1].strip())
+                        return home_score, away_score
+                    except (ValueError, TypeError):
+                        continue
+        
+        # If no separator found or parsing failed, return None
+        logger.warning(f"Could not parse score string: {score_str}")
+        return None, None
+
+    def _create_outcome_for_past_match(
+        self,
+        event: PredictionEvent,
+        match_id: str,
+        match_data: dict,
+        client,
+        home_team: str,
+        away_team: str,
+        result: EventSourceResult,
+    ) -> None:
+        """
+        Create an outcome for a past match if it has results and no outcome exists.
+        
+        According to SLAPI API spec, matches from /leagues/{league_id}/matches include:
+        - score: nullable string (e.g., "85:78")
+        - is_finished: boolean
+        - is_cancelled: boolean
+        
+        Args:
+            event: The prediction event for this match
+            match_id: The match ID from SLAPI
+            match_data: Match data from get_league_matches
+            client: SLAPI client instance (not used, kept for compatibility)
+            home_team: Home team name
+            away_team: Away team name
+            result: EventSourceResult to track outcome creation
+        """
+        # Check if outcome already exists
+        if EventOutcome.objects.filter(prediction_event=event).exists():
+            return
+
+        # Check if match is finished using is_finished flag from API
+        is_finished = match_data.get('is_finished', False)
+        
+        # Also check if match is cancelled (cancelled matches shouldn't have outcomes)
+        if match_data.get('is_cancelled', False):
+            return
+
+        # If not finished, check if match is past deadline (might be finished but flag not set)
+        if not is_finished:
+            if event.deadline < timezone.now() - timedelta(hours=3):
+                # Match is past deadline, consider it finished if we have a score
+                if match_data.get('score'):
+                    is_finished = True
+                else:
+                    return  # No score available, can't create outcome
+            else:
+                return  # Match not finished and not past deadline
+
+        if not is_finished:
+            return
+
+        # Parse score from the score string field
+        score_str = match_data.get('score')
+        if not score_str:
+            return
+
+        home_score, away_score = self._parse_score_string(score_str)
+        
+        if home_score is None or away_score is None:
+            logger.warning(f'Could not parse scores for match {match_id} (score: {score_str})')
+            return
+
+        # Determine winner
+        if home_score > away_score:
+            winning_team_name = home_team
+        elif away_score > home_score:
+            winning_team_name = away_team
+        else:
+            # Tie - skip creating outcome
+            logger.info(f'Match {match_id} ended in a tie, skipping outcome creation')
+            return
+
+        # Find the winning prediction option
+        winning_option = event.options.filter(
+            option__name=winning_team_name,
+            is_active=True
+        ).first()
+
+        if not winning_option:
+            logger.warning(f'Could not find prediction option for {winning_team_name} in event {event.name}')
+            return
+
+        # Create the EventOutcome
+        try:
+            with transaction.atomic():
+                # Store match result data in metadata
+                match_result_metadata = {
+                    'away_score': away_score,
+                    'home_score': home_score,
+                    'away_team': away_team,
+                    'home_team': home_team,
+                    'is_finished': match_data.get('is_finished', True),
+                    'is_cancelled': match_data.get('is_cancelled', False),
+                    'is_confirmed': match_data.get('is_confirmed', False),
+                    'match_id': match_id,
+                    'score_string': score_str,
+                }
+
+                EventOutcome.objects.create(
+                    prediction_event=event,
+                    winning_option=winning_option,
+                    winning_generic_option=winning_option.option,
+                    resolved_at=timezone.now(),
+                    metadata=match_result_metadata,
+                    notes=f'Auto-generated from match result. Final score: {away_team} {away_score}, {home_team} {home_score}'
+                )
+                
+                logger.info(f'Created outcome for past match: {event.name} -> {winning_option.label}')
+        except Exception as e:
+            logger.exception(f'Error creating outcome for match {match_id}: {e}')
 

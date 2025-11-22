@@ -9,9 +9,11 @@ from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from hooptipp.predictions.models import (
+    EventOutcome,
     Option,
     OptionCategory,
     PredictionEvent,
+    PredictionOption,
     TipType,
 )
 from hooptipp.dbb.event_source import DbbEventSource
@@ -117,8 +119,8 @@ class DbbEventSourceTest(TestCase):
         self.assertIn('BG Test Team 2', event.name)
 
     @patch('hooptipp.dbb.event_source.build_slapi_client')
-    def test_sync_events_filters_past_matches(self, mock_build_client):
-        """Test that past matches are not synced."""
+    def test_sync_events_processes_past_matches(self, mock_build_client):
+        """Test that past matches are now synced (to create events and outcomes)."""
         mock_client = MagicMock()
         mock_build_client.return_value = mock_client
         
@@ -139,8 +141,9 @@ class DbbEventSourceTest(TestCase):
 
         result = self.event_source.sync_events()
 
-        # Should not create events for past matches
-        self.assertEqual(result.events_created, 0)
+        # Should create events for past matches now
+        self.assertEqual(result.events_created, 1)
+        self.assertTrue(PredictionEvent.objects.filter(source_id='dbb-slapi', source_event_id='1').exists())
 
     def test_parse_datetime(self):
         """Test datetime parsing."""
@@ -164,6 +167,33 @@ class DbbEventSourceTest(TestCase):
         short_name = self.event_source._extract_short_name('BG Test Team')
         self.assertIsNotNone(short_name)
         self.assertLessEqual(len(short_name), 20)
+
+    def test_parse_score_string(self):
+        """Test parsing score strings in various formats."""
+        # Test colon format (away:home)
+        home, away = self.event_source._parse_score_string('75:90')
+        self.assertEqual(home, 90)
+        self.assertEqual(away, 75)
+        
+        # Test dash format
+        home, away = self.event_source._parse_score_string('85 - 78')
+        self.assertEqual(home, 78)
+        self.assertEqual(away, 85)
+        
+        # Test hyphen format
+        home, away = self.event_source._parse_score_string('80-82')
+        self.assertEqual(home, 82)
+        self.assertEqual(away, 80)
+        
+        # Test empty string
+        home, away = self.event_source._parse_score_string('')
+        self.assertIsNone(home)
+        self.assertIsNone(away)
+        
+        # Test invalid format
+        home, away = self.event_source._parse_score_string('invalid')
+        self.assertIsNone(home)
+        self.assertIsNone(away)
 
     @patch('hooptipp.dbb.event_source.build_slapi_client')
     def test_sync_options_with_logos(self, mock_build_client):
@@ -366,4 +396,190 @@ class DbbEventSourceTest(TestCase):
         # Event should now be deactivated
         event.refresh_from_db()
         self.assertFalse(event.is_active)
+
+    @patch('hooptipp.dbb.event_source.build_slapi_client')
+    def test_sync_events_creates_outcome_for_past_match_with_result(self, mock_build_client):
+        """Test that outcomes are created for past matches with results."""
+        mock_client = MagicMock()
+        mock_build_client.return_value = mock_client
+        
+        # Sync options first
+        self.event_source.sync_options()
+
+        # Mock past match data with score string and is_finished flag
+        past_date = (timezone.now() - timedelta(days=7)).isoformat()
+        mock_client.get_league_matches.return_value = [
+            {
+                'match_id': 1,
+                'home_team': {'id': 't1', 'name': 'BG Test Team 1'},
+                'away_team': {'id': 't2', 'name': 'BG Test Team 2'},
+                'datetime': past_date,
+                'location': 'Test Arena',
+                'score': '78:85',  # away:home format (away 78, home 85)
+                'is_finished': True,
+                'is_cancelled': False
+            }
+        ]
+
+        result = self.event_source.sync_events()
+
+        # Should create event
+        self.assertEqual(result.events_created, 1)
+        event = PredictionEvent.objects.get(source_id='dbb-slapi', source_event_id='1')
+        
+        # Should create outcome
+        self.assertTrue(EventOutcome.objects.filter(prediction_event=event).exists())
+        outcome = EventOutcome.objects.get(prediction_event=event)
+        
+        # Check outcome details
+        self.assertIsNotNone(outcome.winning_option)
+        self.assertEqual(outcome.metadata['home_score'], 85)
+        self.assertEqual(outcome.metadata['away_score'], 78)
+        
+        # Winning team should be home team (85 > 78)
+        winning_option = outcome.winning_option
+        self.assertEqual(winning_option.option.name, 'BG Test Team 1')
+
+    @patch('hooptipp.dbb.event_source.build_slapi_client')
+    def test_sync_events_parses_score_string_from_match_data(self, mock_build_client):
+        """Test that score strings are parsed correctly from match data."""
+        mock_client = MagicMock()
+        mock_build_client.return_value = mock_client
+        
+        # Sync options first
+        self.event_source.sync_options()
+
+        # Mock past match data with score string (format: away:home)
+        past_date = (timezone.now() - timedelta(days=7)).isoformat()
+        mock_client.get_league_matches.return_value = [
+            {
+                'match_id': 1,
+                'home_team': {'id': 't1', 'name': 'BG Test Team 1'},
+                'away_team': {'id': 't2', 'name': 'BG Test Team 2'},
+                'datetime': past_date,
+                'location': 'Test Arena',
+                'score': '75:90',  # away:home format
+                'is_finished': True,
+                'is_cancelled': False
+            }
+        ]
+
+        result = self.event_source.sync_events()
+
+        # Should create event
+        self.assertEqual(result.events_created, 1)
+        event = PredictionEvent.objects.get(source_id='dbb-slapi', source_event_id='1')
+        
+        # Should create outcome with parsed scores
+        self.assertTrue(EventOutcome.objects.filter(prediction_event=event).exists())
+        outcome = EventOutcome.objects.get(prediction_event=event)
+        self.assertEqual(outcome.metadata['home_score'], 90)  # Home team score
+        self.assertEqual(outcome.metadata['away_score'], 75)  # Away team score
+        self.assertEqual(outcome.metadata['score_string'], '75:90')
+
+    @patch('hooptipp.dbb.event_source.build_slapi_client')
+    def test_sync_events_skips_outcome_for_past_match_without_result(self, mock_build_client):
+        """Test that outcomes are not created for past matches without final results."""
+        mock_client = MagicMock()
+        mock_build_client.return_value = mock_client
+        
+        # Sync options first
+        self.event_source.sync_options()
+
+        # Mock past match data without score or is_finished flag
+        past_date = (timezone.now() - timedelta(days=7)).isoformat()
+        mock_client.get_league_matches.return_value = [
+            {
+                'match_id': 1,
+                'home_team': {'id': 't1', 'name': 'BG Test Team 1'},
+                'away_team': {'id': 't2', 'name': 'BG Test Team 2'},
+                'datetime': past_date,
+                'location': 'Test Arena',
+                'is_finished': False,
+                'is_cancelled': False
+            }
+        ]
+
+        result = self.event_source.sync_events()
+
+        # Should create event
+        self.assertEqual(result.events_created, 1)
+        event = PredictionEvent.objects.get(source_id='dbb-slapi', source_event_id='1')
+        
+        # Should NOT create outcome (match not finished and no score)
+        self.assertFalse(EventOutcome.objects.filter(prediction_event=event).exists())
+
+    @patch('hooptipp.dbb.event_source.build_slapi_client')
+    def test_sync_events_skips_outcome_for_tie(self, mock_build_client):
+        """Test that outcomes are not created for matches that end in a tie."""
+        mock_client = MagicMock()
+        mock_build_client.return_value = mock_client
+        
+        # Sync options first
+        self.event_source.sync_options()
+
+        # Mock past match data with tie score
+        past_date = (timezone.now() - timedelta(days=7)).isoformat()
+        mock_client.get_league_matches.return_value = [
+            {
+                'match_id': 1,
+                'home_team': {'id': 't1', 'name': 'BG Test Team 1'},
+                'away_team': {'id': 't2', 'name': 'BG Test Team 2'},
+                'datetime': past_date,
+                'location': 'Test Arena',
+                'score': '80:80',  # tie
+                'is_finished': True,
+                'is_cancelled': False
+            }
+        ]
+
+        result = self.event_source.sync_events()
+
+        # Should create event
+        self.assertEqual(result.events_created, 1)
+        event = PredictionEvent.objects.get(source_id='dbb-slapi', source_event_id='1')
+        
+        # Should NOT create outcome (tie)
+        self.assertFalse(EventOutcome.objects.filter(prediction_event=event).exists())
+
+    @patch('hooptipp.dbb.event_source.build_slapi_client')
+    def test_sync_events_does_not_duplicate_outcome(self, mock_build_client):
+        """Test that outcomes are not created if one already exists."""
+        mock_client = MagicMock()
+        mock_build_client.return_value = mock_client
+        
+        # Sync options first
+        self.event_source.sync_options()
+
+        # Mock past match data with score string
+        past_date = (timezone.now() - timedelta(days=7)).isoformat()
+        mock_client.get_league_matches.return_value = [
+            {
+                'match_id': 1,
+                'home_team': {'id': 't1', 'name': 'BG Test Team 1'},
+                'away_team': {'id': 't2', 'name': 'BG Test Team 2'},
+                'datetime': past_date,
+                'location': 'Test Arena',
+                'score': '78:85',  # away:home
+                'is_finished': True,
+                'is_cancelled': False
+            }
+        ]
+
+        # First sync - creates event and outcome
+        result1 = self.event_source.sync_events()
+        self.assertEqual(result1.events_created, 1)
+        event = PredictionEvent.objects.get(source_id='dbb-slapi', source_event_id='1')
+        self.assertTrue(EventOutcome.objects.filter(prediction_event=event).exists())
+        
+        # Count outcomes before second sync
+        outcome_count_before = EventOutcome.objects.filter(prediction_event=event).count()
+        
+        # Second sync - should not create duplicate outcome
+        result2 = self.event_source.sync_events()
+        self.assertEqual(result2.events_updated, 1)  # Event updated, not created
+        
+        # Should still have only one outcome
+        outcome_count_after = EventOutcome.objects.filter(prediction_event=event).count()
+        self.assertEqual(outcome_count_before, outcome_count_after)
 

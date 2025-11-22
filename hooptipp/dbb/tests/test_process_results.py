@@ -62,7 +62,8 @@ class ProcessDbbResultsCommandTest(TestCase):
             tip_type=self.tip_type,
             name='Team 1 @ Team 2',
             source_id='dbb-slapi',
-            source_event_id='match_123',
+            source_event_id='123',  # match_id as string
+            metadata={'league_id': 'test_league_123'},  # Add league_id for fetching matches
             opens_at=past_time - timedelta(days=7),
             deadline=past_time,
             reveal_at=past_time - timedelta(days=7),
@@ -111,14 +112,17 @@ class ProcessDbbResultsCommandTest(TestCase):
     def test_command_with_dry_run(self, mock_build_client):
         """Test command with dry-run flag."""
         mock_client = MagicMock()
-        mock_client.get_match_details.return_value = {
-            'id': 'match_123',
-            'home_team': 'Team 2',
-            'away_team': 'Team 1',
-            'home_score': 85,
-            'away_score': 78,
-            'status': 'Final'
-        }
+        # Mock get_league_matches to return match with score string
+        mock_client.get_league_matches.return_value = [
+            {
+                'match_id': 123,
+                'home_team': {'name': 'Team 2'},
+                'away_team': {'name': 'Team 1'},
+                'score': '78:85',  # away:home format
+                'is_finished': True,
+                'is_cancelled': False
+            }
+        ]
         mock_build_client.return_value = mock_client
         
         out = StringIO()
@@ -131,14 +135,17 @@ class ProcessDbbResultsCommandTest(TestCase):
     def test_command_processes_finished_match(self, mock_build_client):
         """Test command processes finished match."""
         mock_client = MagicMock()
-        mock_client.get_match_details.return_value = {
-            'id': 'match_123',
-            'home_team': 'Team 2',
-            'away_team': 'Team 1',
-            'home_score': 85,
-            'away_score': 78,
-            'status': 'Final'
-        }
+        # Mock get_league_matches to return match with score string
+        mock_client.get_league_matches.return_value = [
+            {
+                'match_id': 123,
+                'home_team': {'name': 'Team 2'},
+                'away_team': {'name': 'Team 1'},
+                'score': '78:85',  # away:home format (Team 2 wins 85-78)
+                'is_finished': True,
+                'is_cancelled': False
+            }
+        ]
         mock_build_client.return_value = mock_client
         
         out = StringIO()
@@ -150,18 +157,22 @@ class ProcessDbbResultsCommandTest(TestCase):
         # Verify outcome was created
         self.event.refresh_from_db()
         self.assertIsNotNone(self.event.outcome)
-        self.assertEqual(self.event.outcome.winning_option, self.option2)
+        self.assertEqual(self.event.outcome.winning_option, self.option2)  # Team 2 wins
 
     @patch('hooptipp.dbb.management.commands.process_dbb_results.build_slapi_client')
     def test_command_skips_unfinished_match(self, mock_build_client):
         """Test command skips unfinished matches."""
         mock_client = MagicMock()
-        mock_client.get_match_details.return_value = {
-            'id': 'match_123',
-            'home_team': 'Team 2',
-            'away_team': 'Team 1',
-            'status': 'In Progress'
-        }
+        # Mock get_league_matches to return unfinished match
+        mock_client.get_league_matches.return_value = [
+            {
+                'match_id': 123,
+                'home_team': {'name': 'Team 2'},
+                'away_team': {'name': 'Team 1'},
+                'is_finished': False,
+                'is_cancelled': False
+            }
+        ]
         mock_build_client.return_value = mock_client
         
         out = StringIO()
@@ -205,7 +216,7 @@ class ProcessDbbResultsCommandTest(TestCase):
     def test_command_handles_api_errors(self, mock_build_client):
         """Test command handles API errors gracefully."""
         mock_client = MagicMock()
-        mock_client.get_match_details.side_effect = Exception('API Error')
+        mock_client.get_league_matches.side_effect = Exception('API Error')
         mock_build_client.return_value = mock_client
         
         out = StringIO()
