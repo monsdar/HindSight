@@ -22,6 +22,45 @@
       .theme-accent-radio input[type="radio"] { accent-color: var(--accent-color); }
       .theme-accent-muted { color: color-mix(in srgb, var(--accent-color) 45%, white); }
       .text-theme-accent-contrast { color: var(--accent-contrast); }
+      
+      /* Ensure lists in impressum modal have proper styling - Tailwind's reset removes list styles */
+      #impressum-content ul {
+        list-style-type: disc;
+        margin-left: 1.5rem;
+        margin-top: 0.5rem;
+        margin-bottom: 0.5rem;
+        padding-left: 0;
+      }
+      #impressum-content ol {
+        list-style-type: decimal;
+        margin-left: 1.5rem;
+        margin-top: 0.5rem;
+        margin-bottom: 0.5rem;
+        padding-left: 0;
+      }
+      #impressum-content ul ul {
+        list-style-type: circle;
+        margin-top: 0.25rem;
+        margin-bottom: 0.25rem;
+      }
+      #impressum-content ul ul ul {
+        list-style-type: square;
+      }
+      #impressum-content ol ol {
+        list-style-type: lower-alpha;
+        margin-top: 0.25rem;
+        margin-bottom: 0.25rem;
+      }
+      #impressum-content li {
+        margin-top: 0.25rem;
+        margin-bottom: 0.25rem;
+        padding-left: 0.25rem;
+        display: list-item;
+      }
+      #impressum-content ul li::marker,
+      #impressum-content ol li::marker {
+        color: rgb(203 213 225); /* slate-300 to match text color */
+      }
     </style>
     {% block head %}{% endblock %}
   </head>
@@ -71,6 +110,136 @@
       {% endif %}
       {% block content %}{% endblock %}
     </main>
+
+    {# Impressum Modal #}
+    <div id="impressum-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center">
+      <div class="bg-slate-900 rounded-2xl border border-slate-800 p-6 max-w-3xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+        <div class="flex justify-between items-center mb-4">
+          <h3 class="text-xl font-semibold theme-accent-text">Impressum</h3>
+          <button type="button" id="close-impressum-modal" class="text-slate-400 hover:text-slate-200">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+            </svg>
+          </button>
+        </div>
+        
+        <div id="impressum-content">
+          <div class="flex items-center justify-center py-8">
+            <div class="text-slate-400">Loading...</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      document.addEventListener('DOMContentLoaded', function() {
+        const impressumLink = document.getElementById('impressum-link');
+        const impressumModal = document.getElementById('impressum-modal');
+        const closeImpressumModal = document.getElementById('close-impressum-modal');
+        const impressumContent = document.getElementById('impressum-content');
+        let impressumDataLoaded = false;
+
+        function openImpressumModal() {
+          if (impressumModal) {
+            impressumModal.classList.remove('hidden');
+            
+            // Lazy load content only when modal is opened for the first time
+            if (!impressumDataLoaded) {
+              loadImpressumContent();
+            }
+          }
+        }
+
+        function closeImpressumModalFunc() {
+          if (impressumModal) {
+            impressumModal.classList.add('hidden');
+          }
+        }
+
+        function loadImpressumContent() {
+          if (impressumDataLoaded) {
+            return;
+          }
+
+          impressumContent.innerHTML = '<div class="flex items-center justify-center py-8"><div class="text-slate-400">Loading...</div></div>';
+
+          fetch('{% url "predictions:impressum_api" %}')
+            .then(response => {
+              if (!response.ok) {
+                throw new Error('Failed to load Impressum');
+              }
+              return response.json();
+            })
+            .then(data => {
+              impressumDataLoaded = true;
+              
+              if (!data.sections || data.sections.length === 0) {
+                impressumContent.innerHTML = '<div class="text-slate-400 text-center py-8">No Impressum content available.</div>';
+                return;
+              }
+
+              // Clear and build content using DOM manipulation to ensure HTML is properly inserted
+              impressumContent.innerHTML = '';
+              const container = document.createElement('div');
+              container.className = 'space-y-6';
+              
+              data.sections.forEach(section => {
+                const sectionDiv = document.createElement('div');
+                sectionDiv.className = 'space-y-2';
+                
+                const heading = document.createElement('h4');
+                heading.className = 'text-lg font-semibold text-slate-200';
+                heading.textContent = section.caption;
+                sectionDiv.appendChild(heading);
+                
+                const contentDiv = document.createElement('div');
+                contentDiv.className = 'text-slate-300 prose prose-invert max-w-none';
+                contentDiv.innerHTML = section.text_html;
+                sectionDiv.appendChild(contentDiv);
+                
+                container.appendChild(sectionDiv);
+              });
+              
+              impressumContent.appendChild(container);
+            })
+            .catch(error => {
+              console.error('Error loading Impressum:', error);
+              impressumContent.innerHTML = '<div class="text-red-400 text-center py-8">Error loading Impressum content. Please try again later.</div>';
+            });
+        }
+
+        function escapeHtml(text) {
+          const div = document.createElement('div');
+          div.textContent = text;
+          return div.innerHTML;
+        }
+
+        if (impressumLink) {
+          impressumLink.addEventListener('click', openImpressumModal);
+        }
+
+        if (closeImpressumModal) {
+          closeImpressumModal.addEventListener('click', closeImpressumModalFunc);
+        }
+
+        // Close modal when clicking outside
+        if (impressumModal) {
+          impressumModal.addEventListener('click', function(e) {
+            if (e.target === impressumModal) {
+              closeImpressumModalFunc();
+            }
+          });
+        }
+
+        // Close modal on Escape key
+        document.addEventListener('keydown', function(e) {
+          if (e.key === 'Escape' && impressumModal && !impressumModal.classList.contains('hidden')) {
+            closeImpressumModalFunc();
+          }
+        });
+      });
+    </script>
+
     <footer class="max-w-5xl mx-auto px-4 pb-10 text-sm text-slate-500">
       <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
         <a
@@ -81,6 +250,14 @@
         >
           GitHub
         </a>
+        <button
+          type="button"
+          id="impressum-link"
+          class="transition text-slate-500 hover:text-slate-300 cursor-pointer bg-transparent border-none p-0 text-sm"
+          style="font-family: inherit;"
+        >
+          Impressum
+        </button>
         <a href="/admin" class="transition text-slate-500 hover:text-slate-300">
           Admin
         </a>

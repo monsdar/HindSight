@@ -2,6 +2,8 @@ from collections import defaultdict
 from datetime import timedelta
 from typing import Iterable
 
+import markdown2
+
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import get_user_model
@@ -21,6 +23,7 @@ from .forms import UserPreferencesForm
 from .lock_service import LockLimitError, LockService
 from .models import (
     EventOutcome,
+    ImpressumSection,
     Option,
     OptionCategory,
     PredictionEvent,
@@ -895,6 +898,29 @@ def get_lock_summary(request):
         'total': summary.total,
         'pending': summary.pending,
         'next_return_at': summary.next_return_at.isoformat() if summary.next_return_at else None
+    })
+
+
+@require_http_methods(["GET"])
+def get_impressum(request):
+    """Get Impressum sections with markdown-rendered content. Public access."""
+    sections = ImpressumSection.objects.all().order_by('order_number', 'caption')
+    
+    sections_data = []
+    for section in sections:
+        # Use markdown2 with extras for better list support
+        html = markdown2.markdown(
+            section.text,
+            extras=['fenced-code-blocks', 'tables', 'break-on-newline', 'cuddled-lists']
+        )
+        sections_data.append({
+            'caption': section.caption,
+            'text_html': html,
+            'order_number': section.order_number,
+        })
+    
+    return JsonResponse({
+        'sections': sections_data
     })
 
 

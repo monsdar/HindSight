@@ -607,6 +607,31 @@ class Season(models.Model):
             ).first()
 
 
+class ImpressumSection(models.Model):
+    """
+    Represents a section of the Impressum (legal notice).
+    
+    Admins can create multiple sections with captions and markdown text.
+    Sections are ordered by order_number (lower numbers appear first).
+    """
+    caption = models.CharField(max_length=200)
+    text = models.TextField(help_text="Markdown content for this section")
+    order_number = models.PositiveIntegerField(
+        default=0,
+        help_text="Lower numbers appear first. Sections with the same order_number are ordered by caption."
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['order_number', 'caption']
+        verbose_name = 'Impressum section'
+        verbose_name_plural = 'Impressum sections'
+
+    def __str__(self) -> str:
+        return self.caption
+
+
 @receiver(post_save, sender=UserPreferences)
 def process_profile_picture_signal(sender, instance, created, **kwargs):
     """Automatically process and resize profile pictures when saved."""
