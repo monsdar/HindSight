@@ -1,8 +1,8 @@
-"""Tests for Impressum feature."""
+"""Tests for Impressum and Datenschutz features."""
 from django.test import TestCase, Client
 from django.contrib.auth import get_user_model
 
-from hooptipp.predictions.models import ImpressumSection
+from hooptipp.predictions.models import DatenschutzSection, ImpressumSection
 
 
 class ImpressumSectionModelTests(TestCase):
@@ -195,4 +195,134 @@ This is a paragraph with **bold** and *italic* text.
         self.assertIn('<em>italic</em>', html)
         self.assertIn('<li>', html)  # List items
         self.assertIn('<a href="https://example.com">', html)  # Link
+
+
+class DatenschutzSectionModelTests(TestCase):
+    """Tests for DatenschutzSection model."""
+
+    def test_create_datenschutz_section(self):
+        """Test creating a DatenschutzSection."""
+        section = DatenschutzSection.objects.create(
+            caption='Data Collection',
+            text='**We collect:** Personal information',
+            order_number=1
+        )
+        
+        self.assertEqual(section.caption, 'Data Collection')
+        self.assertEqual(section.text, '**We collect:** Personal information')
+        self.assertEqual(section.order_number, 1)
+        self.assertIsNotNone(section.created_at)
+        self.assertIsNotNone(section.updated_at)
+
+    def test_datenschutz_section_str(self):
+        """Test DatenschutzSection string representation."""
+        section = DatenschutzSection.objects.create(
+            caption='Privacy Policy',
+            text='Some privacy text',
+            order_number=0
+        )
+        
+        self.assertEqual(str(section), 'Privacy Policy')
+
+    def test_datenschutz_section_ordering(self):
+        """Test that sections are ordered by order_number then caption."""
+        section1 = DatenschutzSection.objects.create(
+            caption='Section B',
+            text='Text B',
+            order_number=2
+        )
+        section2 = DatenschutzSection.objects.create(
+            caption='Section A',
+            text='Text A',
+            order_number=1
+        )
+        section3 = DatenschutzSection.objects.create(
+            caption='Section C',
+            text='Text C',
+            order_number=1
+        )
+        
+        sections = list(DatenschutzSection.objects.all())
+        
+        # Should be ordered by order_number first, then caption
+        self.assertEqual(sections[0], section2)  # order_number=1, caption='Section A'
+        self.assertEqual(sections[1], section3)  # order_number=1, caption='Section C'
+        self.assertEqual(sections[2], section1)  # order_number=2, caption='Section B'
+
+
+class DatenschutzAPITests(TestCase):
+    """Tests for Datenschutz API endpoint."""
+
+    def setUp(self):
+        self.client = Client()
+
+    def test_get_datenschutz_empty(self):
+        """Test getting Datenschutz when no sections exist."""
+        response = self.client.get('/api/datenschutz/')
+        
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertIn('sections', data)
+        self.assertEqual(len(data['sections']), 0)
+
+    def test_get_datenschutz_with_sections(self):
+        """Test getting Datenschutz with multiple sections."""
+        section1 = DatenschutzSection.objects.create(
+            caption='Data Collection',
+            text='**We collect:** Personal information',
+            order_number=1
+        )
+        section2 = DatenschutzSection.objects.create(
+            caption='Introduction',
+            text='This is our privacy policy.',
+            order_number=0
+        )
+        
+        response = self.client.get('/api/datenschutz/')
+        
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertIn('sections', data)
+        self.assertEqual(len(data['sections']), 2)
+        
+        # Should be ordered by order_number
+        self.assertEqual(data['sections'][0]['caption'], 'Introduction')
+        self.assertEqual(data['sections'][0]['order_number'], 0)
+        self.assertEqual(data['sections'][1]['caption'], 'Data Collection')
+        self.assertEqual(data['sections'][1]['order_number'], 1)
+
+    def test_get_datenschutz_markdown_rendering(self):
+        """Test that markdown text is rendered to HTML."""
+        section = DatenschutzSection.objects.create(
+            caption='Test',
+            text='**Bold text** and *italic text*',
+            order_number=0
+        )
+        
+        response = self.client.get('/api/datenschutz/')
+        
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(len(data['sections']), 1)
+        
+        html = data['sections'][0]['text_html']
+        # Markdown2 should convert **Bold text** to <strong>Bold text</strong>
+        self.assertIn('<strong>Bold text</strong>', html)
+        self.assertIn('<em>italic text</em>', html)
+
+    def test_get_datenschutz_public_access(self):
+        """Test that Datenschutz API is publicly accessible (no authentication required)."""
+        section = DatenschutzSection.objects.create(
+            caption='Public Section',
+            text='This is public',
+            order_number=0
+        )
+        
+        # Make request without authentication
+        response = self.client.get('/api/datenschutz/')
+        
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(len(data['sections']), 1)
+        self.assertEqual(data['sections'][0]['caption'], 'Public Section')
 

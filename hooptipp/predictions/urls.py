@@ -10,4 +10,5 @@ urlpatterns = [
     path('api/toggle-lock/', views.toggle_lock, name='toggle_lock'),
     path('api/lock-summary/', views.get_lock_summary, name='lock_summary'),
     path('api/impressum/', views.get_impressum, name='impressum_api'),
+    path('api/datenschutz/', views.get_datenschutz, name='datenschutz_api'),
 ]

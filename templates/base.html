@@ -23,42 +23,50 @@
       .theme-accent-muted { color: color-mix(in srgb, var(--accent-color) 45%, white); }
       .text-theme-accent-contrast { color: var(--accent-contrast); }
       
-      /* Ensure lists in impressum modal have proper styling - Tailwind's reset removes list styles */
-      #impressum-content ul {
+      /* Ensure lists in impressum and datenschutz modals have proper styling - Tailwind's reset removes list styles */
+      #impressum-content ul,
+      #datenschutz-content ul {
         list-style-type: disc;
         margin-left: 1.5rem;
         margin-top: 0.5rem;
         margin-bottom: 0.5rem;
         padding-left: 0;
       }
-      #impressum-content ol {
+      #impressum-content ol,
+      #datenschutz-content ol {
         list-style-type: decimal;
         margin-left: 1.5rem;
         margin-top: 0.5rem;
         margin-bottom: 0.5rem;
         padding-left: 0;
       }
-      #impressum-content ul ul {
+      #impressum-content ul ul,
+      #datenschutz-content ul ul {
         list-style-type: circle;
         margin-top: 0.25rem;
         margin-bottom: 0.25rem;
       }
-      #impressum-content ul ul ul {
+      #impressum-content ul ul ul,
+      #datenschutz-content ul ul ul {
         list-style-type: square;
       }
-      #impressum-content ol ol {
+      #impressum-content ol ol,
+      #datenschutz-content ol ol {
         list-style-type: lower-alpha;
         margin-top: 0.25rem;
         margin-bottom: 0.25rem;
       }
-      #impressum-content li {
+      #impressum-content li,
+      #datenschutz-content li {
         margin-top: 0.25rem;
         margin-bottom: 0.25rem;
         padding-left: 0.25rem;
         display: list-item;
       }
       #impressum-content ul li::marker,
-      #impressum-content ol li::marker {
+      #impressum-content ol li::marker,
+      #datenschutz-content ul li::marker,
+      #datenschutz-content ol li::marker {
         color: rgb(203 213 225); /* slate-300 to match text color */
       }
     </style>
@@ -124,6 +132,26 @@
         </div>
         
         <div id="impressum-content">
+          <div class="flex items-center justify-center py-8">
+            <div class="text-slate-400">Loading...</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {# Datenschutz Modal #}
+    <div id="datenschutz-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center">
+      <div class="bg-slate-900 rounded-2xl border border-slate-800 p-6 max-w-3xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+        <div class="flex justify-between items-center mb-4">
+          <h3 class="text-xl font-semibold theme-accent-text">Datenschutzerklärung</h3>
+          <button type="button" id="close-datenschutz-modal" class="text-slate-400 hover:text-slate-200">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+            </svg>
+          </button>
+        </div>
+        
+        <div id="datenschutz-content">
           <div class="flex items-center justify-center py-8">
             <div class="text-slate-400">Loading...</div>
           </div>
@@ -238,6 +266,108 @@
           }
         });
       });
+
+      // Datenschutz Modal functionality
+      document.addEventListener('DOMContentLoaded', function() {
+        const datenschutzLink = document.getElementById('datenschutz-link');
+        const datenschutzModal = document.getElementById('datenschutz-modal');
+        const closeDatenschutzModal = document.getElementById('close-datenschutz-modal');
+        const datenschutzContent = document.getElementById('datenschutz-content');
+        let datenschutzDataLoaded = false;
+
+        function openDatenschutzModal() {
+          if (datenschutzModal) {
+            datenschutzModal.classList.remove('hidden');
+            
+            // Lazy load content only when modal is opened for the first time
+            if (!datenschutzDataLoaded) {
+              loadDatenschutzContent();
+            }
+          }
+        }
+
+        function closeDatenschutzModalFunc() {
+          if (datenschutzModal) {
+            datenschutzModal.classList.add('hidden');
+          }
+        }
+
+        function loadDatenschutzContent() {
+          if (datenschutzDataLoaded) {
+            return;
+          }
+
+          datenschutzContent.innerHTML = '<div class="flex items-center justify-center py-8"><div class="text-slate-400">Loading...</div></div>';
+
+          fetch('{% url "predictions:datenschutz_api" %}')
+            .then(response => {
+              if (!response.ok) {
+                throw new Error('Failed to load Datenschutzerklärung');
+              }
+              return response.json();
+            })
+            .then(data => {
+              datenschutzDataLoaded = true;
+              
+              if (!data.sections || data.sections.length === 0) {
+                datenschutzContent.innerHTML = '<div class="text-slate-400 text-center py-8">No Datenschutzerklärung content available.</div>';
+                return;
+              }
+
+              // Clear and build content using DOM manipulation to ensure HTML is properly inserted
+              datenschutzContent.innerHTML = '';
+              const container = document.createElement('div');
+              container.className = 'space-y-6';
+              
+              data.sections.forEach(section => {
+                const sectionDiv = document.createElement('div');
+                sectionDiv.className = 'space-y-2';
+                
+                const heading = document.createElement('h4');
+                heading.className = 'text-lg font-semibold text-slate-200';
+                heading.textContent = section.caption;
+                sectionDiv.appendChild(heading);
+                
+                const contentDiv = document.createElement('div');
+                contentDiv.className = 'text-slate-300 prose prose-invert max-w-none';
+                contentDiv.innerHTML = section.text_html;
+                sectionDiv.appendChild(contentDiv);
+                
+                container.appendChild(sectionDiv);
+              });
+              
+              datenschutzContent.appendChild(container);
+            })
+            .catch(error => {
+              console.error('Error loading Datenschutzerklärung:', error);
+              datenschutzContent.innerHTML = '<div class="text-red-400 text-center py-8">Error loading Datenschutzerklärung content. Please try again later.</div>';
+            });
+        }
+
+        if (datenschutzLink) {
+          datenschutzLink.addEventListener('click', openDatenschutzModal);
+        }
+
+        if (closeDatenschutzModal) {
+          closeDatenschutzModal.addEventListener('click', closeDatenschutzModalFunc);
+        }
+
+        // Close modal when clicking outside
+        if (datenschutzModal) {
+          datenschutzModal.addEventListener('click', function(e) {
+            if (e.target === datenschutzModal) {
+              closeDatenschutzModalFunc();
+            }
+          });
+        }
+
+        // Close modal on Escape key
+        document.addEventListener('keydown', function(e) {
+          if (e.key === 'Escape' && datenschutzModal && !datenschutzModal.classList.contains('hidden')) {
+            closeDatenschutzModalFunc();
+          }
+        });
+      });
     </script>
 
     <footer class="max-w-5xl mx-auto px-4 pb-10 text-sm text-slate-500">
@@ -257,6 +387,14 @@
           style="font-family: inherit;"
         >
           Impressum
+        </button>
+        <button
+          type="button"
+          id="datenschutz-link"
+          class="transition text-slate-500 hover:text-slate-300 cursor-pointer bg-transparent border-none p-0 text-sm"
+          style="font-family: inherit;"
+        >
+          Datenschutzerklärung
         </button>
         <a href="/admin" class="transition text-slate-500 hover:text-slate-300">
           Admin

@@ -22,6 +22,7 @@ from hooptipp.user_context import get_active_user, set_active_user, clear_active
 from .forms import UserPreferencesForm
 from .lock_service import LockLimitError, LockService
 from .models import (
+    DatenschutzSection,
     EventOutcome,
     ImpressumSection,
     Option,
@@ -905,6 +906,29 @@ def get_lock_summary(request):
 def get_impressum(request):
     """Get Impressum sections with markdown-rendered content. Public access."""
     sections = ImpressumSection.objects.all().order_by('order_number', 'caption')
+    
+    sections_data = []
+    for section in sections:
+        # Use markdown2 with extras for better list support
+        html = markdown2.markdown(
+            section.text,
+            extras=['fenced-code-blocks', 'tables', 'break-on-newline', 'cuddled-lists']
+        )
+        sections_data.append({
+            'caption': section.caption,
+            'text_html': html,
+            'order_number': section.order_number,
+        })
+    
+    return JsonResponse({
+        'sections': sections_data
+    })
+
+
+@require_http_methods(["GET"])
+def get_datenschutz(request):
+    """Get Datenschutz sections with markdown-rendered content. Public access."""
+    sections = DatenschutzSection.objects.all().order_by('order_number', 'caption')
     
     sections_data = []
     for section in sections:
