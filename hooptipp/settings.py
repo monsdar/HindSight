@@ -81,6 +81,11 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'django.contrib.sites',  # Required by allauth
+    'allauth',
+    'allauth.account',
+    'allauth.socialaccount',
+    'allauth.socialaccount.providers.google',
     'hooptipp.predictions',
     'hooptipp.nba',
     'hooptipp.dbb',
@@ -95,6 +100,7 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'allauth.account.middleware.AccountMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
@@ -273,6 +279,53 @@ TESTING = 'test' in sys.argv or 'pytest' in sys.argv[0] if sys.argv else False
 LOGIN_URL = '/login/'
 LOGIN_REDIRECT_URL = '/'
 LOGOUT_REDIRECT_URL = '/'
+
+# Authentication Backends
+# Keep ModelBackend for password authentication (existing users) and add allauth for OAuth
+AUTHENTICATION_BACKENDS = [
+    'django.contrib.auth.backends.ModelBackend',  # For password authentication
+    'allauth.account.auth_backends.AuthenticationBackend',  # For OAuth
+]
+
+# Site ID (required by allauth)
+SITE_ID = int(os.environ.get('SITE_ID', '1'))
+
+# django-allauth Configuration
+# Only active when ENABLE_USER_SELECTION=False (authentication mode)
+if not ENABLE_USER_SELECTION:
+    # Account settings
+    ACCOUNT_EMAIL_REQUIRED = True
+    ACCOUNT_USERNAME_REQUIRED = False  # Use email as username for OAuth users
+    ACCOUNT_LOGIN_METHODS = {'email'}  # Allow email-based login
+    ACCOUNT_EMAIL_VERIFICATION = 'none'  # Google verifies emails, no need for our verification
+    
+    # Social account settings
+    SOCIALACCOUNT_AUTO_SIGNUP = True  # Automatically create accounts on first OAuth login
+    SOCIALACCOUNT_EMAIL_VERIFICATION = 'none'  # Google verifies emails
+    SOCIALACCOUNT_EMAIL_REQUIRED = True
+    SOCIALACCOUNT_QUERY_EMAIL = True  # Request email from Google
+    SOCIALACCOUNT_LOGIN_ON_GET = True  # Skip intermediate page, go straight to OAuth
+    
+    # Google OAuth Provider Configuration
+    SOCIALACCOUNT_PROVIDERS = {
+        'google': {
+            'SCOPE': [
+                'profile',
+                'email',
+            ],
+            'AUTH_PARAMS': {
+                'access_type': 'online',
+            },
+            'APP': {
+                'client_id': os.environ.get('GOOGLE_OAUTH2_CLIENT_ID', ''),
+                'secret': os.environ.get('GOOGLE_OAUTH2_CLIENT_SECRET', ''),
+                'key': '',
+            }
+        }
+    }
+    
+    # Custom adapters
+    SOCIALACCOUNT_ADAPTER = 'hooptipp.adapters.CustomSocialAccountAdapter'
 
 # Email Configuration (for password reset)
 # In development, emails are printed to console

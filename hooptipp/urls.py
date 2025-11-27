@@ -25,10 +25,13 @@ urlpatterns = [
     path('robots.txt', robots_txt, name='robots_txt'),
     
     # Authentication URLs (available in both modes, but functional only when ENABLE_USER_SELECTION=False)
-    path('signup/', signup, name='signup'),
+    path('signup/', signup, name='signup'),  # Redirects to login (OAuth-only signup)
     path('login/', auth_views.LoginView.as_view(template_name='auth/login.html'), name='login'),
     path('logout/', auth_views.LogoutView.as_view(next_page='/'), name='logout'),
     path('profile/', profile, name='profile'),
+    
+    # django-allauth URLs (for OAuth authentication)
+    path('accounts/', include('allauth.urls')),
     
     # Password reset flow
     path('password-reset/', 

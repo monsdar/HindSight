@@ -189,16 +189,16 @@ Set `ENABLE_USER_SELECTION=True` (default)
 Set `ENABLE_USER_SELECTION=False`
 
 **Features:**
-- Standard signup/login system
-- Users create their own accounts
-- Email-based password reset
+- Google OAuth authentication for new users
+- Password login for existing users and service accounts
+- No SMTP setup required for new signups (Google handles email verification)
 - Each user has private, secure access
-- Traditional web app authentication
+- Automatic account creation on first Google sign-in
 - Suitable for public internet deployment
 
 **Workflow:**
-1. Users sign up with username, email, and password
-2. Users log in with credentials
+1. New users: Sign in with Google (account created automatically)
+2. Existing users: Log in with username and password
 3. Make predictions (automatically tied to logged-in user)
 4. Log out when done
 
@@ -278,7 +278,17 @@ ENABLE_USER_SELECTION=False
 # Privacy Gate (disable for public sites)
 PRIVACY_GATE_ENABLED=False
 
-# Email Configuration (for password reset)
+# Google OAuth Configuration (for new user signups)
+# Get credentials from: https://console.cloud.google.com/apis/credentials
+GOOGLE_OAUTH2_CLIENT_ID=your_google_client_id
+GOOGLE_OAUTH2_CLIENT_SECRET=your_google_client_secret
+# Register callback URL: https://yourdomain.com/accounts/google/login/callback/
+
+# Site ID (required by allauth, default is 1)
+SITE_ID=1
+
+# Email Configuration (for password reset - existing users only)
+# Note: New users sign up via Google OAuth, no SMTP needed for signups
 EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
 EMAIL_HOST=smtp.gmail.com
 EMAIL_PORT=587

@@ -18,123 +18,30 @@ class SignupViewTests(TestCase):
         self.client = Client()
         self.signup_url = reverse('signup')
     
-    def test_signup_page_loads(self):
-        """Test that the signup page loads correctly."""
+    def test_signup_redirects_to_login(self):
+        """Test that signup view redirects to login (OAuth-only signup)."""
         response = self.client.get(self.signup_url)
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'Create Account')
+        
+        # Should redirect to login
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse('login'))
     
-    def test_successful_signup(self):
-        """Test successful user registration."""
+    def test_signup_post_redirects_to_login(self):
+        """Test that POST to signup also redirects to login."""
         data = {
             'username': 'newuser',
             'email': 'newuser@example.com',
             'password1': 'securepassword123',
             'password2': 'securepassword123',
-            'nickname': 'New User',
         }
         response = self.client.post(self.signup_url, data)
         
-        # Should redirect to home after successful signup
+        # Should redirect to login (no new email/password signups)
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, reverse('predictions:home'))
+        self.assertEqual(response.url, reverse('login'))
         
-        # User should be created
-        self.assertTrue(User.objects.filter(username='newuser').exists())
-        
-        # User preferences should be created
-        user = User.objects.get(username='newuser')
-        self.assertTrue(UserPreferences.objects.filter(user=user).exists())
-        prefs = UserPreferences.objects.get(user=user)
-        self.assertEqual(prefs.nickname, 'New User')
-        
-        # User should be logged in
-        user = User.objects.get(username='newuser')
-        self.assertTrue(user.is_authenticated)
-    
-    def test_signup_with_missing_fields(self):
-        """Test signup with missing required fields."""
-        data = {
-            'username': 'testuser',
-            # Missing email, passwords
-        }
-        response = self.client.post(self.signup_url, data)
-        
-        # Should show errors
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'Email is required')
-        self.assertContains(response, 'Password is required')
-        
-        # User should not be created
-        self.assertFalse(User.objects.filter(username='testuser').exists())
-    
-    def test_signup_with_mismatched_passwords(self):
-        """Test signup with mismatched passwords."""
-        data = {
-            'username': 'testuser',
-            'email': 'test@example.com',
-            'password1': 'password123',
-            'password2': 'different456',
-        }
-        response = self.client.post(self.signup_url, data)
-        
-        # Should show error
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'Passwords do not match')
-        
-        # User should not be created
-        self.assertFalse(User.objects.filter(username='testuser').exists())
-    
-    def test_signup_with_short_password(self):
-        """Test signup with password that's too short."""
-        data = {
-            'username': 'testuser',
-            'email': 'test@example.com',
-            'password1': 'short',
-            'password2': 'short',
-        }
-        response = self.client.post(self.signup_url, data)
-        
-        # Should show error
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'at least 8 characters')
-        
-        # User should not be created
-        self.assertFalse(User.objects.filter(username='testuser').exists())
-    
-    def test_signup_with_duplicate_username(self):
-        """Test signup with a username that already exists."""
-        # Create existing user
-        User.objects.create_user(username='existinguser', email='existing@example.com', password='pass123')
-        
-        data = {
-            'username': 'existinguser',
-            'email': 'different@example.com',
-            'password1': 'password123',
-            'password2': 'password123',
-        }
-        response = self.client.post(self.signup_url, data)
-        
-        # Should show error
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'Username already exists')
-    
-    def test_signup_with_duplicate_email(self):
-        """Test signup with an email that already exists."""
-        # Create existing user
-        User.objects.create_user(username='existinguser', email='existing@example.com', password='pass123')
-        
-        data = {
-            'username': 'newuser',
-            'email': 'existing@example.com',
-            'password1': 'password123',
-            'password2': 'password123',
-        }
-        response = self.client.post(self.signup_url, data)
-        
-        # Should show error
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'Email already exists')
+        # User should NOT be created via signup form
+        self.assertFalse(User.objects.filter(username='newuser').exists())
 
 
 @override_settings(ENABLE_USER_SELECTION=True)
