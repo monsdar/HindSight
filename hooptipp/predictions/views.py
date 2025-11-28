@@ -30,6 +30,7 @@ from .models import (
     PredictionEvent,
     PredictionOption,
     Season,
+    TeilnahmebedingungenSection,
     TipType,
     UserPreferences,
     UserEventScore,
@@ -929,6 +930,29 @@ def get_impressum(request):
 def get_datenschutz(request):
     """Get Datenschutz sections with markdown-rendered content. Public access."""
     sections = DatenschutzSection.objects.all().order_by('order_number', 'caption')
+    
+    sections_data = []
+    for section in sections:
+        # Use markdown2 with extras for better list support
+        html = markdown2.markdown(
+            section.text,
+            extras=['fenced-code-blocks', 'tables', 'break-on-newline', 'cuddled-lists']
+        )
+        sections_data.append({
+            'caption': section.caption,
+            'text_html': html,
+            'order_number': section.order_number,
+        })
+    
+    return JsonResponse({
+        'sections': sections_data
+    })
+
+
+@require_http_methods(["GET"])
+def get_teilnahmebedingungen(request):
+    """Get Teilnahmebedingungen sections with markdown-rendered content. Public access."""
+    sections = TeilnahmebedingungenSection.objects.all().order_by('order_number', 'caption')
     
     sections_data = []
     for section in sections:

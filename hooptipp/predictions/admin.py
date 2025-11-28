@@ -23,6 +23,7 @@ from .models import (
     PredictionEvent,
     PredictionOption,
     Season,
+    TeilnahmebedingungenSection,
     TipType,
     UserEventScore,
     UserFavorite,
@@ -815,6 +816,24 @@ class ImpressumSectionAdmin(admin.ModelAdmin):
 
 @admin.register(DatenschutzSection)
 class DatenschutzSectionAdmin(admin.ModelAdmin):
+    list_display = ('caption', 'order_number', 'created_at')
+    list_editable = ('order_number',)
+    search_fields = ('caption',)
+    ordering = ('order_number', 'caption')
+    fieldsets = (
+        (None, {
+            'fields': ('caption', 'text', 'order_number')
+        }),
+        ('Timestamps', {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',),
+        }),
+    )
+    readonly_fields = ('created_at', 'updated_at')
+
+
+@admin.register(TeilnahmebedingungenSection)
+class TeilnahmebedingungenSectionAdmin(admin.ModelAdmin):
     list_display = ('caption', 'order_number', 'created_at')
     list_editable = ('order_number',)
     search_fields = ('caption',)

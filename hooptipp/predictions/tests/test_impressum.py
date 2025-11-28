@@ -1,8 +1,8 @@
-"""Tests for Impressum and Datenschutz features."""
+"""Tests for Impressum, Datenschutz, and Teilnahmebedingungen features."""
 from django.test import TestCase, Client
 from django.contrib.auth import get_user_model
 
-from hooptipp.predictions.models import DatenschutzSection, ImpressumSection
+from hooptipp.predictions.models import DatenschutzSection, ImpressumSection, TeilnahmebedingungenSection
 
 
 class ImpressumSectionModelTests(TestCase):
@@ -320,6 +320,136 @@ class DatenschutzAPITests(TestCase):
         
         # Make request without authentication
         response = self.client.get('/api/datenschutz/')
+        
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(len(data['sections']), 1)
+        self.assertEqual(data['sections'][0]['caption'], 'Public Section')
+
+
+class TeilnahmebedingungenSectionModelTests(TestCase):
+    """Tests for TeilnahmebedingungenSection model."""
+
+    def test_create_teilnahmebedingungen_section(self):
+        """Test creating a TeilnahmebedingungenSection."""
+        section = TeilnahmebedingungenSection.objects.create(
+            caption='Participation Rules',
+            text='**Allowed:** Fair play only',
+            order_number=1
+        )
+        
+        self.assertEqual(section.caption, 'Participation Rules')
+        self.assertEqual(section.text, '**Allowed:** Fair play only')
+        self.assertEqual(section.order_number, 1)
+        self.assertIsNotNone(section.created_at)
+        self.assertIsNotNone(section.updated_at)
+
+    def test_teilnahmebedingungen_section_str(self):
+        """Test TeilnahmebedingungenSection string representation."""
+        section = TeilnahmebedingungenSection.objects.create(
+            caption='Terms of Participation',
+            text='Some terms text',
+            order_number=0
+        )
+        
+        self.assertEqual(str(section), 'Terms of Participation')
+
+    def test_teilnahmebedingungen_section_ordering(self):
+        """Test that sections are ordered by order_number then caption."""
+        section1 = TeilnahmebedingungenSection.objects.create(
+            caption='Section B',
+            text='Text B',
+            order_number=2
+        )
+        section2 = TeilnahmebedingungenSection.objects.create(
+            caption='Section A',
+            text='Text A',
+            order_number=1
+        )
+        section3 = TeilnahmebedingungenSection.objects.create(
+            caption='Section C',
+            text='Text C',
+            order_number=1
+        )
+        
+        sections = list(TeilnahmebedingungenSection.objects.all())
+        
+        # Should be ordered by order_number first, then caption
+        self.assertEqual(sections[0], section2)  # order_number=1, caption='Section A'
+        self.assertEqual(sections[1], section3)  # order_number=1, caption='Section C'
+        self.assertEqual(sections[2], section1)  # order_number=2, caption='Section B'
+
+
+class TeilnahmebedingungenAPITests(TestCase):
+    """Tests for Teilnahmebedingungen API endpoint."""
+
+    def setUp(self):
+        self.client = Client()
+
+    def test_get_teilnahmebedingungen_empty(self):
+        """Test getting Teilnahmebedingungen when no sections exist."""
+        response = self.client.get('/api/teilnahmebedingungen/')
+        
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertIn('sections', data)
+        self.assertEqual(len(data['sections']), 0)
+
+    def test_get_teilnahmebedingungen_with_sections(self):
+        """Test getting Teilnahmebedingungen with multiple sections."""
+        section1 = TeilnahmebedingungenSection.objects.create(
+            caption='Allowed Actions',
+            text='**You may:** Make predictions',
+            order_number=1
+        )
+        section2 = TeilnahmebedingungenSection.objects.create(
+            caption='Introduction',
+            text='These are the terms of participation.',
+            order_number=0
+        )
+        
+        response = self.client.get('/api/teilnahmebedingungen/')
+        
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertIn('sections', data)
+        self.assertEqual(len(data['sections']), 2)
+        
+        # Should be ordered by order_number
+        self.assertEqual(data['sections'][0]['caption'], 'Introduction')
+        self.assertEqual(data['sections'][0]['order_number'], 0)
+        self.assertEqual(data['sections'][1]['caption'], 'Allowed Actions')
+        self.assertEqual(data['sections'][1]['order_number'], 1)
+
+    def test_get_teilnahmebedingungen_markdown_rendering(self):
+        """Test that markdown text is rendered to HTML."""
+        section = TeilnahmebedingungenSection.objects.create(
+            caption='Test',
+            text='**Bold text** and *italic text*',
+            order_number=0
+        )
+        
+        response = self.client.get('/api/teilnahmebedingungen/')
+        
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(len(data['sections']), 1)
+        
+        html = data['sections'][0]['text_html']
+        # Markdown2 should convert **Bold text** to <strong>Bold text</strong>
+        self.assertIn('<strong>Bold text</strong>', html)
+        self.assertIn('<em>italic text</em>', html)
+
+    def test_get_teilnahmebedingungen_public_access(self):
+        """Test that Teilnahmebedingungen API is publicly accessible (no authentication required)."""
+        section = TeilnahmebedingungenSection.objects.create(
+            caption='Public Section',
+            text='This is public',
+            order_number=0
+        )
+        
+        # Make request without authentication
+        response = self.client.get('/api/teilnahmebedingungen/')
         
         self.assertEqual(response.status_code, 200)
         data = response.json()

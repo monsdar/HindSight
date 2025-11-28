@@ -23,9 +23,10 @@
       .theme-accent-muted { color: color-mix(in srgb, var(--accent-color) 45%, white); }
       .text-theme-accent-contrast { color: var(--accent-contrast); }
       
-      /* Ensure lists in impressum and datenschutz modals have proper styling - Tailwind's reset removes list styles */
+      /* Ensure lists in impressum, datenschutz, and teilnahmebedingungen modals have proper styling - Tailwind's reset removes list styles */
       #impressum-content ul,
-      #datenschutz-content ul {
+      #datenschutz-content ul,
+      #teilnahmebedingungen-content ul {
         list-style-type: disc;
         margin-left: 1.5rem;
         margin-top: 0.5rem;
@@ -33,7 +34,8 @@
         padding-left: 0;
       }
       #impressum-content ol,
-      #datenschutz-content ol {
+      #datenschutz-content ol,
+      #teilnahmebedingungen-content ol {
         list-style-type: decimal;
         margin-left: 1.5rem;
         margin-top: 0.5rem;
@@ -41,23 +43,27 @@
         padding-left: 0;
       }
       #impressum-content ul ul,
-      #datenschutz-content ul ul {
+      #datenschutz-content ul ul,
+      #teilnahmebedingungen-content ul ul {
         list-style-type: circle;
         margin-top: 0.25rem;
         margin-bottom: 0.25rem;
       }
       #impressum-content ul ul ul,
-      #datenschutz-content ul ul ul {
+      #datenschutz-content ul ul ul,
+      #teilnahmebedingungen-content ul ul ul {
         list-style-type: square;
       }
       #impressum-content ol ol,
-      #datenschutz-content ol ol {
+      #datenschutz-content ol ol,
+      #teilnahmebedingungen-content ol ol {
         list-style-type: lower-alpha;
         margin-top: 0.25rem;
         margin-bottom: 0.25rem;
       }
       #impressum-content li,
-      #datenschutz-content li {
+      #datenschutz-content li,
+      #teilnahmebedingungen-content li {
         margin-top: 0.25rem;
         margin-bottom: 0.25rem;
         padding-left: 0.25rem;
@@ -66,7 +72,9 @@
       #impressum-content ul li::marker,
       #impressum-content ol li::marker,
       #datenschutz-content ul li::marker,
-      #datenschutz-content ol li::marker {
+      #datenschutz-content ol li::marker,
+      #teilnahmebedingungen-content ul li::marker,
+      #teilnahmebedingungen-content ol li::marker {
         color: rgb(203 213 225); /* slate-300 to match text color */
       }
     </style>
@@ -152,6 +160,26 @@
         </div>
         
         <div id="datenschutz-content">
+          <div class="flex items-center justify-center py-8">
+            <div class="text-slate-400">Loading...</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {# Teilnahmebedingungen Modal #}
+    <div id="teilnahmebedingungen-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center">
+      <div class="bg-slate-900 rounded-2xl border border-slate-800 p-6 max-w-3xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+        <div class="flex justify-between items-center mb-4">
+          <h3 class="text-xl font-semibold theme-accent-text">Teilnahmebedingungen</h3>
+          <button type="button" id="close-teilnahmebedingungen-modal" class="text-slate-400 hover:text-slate-200">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+            </svg>
+          </button>
+        </div>
+        
+        <div id="teilnahmebedingungen-content">
           <div class="flex items-center justify-center py-8">
             <div class="text-slate-400">Loading...</div>
           </div>
@@ -368,6 +396,108 @@
           }
         });
       });
+
+      // Teilnahmebedingungen Modal functionality
+      document.addEventListener('DOMContentLoaded', function() {
+        const teilnahmebedingungenLink = document.getElementById('teilnahmebedingungen-link');
+        const teilnahmebedingungenModal = document.getElementById('teilnahmebedingungen-modal');
+        const closeTeilnahmebedingungenModal = document.getElementById('close-teilnahmebedingungen-modal');
+        const teilnahmebedingungenContent = document.getElementById('teilnahmebedingungen-content');
+        let teilnahmebedingungenDataLoaded = false;
+
+        function openTeilnahmebedingungenModal() {
+          if (teilnahmebedingungenModal) {
+            teilnahmebedingungenModal.classList.remove('hidden');
+            
+            // Lazy load content only when modal is opened for the first time
+            if (!teilnahmebedingungenDataLoaded) {
+              loadTeilnahmebedingungenContent();
+            }
+          }
+        }
+
+        function closeTeilnahmebedingungenModalFunc() {
+          if (teilnahmebedingungenModal) {
+            teilnahmebedingungenModal.classList.add('hidden');
+          }
+        }
+
+        function loadTeilnahmebedingungenContent() {
+          if (teilnahmebedingungenDataLoaded) {
+            return;
+          }
+
+          teilnahmebedingungenContent.innerHTML = '<div class="flex items-center justify-center py-8"><div class="text-slate-400">Loading...</div></div>';
+
+          fetch('{% url "predictions:teilnahmebedingungen_api" %}')
+            .then(response => {
+              if (!response.ok) {
+                throw new Error('Failed to load Teilnahmebedingungen');
+              }
+              return response.json();
+            })
+            .then(data => {
+              teilnahmebedingungenDataLoaded = true;
+              
+              if (!data.sections || data.sections.length === 0) {
+                teilnahmebedingungenContent.innerHTML = '<div class="text-slate-400 text-center py-8">No Teilnahmebedingungen content available.</div>';
+                return;
+              }
+
+              // Clear and build content using DOM manipulation to ensure HTML is properly inserted
+              teilnahmebedingungenContent.innerHTML = '';
+              const container = document.createElement('div');
+              container.className = 'space-y-6';
+              
+              data.sections.forEach(section => {
+                const sectionDiv = document.createElement('div');
+                sectionDiv.className = 'space-y-2';
+                
+                const heading = document.createElement('h4');
+                heading.className = 'text-lg font-semibold text-slate-200';
+                heading.textContent = section.caption;
+                sectionDiv.appendChild(heading);
+                
+                const contentDiv = document.createElement('div');
+                contentDiv.className = 'text-slate-300 prose prose-invert max-w-none';
+                contentDiv.innerHTML = section.text_html;
+                sectionDiv.appendChild(contentDiv);
+                
+                container.appendChild(sectionDiv);
+              });
+              
+              teilnahmebedingungenContent.appendChild(container);
+            })
+            .catch(error => {
+              console.error('Error loading Teilnahmebedingungen:', error);
+              teilnahmebedingungenContent.innerHTML = '<div class="text-red-400 text-center py-8">Error loading Teilnahmebedingungen content. Please try again later.</div>';
+            });
+        }
+
+        if (teilnahmebedingungenLink) {
+          teilnahmebedingungenLink.addEventListener('click', openTeilnahmebedingungenModal);
+        }
+
+        if (closeTeilnahmebedingungenModal) {
+          closeTeilnahmebedingungenModal.addEventListener('click', closeTeilnahmebedingungenModalFunc);
+        }
+
+        // Close modal when clicking outside
+        if (teilnahmebedingungenModal) {
+          teilnahmebedingungenModal.addEventListener('click', function(e) {
+            if (e.target === teilnahmebedingungenModal) {
+              closeTeilnahmebedingungenModalFunc();
+            }
+          });
+        }
+
+        // Close modal on Escape key
+        document.addEventListener('keydown', function(e) {
+          if (e.key === 'Escape' && teilnahmebedingungenModal && !teilnahmebedingungenModal.classList.contains('hidden')) {
+            closeTeilnahmebedingungenModalFunc();
+          }
+        });
+      });
     </script>
 
     <footer class="max-w-5xl mx-auto px-4 pb-10 text-sm text-slate-500">
@@ -395,6 +525,14 @@
           style="font-family: inherit;"
         >
           Datenschutzerklärung
+        </button>
+        <button
+          type="button"
+          id="teilnahmebedingungen-link"
+          class="transition text-slate-500 hover:text-slate-300 cursor-pointer bg-transparent border-none p-0 text-sm"
+          style="font-family: inherit;"
+        >
+          Teilnahmebedingungen
         </button>
         <a href="/admin" class="transition text-slate-500 hover:text-slate-300">
           Admin
