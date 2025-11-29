@@ -73,7 +73,7 @@ NBA game result card - shows the outcome of a completed game prediction.
 
   {# Footer #}
   <div class="mt-3 flex items-center justify-between text-xs text-slate-500">
-    <span>Resolved {{ outcome.resolved_at|date:"M d, H:i" }}</span>
+    <span>Resolved <span data-utc-datetime="{{ outcome.resolved_at|date:'c' }}">{{ outcome.resolved_at|date:"M d, H:i" }}</span></span>
     {% if active_user %}
       {% if user_score %}
         <span class="theme-accent-pill inline-flex items-center gap-1 rounded-full px-2 py-1 font-semibold">

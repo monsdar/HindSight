@@ -498,6 +498,46 @@
           }
         });
       });
+
+      // Timezone conversion utility
+      // Converts UTC timestamps to user's local timezone
+      document.addEventListener('DOMContentLoaded', function() {
+        // Find all elements with data-utc-datetime attribute
+        const timeElements = document.querySelectorAll('[data-utc-datetime]');
+        
+        timeElements.forEach(function(element) {
+          const utcTimestamp = element.getAttribute('data-utc-datetime');
+          if (!utcTimestamp) return;
+          
+          try {
+            // Parse UTC timestamp and convert to local time
+            const utcDate = new Date(utcTimestamp);
+            
+            // Format: "M d, H:i" (e.g., "Nov 29, 15:30")
+            const options = {
+              month: 'short',
+              day: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit',
+              hour12: false
+            };
+            
+            const formattedTime = utcDate.toLocaleString(undefined, options);
+            element.textContent = formattedTime;
+            
+            // Add a title attribute showing UTC time for reference
+            const utcOptions = {
+              ...options,
+              timeZone: 'UTC',
+              timeZoneName: 'short'
+            };
+            const utcFormatted = utcDate.toLocaleString('en-US', utcOptions);
+            element.setAttribute('title', `UTC: ${utcFormatted}`);
+          } catch (e) {
+            console.error('Error converting timezone:', e, 'for timestamp:', utcTimestamp);
+          }
+        });
+      });
     </script>
 
     <footer class="max-w-5xl mx-auto px-4 pb-10 text-sm text-slate-500">

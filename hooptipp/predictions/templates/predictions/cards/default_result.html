@@ -45,7 +45,7 @@ This is used as a fallback when no specific card renderer is registered for a re
 
   {# Footer #}
   <div class="mt-3 flex items-center justify-between text-xs text-slate-500">
-    <span>Resolved {{ outcome.resolved_at|date:"M d, H:i" }}</span>
+    <span>Resolved <span data-utc-datetime="{{ outcome.resolved_at|date:'c' }}">{{ outcome.resolved_at|date:"M d, H:i" }}</span></span>
     <span class="theme-accent-pill inline-flex items-center gap-1 rounded-full px-2 py-1 font-semibold">
       {{ event.points }} pt{{ event.points|pluralize }}
     </span>

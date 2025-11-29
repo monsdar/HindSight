@@ -153,16 +153,57 @@ class DbbEventSourceTest(TestCase):
         self.assertTrue(PredictionEvent.objects.filter(source_id='dbb-slapi', source_event_id='1').exists())
 
     def test_parse_datetime(self):
-        """Test datetime parsing."""
-        # Test ISO format
+        """Test datetime parsing with timezone conversion."""
+        from zoneinfo import ZoneInfo
+        from django.utils import timezone as django_timezone
+        
+        # Test ISO format with UTC timezone
         dt_str = '2024-03-15T18:30:00+00:00'
         dt = self.event_source._parse_datetime(dt_str)
         self.assertIsNotNone(dt)
+        self.assertTrue(django_timezone.is_aware(dt))
+        # Should be in UTC
+        self.assertEqual(dt.tzinfo, ZoneInfo('UTC'))
+        self.assertEqual(dt.hour, 18)
 
-        # Test with Z suffix
+        # Test with Z suffix (UTC)
         dt_str = '2024-03-15T18:30:00Z'
         dt = self.event_source._parse_datetime(dt_str)
         self.assertIsNotNone(dt)
+        self.assertTrue(django_timezone.is_aware(dt))
+        self.assertEqual(dt.tzinfo, ZoneInfo('UTC'))
+        self.assertEqual(dt.hour, 18)
+        
+        # Test naive datetime (should be treated as CET and converted to UTC)
+        # In March, CET is UTC+1, so 18:30 CET = 17:30 UTC
+        dt_str = '2024-03-15T18:30:00'
+        dt = self.event_source._parse_datetime(dt_str)
+        self.assertIsNotNone(dt)
+        self.assertTrue(django_timezone.is_aware(dt))
+        self.assertEqual(dt.tzinfo, ZoneInfo('UTC'))
+        # 18:30 CET (UTC+1) should be 17:30 UTC
+        self.assertEqual(dt.hour, 17)
+        self.assertEqual(dt.minute, 30)
+        
+        # Test naive datetime in summer (should be treated as CEST, UTC+2)
+        # In July, CEST is UTC+2, so 18:30 CEST = 16:30 UTC
+        dt_str = '2024-07-15T18:30:00'
+        dt = self.event_source._parse_datetime(dt_str)
+        self.assertIsNotNone(dt)
+        self.assertTrue(django_timezone.is_aware(dt))
+        self.assertEqual(dt.tzinfo, ZoneInfo('UTC'))
+        # 18:30 CEST (UTC+2) should be 16:30 UTC
+        self.assertEqual(dt.hour, 16)
+        self.assertEqual(dt.minute, 30)
+        
+        # Test date format used by SLAPI
+        dt_str = '2024-03-15 18:30:00'
+        dt = self.event_source._parse_datetime(dt_str)
+        self.assertIsNotNone(dt)
+        self.assertTrue(django_timezone.is_aware(dt))
+        self.assertEqual(dt.tzinfo, ZoneInfo('UTC'))
+        # Should be converted from CET to UTC
+        self.assertEqual(dt.hour, 17)
 
     def test_slugify_team_name(self):
         """Test team name slugification."""

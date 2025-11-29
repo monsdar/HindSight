@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timedelta
 from typing import Optional
+from zoneinfo import ZoneInfo
 
 from django.db import transaction
 from django.utils import timezone
@@ -422,13 +423,30 @@ class DbbEventSource(EventSource):
         return team_name[:20]
 
     def _parse_datetime(self, date_str: str) -> datetime:
-        """Parse a datetime string from SLAPI API."""
+        """
+        Parse a datetime string from SLAPI API.
+        
+        SLAPI returns dates in CET (Central European Time). If the date string
+        doesn't include timezone information, it's assumed to be in CET and
+        converted to UTC for storage.
+        
+        Args:
+            date_str: Date string from SLAPI API
+            
+        Returns:
+            timezone-aware datetime in UTC
+        """
+        # CET timezone (handles both CET and CEST automatically)
+        cet_tz = ZoneInfo('Europe/Berlin')
+        
         # Try ISO format first
         try:
             dt = datetime.fromisoformat(date_str.replace('Z', '+00:00'))
             if timezone.is_naive(dt):
-                dt = timezone.make_aware(dt)
-            return dt
+                # Naive datetime - assume it's in CET and convert to UTC
+                dt = dt.replace(tzinfo=cet_tz)
+            # Convert to UTC
+            return dt.astimezone(ZoneInfo('UTC'))
         except (ValueError, AttributeError):
             pass
 
@@ -442,9 +460,9 @@ class DbbEventSource(EventSource):
         for fmt in formats:
             try:
                 dt = datetime.strptime(date_str, fmt)
-                if timezone.is_naive(dt):
-                    dt = timezone.make_aware(dt)
-                return dt
+                # Naive datetime - assume it's in CET and convert to UTC
+                dt = dt.replace(tzinfo=cet_tz)
+                return dt.astimezone(ZoneInfo('UTC'))
             except ValueError:
                 continue
 

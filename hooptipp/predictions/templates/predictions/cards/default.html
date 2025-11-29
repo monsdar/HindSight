@@ -16,7 +16,7 @@ This is used as a fallback when no specific card renderer is registered for an e
     </div>
     <div class="text-right">
       <p class="text-xs text-slate-500">Deadline</p>
-      <p class="text-xs font-semibold text-slate-300">{{ event.deadline|date:"M d, H:i" }}</p>
+      <p class="text-xs font-semibold text-slate-300" data-utc-datetime="{{ event.deadline|date:'c' }}">{{ event.deadline|date:"M d, H:i" }}</p>
     </div>
   </header>
   
