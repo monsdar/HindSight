@@ -6,7 +6,17 @@ from django.conf import settings
 from django.conf.urls.static import static
 
 from .views import health, privacy_gate
-from .auth_views import signup, profile
+from .auth_views import (
+    signup,
+    profile,
+    verify_email,
+    verify_email_sent,
+    verify_email_success,
+    verify_email_failed,
+    resend_verification,
+    resend_verification_done,
+    CustomLoginView,
+)
 
 
 def robots_txt(request):
@@ -26,9 +36,17 @@ urlpatterns = [
     
     # Authentication URLs (available in both modes, but functional only when ENABLE_USER_SELECTION=False)
     path('signup/', signup, name='signup'),
-    path('login/', auth_views.LoginView.as_view(template_name='auth/login.html'), name='login'),
+    path('login/', CustomLoginView.as_view(), name='login'),
     path('logout/', auth_views.LogoutView.as_view(next_page='/'), name='logout'),
     path('profile/', profile, name='profile'),
+    
+    # Email verification URLs
+    path('verify-email-sent/', verify_email_sent, name='verify_email_sent'),
+    path('verify-email/<str:uidb64>/<str:token>/', verify_email, name='verify_email'),
+    path('verify-email-success/', verify_email_success, name='verify_email_success'),
+    path('verify-email-failed/', verify_email_failed, name='verify_email_failed'),
+    path('resend-verification/', resend_verification, name='resend_verification'),
+    path('resend-verification/done/', resend_verification_done, name='resend_verification_done'),
     
     # Password reset flow
     path('password-reset/', 

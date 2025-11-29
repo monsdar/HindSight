@@ -1,0 +1,14 @@
+Verify Your Email Address - {{ site_name }}
+
+Hello {{ user.username }},
+
+Thank you for signing up for {{ site_name }}! To complete your registration and start making predictions, please verify your email address by visiting the following link:
+
+{{ verification_url }}
+
+This verification link will expire in {{ expiry_days }} days.
+
+If you didn't create an account with {{ site_name }}, you can safely ignore this email.
+
+© {{ site_name }}. All rights reserved.
+

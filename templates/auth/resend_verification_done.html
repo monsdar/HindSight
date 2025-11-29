@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+
+{% block title %}Verification Email Sent - {{ PAGE_TITLE }}{% endblock %}
+
+{% block content %}
+<div class="max-w-md mx-auto mt-8">
+  <div class="bg-slate-900 border border-slate-800 rounded-lg shadow-xl p-8 text-center">
+    <div class="mb-4">
+      <svg class="w-16 h-16 text-amber-400 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
+      </svg>
+    </div>
+    
+    <h1 class="text-3xl font-bold text-amber-400 mb-4">Verification Email Sent</h1>
+    
+    <p class="text-slate-300 mb-6">
+      If an account exists with that email address, a verification email has been sent. Please check your inbox and click the link in the email to verify your account.
+    </p>
+    
+    <p class="text-slate-400 text-sm mb-6">
+      If you don't see the email, check your spam folder. The verification link will expire in 3 days.
+    </p>
+    
+    <a 
+      href="{% url 'login' %}"
+      class="inline-block bg-amber-400 text-slate-900 py-3 px-6 rounded-lg font-semibold hover:bg-amber-300 transition-colors duration-200"
+    >
+      Back to Login
+    </a>
+  </div>
+</div>
+{% endblock %}
+

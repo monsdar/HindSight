@@ -191,6 +191,7 @@ Set `ENABLE_USER_SELECTION=False`
 **Features:**
 - Standard signup/login system
 - Users create their own accounts
+- Email-based account verification (required before first login)
 - Email-based password reset
 - Each user has private, secure access
 - Traditional web app authentication
@@ -198,9 +199,11 @@ Set `ENABLE_USER_SELECTION=False`
 
 **Workflow:**
 1. Users sign up with username, email, and password
-2. Users log in with credentials
-3. Make predictions (automatically tied to logged-in user)
-4. Log out when done
+2. Verification email is sent to the user's email address
+3. User clicks verification link in email to activate account
+4. Users log in with credentials (only after verification)
+5. Make predictions (automatically tied to logged-in user)
+6. Log out when done
 
 ### Switching Between Modes
 
@@ -278,14 +281,22 @@ ENABLE_USER_SELECTION=False
 # Privacy Gate (disable for public sites)
 PRIVACY_GATE_ENABLED=False
 
-# Email Configuration (for password reset)
-EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
-EMAIL_HOST=smtp.gmail.com
-EMAIL_PORT=587
-EMAIL_USE_TLS=True
-EMAIL_HOST_USER=noreply@yourdomain.com
-EMAIL_HOST_PASSWORD=your_email_password
+# Email Configuration (for account verification and password reset)
+# Option 1: AWS SES (Recommended)
+EMAIL_BACKEND=django_ses.SESBackend
+AWS_SES_REGION_NAME=us-east-1
+AWS_ACCESS_KEY_ID=your_aws_access_key
+AWS_SECRET_ACCESS_KEY=your_aws_secret_key
 DEFAULT_FROM_EMAIL=noreply@yourdomain.com
+
+# Option 2: SMTP (Alternative)
+# EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
+# EMAIL_HOST=smtp.gmail.com
+# EMAIL_PORT=587
+# EMAIL_USE_TLS=True
+# EMAIL_HOST_USER=noreply@yourdomain.com
+# EMAIL_HOST_PASSWORD=your_email_password
+# DEFAULT_FROM_EMAIL=noreply@yourdomain.com
 
 # NBA API (optional)
 BALLDONTLIE_API_TOKEN=your_token
@@ -298,6 +309,34 @@ PAGE_SLOGAN=Predict. Compete. Win!
 HOOPTIPP_ADMIN_USER=admin
 HOOPTIPP_ADMIN_PASSWORD=secure_password_here
 ```
+
+### Email Verification
+
+When using Authentication Mode, new users must verify their email address before they can log in:
+
+- After signup, a verification email is automatically sent
+- Users click the verification link in the email (valid for 3 days)
+- Once verified, users can log in normally
+- If the email doesn't arrive, users can request a new verification email
+- Password reset emails use the same email backend configuration
+
+### AWS SES Setup
+
+To use AWS SES for email delivery:
+
+1. **Verify your domain or email address** in AWS SES Console
+   - Go to AWS SES Console → Verified identities
+   - Add and verify your sending domain or email address
+
+2. **Create IAM user with SES permissions**
+   - Create an IAM user with `AmazonSESFullAccess` policy
+   - Generate Access Key ID and Secret Access Key
+
+3. **Configure environment variables** (see Public Deployment section above)
+
+4. **Move out of SES Sandbox** (if needed)
+   - In SES Sandbox, you can only send to verified email addresses
+   - Submit a request to move out of Sandbox for production use
 
 ### Deploy to Railway
 

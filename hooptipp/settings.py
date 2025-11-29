@@ -274,19 +274,43 @@ LOGIN_URL = '/login/'
 LOGIN_REDIRECT_URL = '/'
 LOGOUT_REDIRECT_URL = '/'
 
-# Email Configuration (for password reset)
+# Email Configuration (for password reset and email verification)
 # In development, emails are printed to console
-# In production, configure SMTP settings via environment variables
+# In production, configure SMTP or AWS SES settings via environment variables
 EMAIL_BACKEND = os.environ.get(
     'EMAIL_BACKEND',
     'django.core.mail.backends.console.EmailBackend'  # Default for development
 )
 
+# AWS SES Configuration (when using django-ses)
+if EMAIL_BACKEND == 'django_ses.SESBackend':
+    AWS_SES_REGION_NAME = os.environ.get('AWS_SES_REGION_NAME', 'us-east-1')
+    AWS_SES_REGION_ENDPOINT = os.environ.get('AWS_SES_REGION_ENDPOINT', '')
+    AWS_ACCESS_KEY_ID = os.environ.get('AWS_ACCESS_KEY_ID', '')
+    AWS_SECRET_ACCESS_KEY = os.environ.get('AWS_SECRET_ACCESS_KEY', '')
+    DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', '')
+    if not DEFAULT_FROM_EMAIL:
+        raise ValueError(
+            'DEFAULT_FROM_EMAIL must be set when using AWS SES backend. '
+            'Set it via the DEFAULT_FROM_EMAIL environment variable.'
+        )
 # Optional SMTP settings for production (only needed if using SMTP backend)
-if EMAIL_BACKEND == 'django.core.mail.backends.smtp.EmailBackend':
+elif EMAIL_BACKEND == 'django.core.mail.backends.smtp.EmailBackend':
     EMAIL_HOST = os.environ.get('EMAIL_HOST', 'smtp.gmail.com')
     EMAIL_PORT = int(os.environ.get('EMAIL_PORT', '587'))
     EMAIL_USE_TLS = os.environ.get('EMAIL_USE_TLS', 'True').lower() == 'true'
     EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', '')
     EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
     DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', EMAIL_HOST_USER)
+else:
+    # Console backend or other backends - set DEFAULT_FROM_EMAIL if provided
+    DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'noreply@localhost')
+
+# Cache Configuration (for rate limiting and other features)
+# Default to local memory cache - can be overridden via CACHES environment variable
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': 'unique-snowflake',
+    }
+}

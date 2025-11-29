@@ -25,7 +25,7 @@ class SignupViewTests(TestCase):
         self.assertContains(response, 'Create Account')
     
     def test_successful_signup(self):
-        """Test successful user registration."""
+        """Test successful user registration with email verification."""
         data = {
             'username': 'newuser',
             'email': 'newuser@example.com',
@@ -35,22 +35,22 @@ class SignupViewTests(TestCase):
         }
         response = self.client.post(self.signup_url, data)
         
-        # Should redirect to home after successful signup
+        # Should redirect to verify_email_sent page
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, reverse('predictions:home'))
+        self.assertEqual(response.url, reverse('verify_email_sent'))
         
-        # User should be created
+        # User should be created but inactive
         self.assertTrue(User.objects.filter(username='newuser').exists())
+        user = User.objects.get(username='newuser')
+        self.assertFalse(user.is_active)  # User should be inactive until verified
         
         # User preferences should be created
-        user = User.objects.get(username='newuser')
         self.assertTrue(UserPreferences.objects.filter(user=user).exists())
         prefs = UserPreferences.objects.get(user=user)
         self.assertEqual(prefs.nickname, 'New User')
         
-        # User should be logged in
-        user = User.objects.get(username='newuser')
-        self.assertTrue(user.is_authenticated)
+        # User should NOT be logged in (must verify email first)
+        self.assertNotIn('_auth_user_id', self.client.session)
     
     def test_signup_with_missing_fields(self):
         """Test signup with missing required fields."""
@@ -163,7 +163,8 @@ class LoginViewTests(TestCase):
         self.user = User.objects.create_user(
             username='testuser',
             email='test@example.com',
-            password='testpass123'
+            password='testpass123',
+            is_active=True  # Active user for normal login tests
         )
     
     def test_login_page_loads(self):
@@ -217,4 +218,29 @@ class LoginViewTests(TestCase):
         
         # Session should be cleared
         self.assertNotIn('_auth_user_id', self.client.session)
+    
+    def test_login_blocked_for_unverified_user(self):
+        """Test that unverified (inactive) users cannot log in."""
+        # Create an inactive (unverified) user
+        inactive_user = User.objects.create_user(
+            username='unverified',
+            email='unverified@example.com',
+            password='testpass123',
+            is_active=False  # User hasn't verified email
+        )
+        
+        data = {
+            'username': 'unverified',
+            'password': 'testpass123',
+        }
+        response = self.client.post(self.login_url, data)
+        
+        # Should stay on login page with error
+        self.assertEqual(response.status_code, 200)
+        
+        # User should not be logged in
+        self.assertNotIn('_auth_user_id', self.client.session)
+        
+        # Error message should mention email verification
+        self.assertContains(response, 'verify your email')
 
