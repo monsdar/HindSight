@@ -26,6 +26,16 @@
             ]
         },
         {
+            "name": "Python Debugger: update_dbb_matches",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/manage.py",
+            "console": "integratedTerminal",
+            "args": [
+                "update_dbb_matches"
+            ]
+        },
+        {
             "name": "Python Debugger: Django",
             "type": "debugpy",
             "request": "launch",

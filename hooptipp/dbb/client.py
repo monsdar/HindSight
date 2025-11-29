@@ -175,15 +175,15 @@ class SlapiClient:
 
     def get_match_details(self, match_id: str) -> dict[str, Any]:
         """
-        Get detailed information for a specific match.
+        Get detailed information for a specific match including location.
         
         Args:
             match_id: Match identifier
             
         Returns:
-            Match details dictionary
+            Match details dictionary with location information
         """
-        return self._make_request(f'/matches/{match_id}')
+        return self._make_request(f'/match/{match_id}')
 
 
 def build_slapi_client() -> Optional[SlapiClient]:

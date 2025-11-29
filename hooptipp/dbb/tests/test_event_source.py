@@ -17,7 +17,7 @@ from hooptipp.predictions.models import (
     TipType,
 )
 from hooptipp.dbb.event_source import DbbEventSource
-from hooptipp.dbb.models import TrackedLeague, TrackedTeam
+from hooptipp.dbb.models import DbbMatch, TrackedLeague, TrackedTeam
 
 
 class DbbEventSourceTest(TestCase):
@@ -117,6 +117,13 @@ class DbbEventSourceTest(TestCase):
         event = PredictionEvent.objects.get(source_id='dbb-slapi')
         self.assertIn('BG Test Team 1', event.name)
         self.assertIn('BG Test Team 2', event.name)
+        
+        # Check that venue is stored in event metadata
+        self.assertEqual(event.metadata.get('venue'), 'Test Arena')
+        
+        # Check that venue is stored in DbbMatch model
+        dbb_match = DbbMatch.objects.get(external_match_id='1')
+        self.assertEqual(dbb_match.venue, 'Test Arena')
 
     @patch('hooptipp.dbb.event_source.build_slapi_client')
     def test_sync_events_processes_past_matches(self, mock_build_client):
@@ -666,4 +673,87 @@ class DbbEventSourceTest(TestCase):
         # Should still have only one outcome
         outcome_count_after = EventOutcome.objects.filter(prediction_event=event).count()
         self.assertEqual(outcome_count_before, outcome_count_after)
+
+    @patch('hooptipp.dbb.event_source.build_slapi_client')
+    def test_sync_events_updates_venue_in_existing_event(self, mock_build_client):
+        """Test that venue is updated in existing event metadata when match data changes."""
+        mock_client = MagicMock()
+        mock_build_client.return_value = mock_client
+        
+        # Sync options first
+        self.event_source.sync_options()
+
+        # First sync: create an event with initial venue
+        future_date = (timezone.now() + timedelta(days=7)).isoformat()
+        mock_client.get_league_matches.return_value = [
+            {
+                'match_id': 1,
+                'home_team': {'id': 't1', 'name': 'BG Test Team 1'},
+                'away_team': {'id': 't2', 'name': 'BG Test Team 2'},
+                'datetime': future_date,
+                'location': 'Original Arena'
+            }
+        ]
+
+        result1 = self.event_source.sync_events()
+        self.assertEqual(result1.events_created, 1)
+        
+        event = PredictionEvent.objects.get(source_id='dbb-slapi', source_event_id='1')
+        self.assertEqual(event.metadata.get('venue'), 'Original Arena')
+        
+        dbb_match = DbbMatch.objects.get(external_match_id='1')
+        self.assertEqual(dbb_match.venue, 'Original Arena')
+
+        # Second sync: update venue to new location
+        mock_client.get_league_matches.return_value = [
+            {
+                'match_id': 1,
+                'home_team': {'id': 't1', 'name': 'BG Test Team 1'},
+                'away_team': {'id': 't2', 'name': 'BG Test Team 2'},
+                'datetime': future_date,
+                'location': 'Updated Arena'
+            }
+        ]
+
+        result2 = self.event_source.sync_events()
+        self.assertEqual(result2.events_updated, 1)
+        
+        # Refresh from database
+        event.refresh_from_db()
+        dbb_match.refresh_from_db()
+        
+        # Venue should be updated in both event metadata and DbbMatch
+        self.assertEqual(event.metadata.get('venue'), 'Updated Arena')
+        self.assertEqual(dbb_match.venue, 'Updated Arena')
+
+    @patch('hooptipp.dbb.event_source.build_slapi_client')
+    def test_sync_events_extracts_venue_from_location_field(self, mock_build_client):
+        """Test that venue is correctly extracted from 'location' field (SLAPI format)."""
+        mock_client = MagicMock()
+        mock_build_client.return_value = mock_client
+        
+        # Sync options first
+        self.event_source.sync_options()
+
+        # Mock match data with 'location' field (SLAPI format)
+        future_date = (timezone.now() + timedelta(days=7)).isoformat()
+        mock_client.get_league_matches.return_value = [
+            {
+                'match_id': 1,
+                'home_team': {'id': 't1', 'name': 'BG Test Team 1'},
+                'away_team': {'id': 't2', 'name': 'BG Test Team 2'},
+                'datetime': future_date,
+                'location': 'SLAPI Arena'  # Using 'location' field as per SLAPI spec
+            }
+        ]
+
+        result = self.event_source.sync_events()
+        self.assertEqual(result.events_created, 1)
+        
+        event = PredictionEvent.objects.get(source_id='dbb-slapi', source_event_id='1')
+        # Venue should be extracted from 'location' field
+        self.assertEqual(event.metadata.get('venue'), 'SLAPI Arena')
+        
+        dbb_match = DbbMatch.objects.get(external_match_id='1')
+        self.assertEqual(dbb_match.venue, 'SLAPI Arena')
 

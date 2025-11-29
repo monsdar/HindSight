@@ -28,7 +28,12 @@ from .logo_matcher import discover_logo_files, find_logo_for_team, get_logo_for_
 from .models import DbbMatch, TrackedLeague, TrackedTeam
 
 logger = logging.getLogger(__name__)
-
+logger.setLevel(logging.DEBUG)
+handler = logging.StreamHandler()
+handler.setLevel(logging.DEBUG)
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+handler.setFormatter(formatter)
+logger.addHandler(handler)
 
 class DbbEventSource(EventSource):
     """Event source for German basketball matches via SLAPI API."""
@@ -149,7 +154,7 @@ class DbbEventSource(EventSource):
             tip_type, _ = TipType.objects.get_or_create(
                 slug='dbb-matches',
                 defaults={
-                    'name': 'German Basketball Matches',
+                    'name': 'DBB Spiele',
                     'description': 'German amateur basketball league matches',
                     'category': TipType.TipCategory.GAME,
                     'deadline': timezone.now(),
@@ -164,7 +169,9 @@ class DbbEventSource(EventSource):
             for league in tracked_leagues:
                 try:
                     # Fetch matches for this league
+                    logger.info(f"Fetching matches for league {league.league_name}...")
                     matches = client.get_league_matches(league.league_id)
+                    logger.info(f"Found {len(matches)} matches for league {league.league_name}")
                     
                     # Get tracked team names for filtering
                     tracked_team_names = set(
@@ -226,6 +233,21 @@ class DbbEventSource(EventSource):
                             
                             continue
 
+                        # Fetch location data from /match/{match_id} endpoint if not available
+                        # The /leagues/{league_id}/matches endpoint no longer includes location
+                        location = match_data.get('location') or match_data.get('venue')
+                        if not location:
+                            try:
+                                detailed_match = client.get_match_details(match_id)
+                                location = detailed_match.get('location')
+                                if location:
+                                    # Update match_data with location for consistency
+                                    match_data['location'] = location
+                                    logger.debug(f"Fetched location for match {match_id}: {location}")
+                            except Exception as e:
+                                logger.warning(f"Failed to fetch location for match {match_id}: {e}")
+                                # Continue without location - it's not critical
+
                         # Create or update DbbMatch
                         dbb_match, match_created = DbbMatch.objects.update_or_create(
                             external_match_id=match_id,
@@ -234,7 +256,7 @@ class DbbEventSource(EventSource):
                                 'match_date': match_date,
                                 'home_team': home_team,
                                 'away_team': away_team,
-                                'venue': match_data.get('venue') or match_data.get('location') or None,
+                                'venue': location,
                                 'league_name': league.league_name,
                                 'tracked_league': league,
                                 'metadata': match_data,
@@ -251,6 +273,15 @@ class DbbEventSource(EventSource):
                             # Update existing event
                             existing_event.deadline = match_date
                             existing_event.name = f"{home_team} vs. {away_team}"
+                            # Update metadata including venue
+                            metadata = existing_event.metadata or {}
+                            metadata.update({
+                                'league_name': league.league_name,
+                                'league_id': league.league_id,
+                                'verband_name': league.verband_name,
+                                'venue': dbb_match.venue,
+                            })
+                            existing_event.metadata = metadata
                             existing_event.save()
                             event = existing_event
                             result.events_updated += 1
