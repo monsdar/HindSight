@@ -29,9 +29,9 @@ from .logo_matcher import discover_logo_files, find_logo_for_team, get_logo_for_
 from .models import DbbMatch, TrackedLeague, TrackedTeam
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.INFO)
 handler = logging.StreamHandler()
-handler.setLevel(logging.DEBUG)
+handler.setLevel(logging.INFO)
 formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 handler.setFormatter(formatter)
 logger.addHandler(handler)
