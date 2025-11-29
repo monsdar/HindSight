@@ -59,7 +59,7 @@ class SlapiClient:
         url = urljoin(self.base_url, endpoint)
         
         try:
-            response = self.session.get(url, params=params, timeout=30)
+            response = self.session.get(url, params=params, timeout=90)
             response.raise_for_status()
             return response.json()
         except requests.RequestException as e:
