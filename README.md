@@ -282,14 +282,25 @@ ENABLE_USER_SELECTION=False
 PRIVACY_GATE_ENABLED=False
 
 # Email Configuration (for account verification and password reset)
-# Option 1: AWS SES (Recommended)
+# Option 1: AWS SES API (Recommended)
 EMAIL_BACKEND=django_ses.SESBackend
 AWS_SES_REGION_NAME=us-east-1
 AWS_ACCESS_KEY_ID=your_aws_access_key
 AWS_SECRET_ACCESS_KEY=your_aws_secret_key
 DEFAULT_FROM_EMAIL=noreply@yourdomain.com
 
-# Option 2: SMTP (Alternative)
+# Option 2: AWS SES SMTP (Alternative)
+# EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
+# EMAIL_HOST=email-smtp.us-east-1.amazonaws.com
+# EMAIL_PORT=587
+# EMAIL_USE_TLS=True
+# EMAIL_USE_SSL=False
+# EMAIL_HOST_USER=your_smtp_username
+# EMAIL_HOST_PASSWORD=your_smtp_password
+# DEFAULT_FROM_EMAIL=noreply@yourdomain.com
+# EMAIL_TIMEOUT=30
+
+# Option 3: Other SMTP (Gmail, etc.)
 # EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
 # EMAIL_HOST=smtp.gmail.com
 # EMAIL_PORT=587
@@ -322,7 +333,9 @@ When using Authentication Mode, new users must verify their email address before
 
 ### AWS SES Setup
 
-To use AWS SES for email delivery:
+To use AWS SES for email delivery, you have two options:
+
+#### Option 1: AWS SES API (Recommended)
 
 1. **Verify your domain or email address** in AWS SES Console
    - Go to AWS SES Console → Verified identities
@@ -334,9 +347,84 @@ To use AWS SES for email delivery:
 
 3. **Configure environment variables** (see Public Deployment section above)
 
-4. **Move out of SES Sandbox** (if needed)
-   - In SES Sandbox, you can only send to verified email addresses
-   - Submit a request to move out of Sandbox for production use
+#### Option 2: AWS SES SMTP
+
+1. **Verify your domain or email address** in AWS SES Console
+   - Go to AWS SES Console → Verified identities
+   - Add and verify your sending domain or email address
+
+2. **Create SMTP credentials**
+   - Go to AWS SES Console → SMTP settings
+   - Click "Create SMTP credentials"
+   - Download or copy the SMTP username and password
+   - **Note**: The SMTP username and password are different from IAM access keys
+
+3. **Find your SMTP endpoint**
+   - Go to AWS SES Console → SMTP settings
+   - Find your region's SMTP endpoint (e.g., `email-smtp.us-east-1.amazonaws.com`)
+   - Note the port (587 for STARTTLS or 465 for SSL)
+
+4. **Configure environment variables:**
+   ```
+   EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
+   EMAIL_HOST=email-smtp.us-east-1.amazonaws.com
+   EMAIL_PORT=587
+   EMAIL_USE_TLS=True
+   EMAIL_USE_SSL=False
+   EMAIL_HOST_USER=your_smtp_username
+   EMAIL_HOST_PASSWORD=your_smtp_password
+   DEFAULT_FROM_EMAIL=noreply@yourdomain.com
+   EMAIL_TIMEOUT=30
+   ```
+
+5. **Test your configuration:**
+   ```bash
+   python manage.py test_email --to your-email@example.com
+   ```
+
+**Common Issues:**
+- **Socket connection error**: Check that EMAIL_HOST matches your AWS region (e.g., `email-smtp.us-east-1.amazonaws.com`)
+- **Authentication error**: Verify SMTP username/password from SES Console (not IAM credentials)
+- **Port 587**: Use `EMAIL_USE_TLS=True` and `EMAIL_USE_SSL=False`
+- **Port 465**: Use `EMAIL_USE_SSL=True` and `EMAIL_USE_TLS=False`
+
+#### AWS SES Sandbox Mode
+
+**Important**: New AWS SES accounts start in **Sandbox mode**. In Sandbox mode:
+
+- ✅ You can **only send emails to verified email addresses**
+- ⚠️ Rate limits: **1 message/second** and **100 messages/day**
+- ❌ You **cannot** send to unverified email addresses (like Gmail, Yahoo, etc.)
+
+**If you get this error:**
+```
+Message rejected: Email address is not verified. The following identities failed the check
+```
+
+You have two options:
+
+**Option A: Verify individual recipient emails (for testing)**
+1. Go to [AWS SES Console](https://console.aws.amazon.com/ses/) → **Verified identities**
+2. Click **"Create identity"** → Select **"Email address"**
+3. Enter the recipient email address (e.g., `monsdar@gmail.com`)
+4. Check that email's inbox for a verification email
+5. Click the verification link in the email
+
+**Option B: Request production access (recommended for production)**
+1. Go to [AWS SES Console](https://console.aws.amazon.com/ses/) → **Account dashboard**
+2. Scroll down to find **"Sending statistics"** section
+3. Click **"Request production access"**
+4. Fill out the request form:
+   - Select your use case (e.g., "Transactional emails")
+   - Describe your application and email content
+   - Provide website URL if applicable
+5. Submit the request (usually approved within 24 hours)
+6. Once approved, you can send to any email address
+
+**After moving to production:**
+- ✅ Can send to **any email address**
+- ✅ Higher rate limits (varies by region and account)
+- ⚠️ Still must verify **sending** domain/email (the FROM address)
 
 ### Deploy to Railway
 

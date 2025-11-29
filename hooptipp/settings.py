@@ -297,11 +297,44 @@ if EMAIL_BACKEND == 'django_ses.SESBackend':
 # Optional SMTP settings for production (only needed if using SMTP backend)
 elif EMAIL_BACKEND == 'django.core.mail.backends.smtp.EmailBackend':
     EMAIL_HOST = os.environ.get('EMAIL_HOST', 'smtp.gmail.com')
-    EMAIL_PORT = int(os.environ.get('EMAIL_PORT', '587'))
-    EMAIL_USE_TLS = os.environ.get('EMAIL_USE_TLS', 'True').lower() == 'true'
+    email_port_str = os.environ.get('EMAIL_PORT', '587')
+    email_port = int(email_port_str)
+    EMAIL_PORT = email_port
+    
+    # TLS vs SSL configuration
+    # AWS SES: Port 587 uses STARTTLS (TLS), Port 465 uses SSL
+    # Allow explicit override via environment variables
+    use_tls_env = os.environ.get('EMAIL_USE_TLS', '').lower()
+    use_ssl_env = os.environ.get('EMAIL_USE_SSL', '').lower()
+    
+    if email_port == 465:
+        # Port 465 requires SSL, not TLS
+        if use_ssl_env:
+            EMAIL_USE_SSL = use_ssl_env == 'true'
+        else:
+            EMAIL_USE_SSL = True  # Default to True for port 465
+        if use_tls_env:
+            EMAIL_USE_TLS = use_tls_env == 'true'
+        else:
+            EMAIL_USE_TLS = False  # Don't use TLS with SSL
+    else:
+        # Port 587 and other ports use STARTTLS (TLS)
+        if use_tls_env:
+            EMAIL_USE_TLS = use_tls_env == 'true'
+        else:
+            EMAIL_USE_TLS = True  # Default to True for port 587
+        if use_ssl_env:
+            EMAIL_USE_SSL = use_ssl_env == 'true'
+        else:
+            EMAIL_USE_SSL = False  # Don't use SSL with TLS
+    
     EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', '')
     EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
     DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', EMAIL_HOST_USER)
+    
+    # Connection timeout settings (important for AWS SES)
+    # Increase timeout for AWS SES which may have rate limiting
+    EMAIL_TIMEOUT = int(os.environ.get('EMAIL_TIMEOUT', '30'))  # 30 seconds default
 else:
     # Console backend or other backends - set DEFAULT_FROM_EMAIL if provided
     DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'noreply@localhost')
