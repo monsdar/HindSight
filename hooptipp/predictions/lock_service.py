@@ -7,7 +7,7 @@ from typing import Optional, Set
 
 from django.utils import timezone
 
-from .models import UserTip
+from .models import Season, UserTip
 
 
 LOCK_LIMIT = 3
@@ -59,6 +59,25 @@ class LockService:
                 lock_released_at=now,
                 lock_releases_at=None,
             )
+
+        # Check for active season and restore locks forfeited before season start
+        active_season = Season.get_active_season()
+        if active_season:
+            # Find forfeited locks that were lost before the season started
+            pre_season_forfeited_ids = list(
+                UserTip.objects.filter(
+                    user=self.user,
+                    lock_status=UserTip.LockStatus.FORFEITED,
+                    lock_forfeited_at__isnull=False,
+                    lock_forfeited_at__lt=active_season.start_date,
+                ).values_list("id", flat=True)
+            )
+            if pre_season_forfeited_ids:
+                UserTip.objects.filter(id__in=pre_season_forfeited_ids).update(
+                    lock_status=UserTip.LockStatus.RETURNED,
+                    lock_released_at=now,
+                    lock_releases_at=None,
+                )
 
         active_ids = set(
             UserTip.objects.filter(user=self.user, is_locked=True).values_list("id", flat=True)
@@ -212,12 +231,14 @@ class LockService:
         tip.lock_status = UserTip.LockStatus.FORFEITED
         tip.lock_releases_at = release_at
         tip.lock_released_at = None
+        tip.lock_forfeited_at = resolved_at
         tip.save(
             update_fields=[
                 "is_locked",
                 "lock_status",
                 "lock_releases_at",
                 "lock_released_at",
+                "lock_forfeited_at",
             ]
         )
         if tip.id in self._active_ids:

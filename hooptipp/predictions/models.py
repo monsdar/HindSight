@@ -327,6 +327,11 @@ class UserTip(models.Model):
         blank=True,
         help_text="Scheduled timestamp for automatically returning a forfeited lock.",
     )
+    lock_forfeited_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Timestamp when the lock was forfeited (used for season-aware restoration).",
+    )
 
     class Meta:
         unique_together = (('user', 'prediction_event'),)

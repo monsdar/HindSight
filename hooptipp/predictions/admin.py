@@ -682,6 +682,7 @@ class UserTipAdmin(admin.ModelAdmin):
                 'lock_committed_at',
                 'lock_released_at',
                 'lock_releases_at',
+                'lock_forfeited_at',
             ),
             'classes': ('collapse',),
         }),

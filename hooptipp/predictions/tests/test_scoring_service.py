@@ -774,6 +774,9 @@ class ProcessAllUserScoresTests(TestCase):
         # Verify the release time is set to 30 days after resolution
         expected_release_time = outcome.resolved_at + timedelta(days=30)
         self.assertEqual(tip.lock_releases_at, expected_release_time)
+        
+        # Verify lock_forfeited_at is set to resolved_at
+        self.assertEqual(tip.lock_forfeited_at, outcome.resolved_at)
 
     def test_process_all_user_scores_idempotent_with_locks(self) -> None:
         """Test that process_all_user_scores maintains bonus points on subsequent runs."""

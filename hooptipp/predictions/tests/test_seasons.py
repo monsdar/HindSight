@@ -416,3 +416,302 @@ class SeasonLeaderboardTests(TestCase):
         all_time_total = sum(s.points_awarded for s in all_scores)
         self.assertEqual(all_time_total, 15)
 
+
+class SeasonAwareLockRestorationTests(TestCase):
+    """Test season-aware lock restoration functionality."""
+
+    def setUp(self):
+        """Set up test data."""
+        self.user_model = get_user_model()
+        self.user = self.user_model.objects.create_user(username='testuser', password='pass')
+        
+        # Create tip type and event
+        self.tip_type = TipType.objects.create(
+            name='Test Tip Type',
+            slug='test-tip-type',
+            deadline=timezone.now() + timedelta(days=1)
+        )
+        
+        self.category = OptionCategory.objects.create(
+            slug='test-category',
+            name='Test Category'
+        )
+        
+        self.option = Option.objects.create(
+            category=self.category,
+            slug='test-option',
+            name='Test Option'
+        )
+        
+        self.event = PredictionEvent.objects.create(
+            tip_type=self.tip_type,
+            name='Test Event',
+            target_kind=PredictionEvent.TargetKind.GENERIC,
+            selection_mode=PredictionEvent.SelectionMode.CURATED,
+            opens_at=timezone.now() - timedelta(days=10),
+            deadline=timezone.now() - timedelta(days=5),
+            points=1,
+            is_active=True
+        )
+        
+        self.prediction_option = PredictionOption.objects.create(
+            event=self.event,
+            label='Option 1',
+            option=self.option
+        )
+
+    def test_lock_forfeited_at_set_when_forfeiting(self):
+        """Test that lock_forfeited_at is set when a lock is forfeited."""
+        from hooptipp.predictions.lock_service import LockService
+        
+        # Create tip with lock
+        tip = UserTip.objects.create(
+            user=self.user,
+            tip_type=self.tip_type,
+            prediction_event=self.event,
+            prediction_option=self.prediction_option,
+            selected_option=self.option,
+            prediction='Test Prediction',
+            is_locked=True,
+            lock_status=UserTip.LockStatus.ACTIVE,
+        )
+        
+        # Create outcome
+        resolved_at = timezone.now() - timedelta(days=5)
+        outcome = EventOutcome.objects.create(
+            prediction_event=self.event,
+            winning_option=self.prediction_option,
+            winning_generic_option=self.option,
+            resolved_at=resolved_at
+        )
+        
+        # Forfeit the lock
+        lock_service = LockService(self.user)
+        lock_service.schedule_forfeit(tip, resolved_at=outcome.resolved_at)
+        
+        # Verify lock_forfeited_at is set
+        tip.refresh_from_db()
+        self.assertEqual(tip.lock_forfeited_at, resolved_at)
+        self.assertEqual(tip.lock_status, UserTip.LockStatus.FORFEITED)
+
+    def test_locks_forfeited_before_season_restored_immediately(self):
+        """Test that locks forfeited before season start are restored immediately."""
+        from hooptipp.predictions.lock_service import LockService
+        
+        today = timezone.now().date()
+        season_start = today - timedelta(days=3)
+        
+        # Create season
+        season = Season.objects.create(
+            name='Test Season',
+            start_date=season_start,
+            end_date=today + timedelta(days=30)
+        )
+        
+        # Create tip with forfeited lock (forfeited before season start)
+        forfeited_date = season_start - timedelta(days=5)
+        forfeited_at = timezone.now().replace(
+            year=forfeited_date.year,
+            month=forfeited_date.month,
+            day=forfeited_date.day,
+            hour=0,
+            minute=0,
+            second=0,
+            microsecond=0
+        )
+        tip = UserTip.objects.create(
+            user=self.user,
+            tip_type=self.tip_type,
+            prediction_event=self.event,
+            prediction_option=self.prediction_option,
+            selected_option=self.option,
+            prediction='Test Prediction',
+            is_locked=False,
+            lock_status=UserTip.LockStatus.FORFEITED,
+            lock_forfeited_at=forfeited_at,
+            lock_releases_at=forfeited_at + timedelta(days=30),  # Would normally return in 30 days
+        )
+        
+        # Refresh lock service (should restore pre-season forfeited locks)
+        lock_service = LockService(self.user)
+        summary = lock_service.refresh()
+        
+        # Verify lock is restored
+        tip.refresh_from_db()
+        self.assertEqual(tip.lock_status, UserTip.LockStatus.RETURNED)
+        self.assertIsNotNone(tip.lock_released_at)
+        self.assertIsNone(tip.lock_releases_at)
+        self.assertFalse(tip.is_locked)
+        
+        # Verify lock is available
+        self.assertEqual(summary.available, 3)  # All locks available
+
+    def test_locks_forfeited_during_season_follow_normal_delay(self):
+        """Test that locks forfeited during season follow normal 30-day delay."""
+        from hooptipp.predictions.lock_service import LockService
+        
+        today = timezone.now().date()
+        season_start = today - timedelta(days=10)
+        
+        # Create season
+        season = Season.objects.create(
+            name='Test Season',
+            start_date=season_start,
+            end_date=today + timedelta(days=30)
+        )
+        
+        # Create tip with forfeited lock (forfeited during season)
+        forfeited_date = season_start + timedelta(days=2)
+        forfeited_at = timezone.make_aware(
+            datetime(forfeited_date.year, forfeited_date.month, forfeited_date.day, 0, 0, 0)
+        )
+        tip = UserTip.objects.create(
+            user=self.user,
+            tip_type=self.tip_type,
+            prediction_event=self.event,
+            prediction_option=self.prediction_option,
+            selected_option=self.option,
+            prediction='Test Prediction',
+            is_locked=False,
+            lock_status=UserTip.LockStatus.FORFEITED,
+            lock_forfeited_at=forfeited_at,
+            lock_releases_at=forfeited_at + timedelta(days=30),  # Should return in 30 days
+        )
+        
+        # Refresh lock service
+        lock_service = LockService(self.user)
+        summary = lock_service.refresh()
+        
+        # Verify lock is NOT restored (still forfeited, waiting for 30 days)
+        tip.refresh_from_db()
+        self.assertEqual(tip.lock_status, UserTip.LockStatus.FORFEITED)
+        self.assertIsNotNone(tip.lock_releases_at)
+        self.assertIsNone(tip.lock_released_at)
+        
+        # Verify lock is not available (counted as pending)
+        self.assertEqual(summary.available, 2)  # One lock pending
+        self.assertEqual(summary.pending, 1)
+
+    def test_no_season_restoration_when_no_active_season(self):
+        """Test that normal lock behavior works when no active season exists."""
+        from hooptipp.predictions.lock_service import LockService
+        
+        # Create tip with forfeited lock
+        forfeited_at = timezone.now() - timedelta(days=5)
+        tip = UserTip.objects.create(
+            user=self.user,
+            tip_type=self.tip_type,
+            prediction_event=self.event,
+            prediction_option=self.prediction_option,
+            selected_option=self.option,
+            prediction='Test Prediction',
+            is_locked=False,
+            lock_status=UserTip.LockStatus.FORFEITED,
+            lock_forfeited_at=forfeited_at,
+            lock_releases_at=forfeited_at + timedelta(days=30),
+        )
+        
+        # No active season
+        active_season = Season.get_active_season()
+        self.assertIsNone(active_season)
+        
+        # Refresh lock service
+        lock_service = LockService(self.user)
+        summary = lock_service.refresh()
+        
+        # Verify lock is NOT restored (normal behavior, waiting for 30 days)
+        tip.refresh_from_db()
+        self.assertEqual(tip.lock_status, UserTip.LockStatus.FORFEITED)
+        self.assertIsNotNone(tip.lock_releases_at)
+        self.assertIsNone(tip.lock_released_at)
+        
+        # Verify lock is not available
+        self.assertEqual(summary.available, 2)
+        self.assertEqual(summary.pending, 1)
+
+    def test_lock_forfeited_exactly_on_season_start_not_restored(self):
+        """Test that locks forfeited exactly on season start date are not restored."""
+        from hooptipp.predictions.lock_service import LockService
+        
+        today = timezone.now().date()
+        season_start = today - timedelta(days=3)
+        
+        # Create season
+        season = Season.objects.create(
+            name='Test Season',
+            start_date=season_start,
+            end_date=today + timedelta(days=30)
+        )
+        
+        # Create tip with forfeited lock (forfeited exactly on season start)
+        # Create timezone-aware datetime for season start
+        forfeited_at = timezone.make_aware(
+            datetime(season_start.year, season_start.month, season_start.day, 0, 0, 0)
+        )
+        tip = UserTip.objects.create(
+            user=self.user,
+            tip_type=self.tip_type,
+            prediction_event=self.event,
+            prediction_option=self.prediction_option,
+            selected_option=self.option,
+            prediction='Test Prediction',
+            is_locked=False,
+            lock_status=UserTip.LockStatus.FORFEITED,
+            lock_forfeited_at=forfeited_at,
+            lock_releases_at=forfeited_at + timedelta(days=30),
+        )
+        
+        # Refresh lock service
+        lock_service = LockService(self.user)
+        summary = lock_service.refresh()
+        
+        # Verify lock is NOT restored (forfeited on or after season start)
+        tip.refresh_from_db()
+        self.assertEqual(tip.lock_status, UserTip.LockStatus.FORFEITED)
+        self.assertIsNotNone(tip.lock_releases_at)
+        self.assertIsNone(tip.lock_released_at)
+        
+        # Verify lock is not available
+        self.assertEqual(summary.available, 2)
+        self.assertEqual(summary.pending, 1)
+
+    def test_locks_without_forfeited_at_not_restored(self):
+        """Test that locks without lock_forfeited_at are handled gracefully."""
+        from hooptipp.predictions.lock_service import LockService
+        
+        today = timezone.now().date()
+        season_start = today - timedelta(days=3)
+        
+        # Create season
+        season = Season.objects.create(
+            name='Test Season',
+            start_date=season_start,
+            end_date=today + timedelta(days=30)
+        )
+        
+        # Create tip with forfeited lock but no lock_forfeited_at (old data)
+        tip = UserTip.objects.create(
+            user=self.user,
+            tip_type=self.tip_type,
+            prediction_event=self.event,
+            prediction_option=self.prediction_option,
+            selected_option=self.option,
+            prediction='Test Prediction',
+            is_locked=False,
+            lock_status=UserTip.LockStatus.FORFEITED,
+            lock_forfeited_at=None,  # Missing data
+            lock_releases_at=timezone.now() + timedelta(days=25),
+        )
+        
+        # Refresh lock service (should not crash)
+        lock_service = LockService(self.user)
+        summary = lock_service.refresh()
+        
+        # Verify lock is NOT restored (can't determine if pre-season)
+        tip.refresh_from_db()
+        self.assertEqual(tip.lock_status, UserTip.LockStatus.FORFEITED)
+        self.assertIsNotNone(tip.lock_releases_at)
+        
+        # Verify lock is not available
+        self.assertEqual(summary.available, 2)
+        self.assertEqual(summary.pending, 1)
