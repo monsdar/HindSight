@@ -16,6 +16,7 @@ from .auth_views import (
     resend_verification,
     resend_verification_done,
     CustomLoginView,
+    CustomPasswordResetView,
 )
 
 
@@ -50,7 +51,7 @@ urlpatterns = [
     
     # Password reset flow
     path('password-reset/', 
-         auth_views.PasswordResetView.as_view(template_name='auth/password_reset.html'),
+         CustomPasswordResetView.as_view(),
          name='password_reset'),
     path('password-reset/done/', 
          auth_views.PasswordResetDoneView.as_view(template_name='auth/password_reset_done.html'),

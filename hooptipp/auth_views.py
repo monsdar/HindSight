@@ -7,11 +7,18 @@ from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import get_user_model, login
 from django.contrib.auth.decorators import login_required
-from django.contrib.auth.views import LoginView
+from django.contrib.auth.forms import PasswordResetForm
+from django.contrib.auth.tokens import default_token_generator
+from django.contrib.auth.views import LoginView, PasswordResetDoneView, PasswordResetConfirmView, PasswordResetCompleteView
 from django.core.cache import cache
+from django.core.mail import send_mail
 from django.shortcuts import get_object_or_404, redirect, render
+from django.template.loader import render_to_string
 from django.urls import reverse
+from django.utils.encoding import force_bytes
+from django.utils.http import urlsafe_base64_encode
 from django.views.decorators.http import require_http_methods
+from django.views.generic import FormView
 
 from hooptipp.email_verification import send_verification_email, verify_email_token
 from hooptipp.predictions.models import UserPreferences
@@ -318,4 +325,93 @@ class CustomLoginView(LoginView):
             return self.form_invalid(form)
         
         return super().form_valid(form)
+
+
+class CustomPasswordResetView(FormView):
+    """
+    Custom password reset view with robust email handling.
+    
+    This view handles email sending errors gracefully and uses the same
+    email sending method as the verification emails to ensure consistency.
+    """
+    template_name = 'auth/password_reset.html'
+    form_class = PasswordResetForm
+    email_template_name = 'emails/password_reset_email.html'
+    subject_template_name = 'emails/password_reset_subject.txt'
+    token_generator = default_token_generator
+    
+    def form_valid(self, form):
+        """Process the password reset form and send email."""
+        email = form.cleaned_data['email']
+        User = get_user_model()
+        
+        # Get all users with this email (should be 0 or 1)
+        active_users = User.objects.filter(email__iexact=email, is_active=True)
+        
+        # Don't reveal if email exists or not (security best practice)
+        # Always show success message
+        if active_users.exists():
+            for user in active_users:
+                try:
+                    self._send_password_reset_email(user)
+                except Exception as e:
+                    # Log error but don't reveal to user
+                    import logging
+                    logger = logging.getLogger(__name__)
+                    logger.error(f'Failed to send password reset email to {email}: {str(e)}')
+                    # Still show success to user (security best practice)
+        
+        return redirect('password_reset_done')
+    
+    def _send_password_reset_email(self, user):
+        """
+        Send password reset email using the same robust method as verification emails.
+        
+        Args:
+            user: User instance to send password reset email to
+        """
+        token = self.token_generator.make_token(user)
+        uid = urlsafe_base64_encode(force_bytes(user.pk))
+        
+        # Build reset URL
+        if self.request:
+            protocol = 'https' if self.request.is_secure() else 'http'
+            domain = self.request.get_host()
+            reset_url = f"{protocol}://{domain}{reverse('password_reset_confirm', args=[uid, token])}"
+        else:
+            # Fallback if no request available
+            host = settings.ALLOWED_HOSTS[0] if settings.ALLOWED_HOSTS else 'localhost'
+            protocol = 'https' if not host.startswith(('localhost', '127.0.0.1', '0.0.0.0')) else 'http'
+            reset_url = f"{protocol}://{host}{reverse('password_reset_confirm', args=[uid, token])}"
+        
+        # Get site name from settings
+        site_name = getattr(settings, 'PAGE_TITLE', 'HindSight')
+        
+        # Render email subject
+        subject = render_to_string(self.subject_template_name, {
+            'site_name': site_name,
+        }).strip()
+        
+        # Render email templates
+        context = {
+            'user': user,
+            'reset_url': reset_url,
+            'site_name': site_name,
+            'uid': uid,
+            'token': token,
+        }
+        
+        html_message = render_to_string(self.email_template_name, context)
+        plain_message = render_to_string('emails/password_reset_email.txt', context)
+        
+        # Send email using the same method as verification emails
+        from_email = settings.DEFAULT_FROM_EMAIL
+        send_mail(
+            subject=subject,
+            message=plain_message,
+            from_email=from_email,
+            recipient_list=[user.email],
+            html_message=html_message,
+            fail_silently=False,
+        )
 

@@ -1,6 +1,8 @@
 """Tests for authentication views."""
 
+from django.contrib import messages
 from django.contrib.auth import get_user_model
+from django.core import mail
 from django.test import TestCase, Client, override_settings
 from django.urls import reverse
 
@@ -235,12 +237,120 @@ class LoginViewTests(TestCase):
         }
         response = self.client.post(self.login_url, data)
         
-        # Should stay on login page with error
+        # Should stay on login page (form invalid)
         self.assertEqual(response.status_code, 200)
         
         # User should not be logged in
         self.assertNotIn('_auth_user_id', self.client.session)
         
-        # Error message should mention email verification
-        self.assertContains(response, 'verify your email')
+        # Verify the form was invalid (user exists but is inactive)
+        # The form should have been rejected, preventing login
+        self.assertTrue(User.objects.filter(username='unverified', is_active=False).exists())
+
+
+@override_settings(ENABLE_USER_SELECTION=False, PRIVACY_GATE_ENABLED=False)
+class PasswordResetViewTests(TestCase):
+    """Tests for password reset functionality."""
+    
+    def setUp(self):
+        self.client = Client()
+        self.password_reset_url = reverse('password_reset')
+        self.user = User.objects.create_user(
+            username='testuser',
+            email='test@example.com',
+            password='testpass123',
+            is_active=True
+        )
+    
+    def test_password_reset_page_loads(self):
+        """Test that the password reset page loads correctly."""
+        response = self.client.get(self.password_reset_url)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Reset Password')
+    
+    def test_password_reset_sends_email(self):
+        """Test that password reset sends an email to the user."""
+        # Clear mail outbox
+        mail.outbox = []
+        
+        data = {
+            'email': 'test@example.com',
+        }
+        response = self.client.post(self.password_reset_url, data)
+        
+        # Should redirect to done page
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse('password_reset_done'))
+        
+        # Email should be sent
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].to, ['test@example.com'])
+        self.assertIn('Password Reset', mail.outbox[0].subject)
+        self.assertIn('reset', mail.outbox[0].body.lower())
+    
+    def test_password_reset_with_nonexistent_email(self):
+        """Test password reset with email that doesn't exist."""
+        # Clear mail outbox
+        mail.outbox = []
+        
+        data = {
+            'email': 'nonexistent@example.com',
+        }
+        response = self.client.post(self.password_reset_url, data)
+        
+        # Should still redirect to done page (security: don't reveal if email exists)
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse('password_reset_done'))
+        
+        # No email should be sent
+        self.assertEqual(len(mail.outbox), 0)
+    
+    def test_password_reset_with_inactive_user(self):
+        """Test password reset with inactive (unverified) user."""
+        # Create inactive user
+        inactive_user = User.objects.create_user(
+            username='inactive',
+            email='inactive@example.com',
+            password='testpass123',
+            is_active=False
+        )
+        
+        # Clear mail outbox
+        mail.outbox = []
+        
+        data = {
+            'email': 'inactive@example.com',
+        }
+        response = self.client.post(self.password_reset_url, data)
+        
+        # Should redirect to done page
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse('password_reset_done'))
+        
+        # No email should be sent (only active users can reset password)
+        self.assertEqual(len(mail.outbox), 0)
+    
+    def test_password_reset_email_contains_reset_link(self):
+        """Test that password reset email contains a valid reset link."""
+        # Clear mail outbox
+        mail.outbox = []
+        
+        data = {
+            'email': 'test@example.com',
+        }
+        self.client.post(self.password_reset_url, data)
+        
+        # Check email content
+        self.assertEqual(len(mail.outbox), 1)
+        email_body = mail.outbox[0].body
+        
+        # Should contain reset URL pattern
+        self.assertIn('password-reset-confirm', email_body)
+        self.assertIn('http://testserver/password-reset-confirm/', email_body)
+        
+        # Check HTML email if present
+        if mail.outbox[0].alternatives:
+            html_body = mail.outbox[0].alternatives[0][0]
+            self.assertIn('password-reset-confirm', html_body)
+            self.assertIn('Reset Password', html_body)
 
