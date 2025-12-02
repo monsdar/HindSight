@@ -7,7 +7,7 @@ from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import get_user_model, login
 from django.contrib.auth.decorators import login_required
-from django.contrib.auth.forms import PasswordResetForm
+from django.contrib.auth.forms import PasswordResetForm, SetPasswordForm
 from django.contrib.auth.tokens import default_token_generator
 from django.contrib.auth.views import LoginView, PasswordResetDoneView, PasswordResetConfirmView, PasswordResetCompleteView
 from django.core.cache import cache
@@ -414,4 +414,51 @@ class CustomPasswordResetView(FormView):
             html_message=html_message,
             fail_silently=False,
         )
+
+
+class CustomPasswordResetConfirmView(PasswordResetConfirmView):
+    """
+    Custom password reset confirm view that properly displays form errors.
+    
+    This view extends Django's PasswordResetConfirmView to ensure form errors
+    are properly displayed in the template.
+    """
+    template_name = 'auth/password_reset_confirm.html'
+    form_class = SetPasswordForm
+    token_generator = default_token_generator
+    post_reset_login = False
+    post_reset_login_backend = None
+    
+    def get_success_url(self):
+        """Return the URL to redirect to after successful password reset."""
+        return reverse('password_reset_complete')
+    
+    def form_invalid(self, form):
+        """Handle invalid form submission and display errors."""
+        # Display form errors as messages
+        for field, errors in form.errors.items():
+            for error in errors:
+                if field == '__all__':
+                    messages.error(self.request, error)
+                else:
+                    # Field-specific errors
+                    field_name = field.replace('_', ' ').title()
+                    messages.error(self.request, f'{field_name}: {error}')
+        
+        # Return the form with errors (don't redirect)
+        return self.render_to_response(self.get_context_data(form=form))
+    
+    def form_valid(self, form):
+        """Handle valid form submission."""
+        # Save the new password
+        user = form.save()
+        
+        # Display success message
+        messages.success(
+            self.request,
+            'Your password has been successfully reset. You can now log in with your new password.'
+        )
+        
+        # Redirect to success page
+        return redirect(self.get_success_url())
 

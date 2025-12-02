@@ -17,6 +17,7 @@ from .auth_views import (
     resend_verification_done,
     CustomLoginView,
     CustomPasswordResetView,
+    CustomPasswordResetConfirmView,
 )
 
 
@@ -57,8 +58,10 @@ urlpatterns = [
          auth_views.PasswordResetDoneView.as_view(template_name='auth/password_reset_done.html'),
          name='password_reset_done'),
     path('password-reset-confirm/<uidb64>/<token>/', 
-         auth_views.PasswordResetConfirmView.as_view(template_name='auth/password_reset_confirm.html'),
+         CustomPasswordResetConfirmView.as_view(),
          name='password_reset_confirm'),
+    path('password-reset-confirm/<uidb64>/set-password/', 
+         CustomPasswordResetConfirmView.as_view()),
     path('password-reset-complete/', 
          auth_views.PasswordResetCompleteView.as_view(template_name='auth/password_reset_complete.html'),
          name='password_reset_complete'),

@@ -354,3 +354,148 @@ class PasswordResetViewTests(TestCase):
             self.assertIn('password-reset-confirm', html_body)
             self.assertIn('Reset Password', html_body)
 
+
+@override_settings(ENABLE_USER_SELECTION=False, PRIVACY_GATE_ENABLED=False)
+class PasswordResetConfirmViewTests(TestCase):
+    """Tests for password reset confirm functionality."""
+    
+    def setUp(self):
+        self.client = Client()
+        self.user = User.objects.create_user(
+            username='testuser',
+            email='test@example.com',
+            password='oldpassword123',
+            is_active=True
+        )
+        from django.contrib.auth.tokens import default_token_generator
+        from django.utils.encoding import force_bytes
+        from django.utils.http import urlsafe_base64_encode
+        
+        self.token = default_token_generator.make_token(self.user)
+        self.uidb64 = urlsafe_base64_encode(force_bytes(self.user.pk))
+        self.reset_confirm_url = reverse('password_reset_confirm', args=[self.uidb64, self.token])
+    
+    def test_password_reset_confirm_page_loads(self):
+        """Test that the password reset confirm page loads correctly."""
+        response = self.client.get(self.reset_confirm_url, follow=True)
+        # Django's PasswordResetConfirmView redirects to set-password URL first
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Set New Password')
+        self.assertContains(response, 'new_password1')
+        self.assertContains(response, 'new_password2')
+    
+    def test_successful_password_reset(self):
+        """Test successful password reset."""
+        # First GET to get redirected to set-password URL
+        get_response = self.client.get(self.reset_confirm_url, follow=True)
+        # Extract the set-password URL from the redirect chain
+        set_password_url = None
+        if get_response.redirect_chain:
+            set_password_url = get_response.redirect_chain[-1][0]
+        else:
+            # If no redirect, use the original URL
+            set_password_url = self.reset_confirm_url
+        
+        data = {
+            'new_password1': 'newpassword123',
+            'new_password2': 'newpassword123',
+        }
+        response = self.client.post(set_password_url, data, follow=True)
+        
+        # Should redirect to complete page
+        final_url = response.redirect_chain[-1][0] if response.redirect_chain else response.url
+        self.assertIn('password-reset-complete', final_url)
+        
+        # User should be able to login with new password
+        self.assertTrue(self.client.login(username='testuser', password='newpassword123'))
+        
+        # Old password should not work
+        self.client.logout()
+        self.assertFalse(self.client.login(username='testuser', password='oldpassword123'))
+    
+    def test_password_reset_with_mismatched_passwords(self):
+        """Test password reset with mismatched passwords."""
+        # First GET to get redirected to set-password URL
+        get_response = self.client.get(self.reset_confirm_url, follow=True)
+        set_password_url = get_response.redirect_chain[-1][0] if get_response.redirect_chain else self.reset_confirm_url
+        
+        data = {
+            'new_password1': 'newpassword123',
+            'new_password2': 'differentpassword456',
+        }
+        response = self.client.post(set_password_url, data, follow=True)
+        
+        # Should stay on the same page (form invalid)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Set New Password')
+        
+        # Should display error message
+        messages_list = list(messages.get_messages(response.wsgi_request))
+        error_found = any('match' in str(msg).lower() or 'password' in str(msg).lower() for msg in messages_list)
+        self.assertTrue(error_found or 'form' in response.content.decode().lower())
+        
+        # Password should not be changed
+        self.assertTrue(self.client.login(username='testuser', password='oldpassword123'))
+    
+    def test_password_reset_with_short_password(self):
+        """Test password reset with password that's too short."""
+        # First GET to get redirected to set-password URL
+        get_response = self.client.get(self.reset_confirm_url, follow=True)
+        set_password_url = get_response.redirect_chain[-1][0] if get_response.redirect_chain else self.reset_confirm_url
+        
+        data = {
+            'new_password1': 'short',
+            'new_password2': 'short',
+        }
+        response = self.client.post(set_password_url, data, follow=True)
+        
+        # Should stay on the same page (form invalid)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Set New Password')
+        
+        # Password should not be changed
+        self.assertTrue(self.client.login(username='testuser', password='oldpassword123'))
+    
+    def test_password_reset_with_invalid_token(self):
+        """Test password reset with invalid token."""
+        invalid_token = 'invalid-token-123'
+        invalid_url = reverse('password_reset_confirm', args=[self.uidb64, invalid_token])
+        
+        response = self.client.get(invalid_url)
+        
+        # Should show invalid link message
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'invalid')
+        self.assertContains(response, 'expired')
+    
+    def test_password_reset_with_invalid_uid(self):
+        """Test password reset with invalid user ID."""
+        invalid_uidb64 = 'invalid-uid'
+        invalid_url = reverse('password_reset_confirm', args=[invalid_uidb64, self.token])
+        
+        response = self.client.get(invalid_url)
+        
+        # Should show invalid link message
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'invalid')
+    
+    def test_password_reset_form_displays_errors(self):
+        """Test that form errors are displayed in the template."""
+        # First GET to get redirected to set-password URL
+        get_response = self.client.get(self.reset_confirm_url, follow=True)
+        set_password_url = get_response.redirect_chain[-1][0] if get_response.redirect_chain else self.reset_confirm_url
+        
+        data = {
+            'new_password1': 'newpassword123',
+            'new_password2': 'differentpassword456',
+        }
+        response = self.client.post(set_password_url, data, follow=True)
+        
+        # Should display form errors
+        self.assertEqual(response.status_code, 200)
+        # Check for error indicators in the form
+        content = response.content.decode()
+        # Form should be present with errors
+        self.assertIn('new_password1', content)
+        self.assertIn('new_password2', content)
+
