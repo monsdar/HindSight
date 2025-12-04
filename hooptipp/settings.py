@@ -285,7 +285,11 @@ EMAIL_BACKEND = os.environ.get(
 # AWS SES Configuration (when using django-ses)
 if EMAIL_BACKEND == 'django_ses.SESBackend':
     AWS_SES_REGION_NAME = os.environ.get('AWS_SES_REGION_NAME', 'us-east-1')
-    AWS_SES_REGION_ENDPOINT = os.environ.get('AWS_SES_REGION_ENDPOINT', '')
+    # Only set AWS_SES_REGION_ENDPOINT if explicitly provided
+    # If not set, django-ses will automatically construct the endpoint from the region
+    aws_ses_endpoint = os.environ.get('AWS_SES_REGION_ENDPOINT', '').strip()
+    if aws_ses_endpoint:
+        AWS_SES_REGION_ENDPOINT = aws_ses_endpoint
     AWS_ACCESS_KEY_ID = os.environ.get('AWS_ACCESS_KEY_ID', '')
     AWS_SECRET_ACCESS_KEY = os.environ.get('AWS_SECRET_ACCESS_KEY', '')
     DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', '')

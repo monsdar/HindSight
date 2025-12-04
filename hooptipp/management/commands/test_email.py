@@ -42,8 +42,11 @@ class Command(BaseCommand):
                     settings.EMAIL_BACKEND
                 )
             ))
-            if options['to']:
-                self._send_test_email(options['to'])
+        if options['to']:
+            self.stdout.write(self.style.SUCCESS('Sending test email to {}'.format(options['to'])))
+            self._send_test_email(options['to'])
+        else:
+            self.stdout.write(self.style.WARNING('No to address provided, skipping test email'))
 
     def _test_smtp_configuration(self, options):
         """Test SMTP configuration."""
@@ -96,7 +99,9 @@ class Command(BaseCommand):
 
     def _send_test_email(self, to_email):
         """Send a test email."""
-        self.stdout.write('\nSending test email to {}...'.format(to_email))
+        self.stdout.write('\nSending test email...')
+        self.stdout.write('  From: {}'.format(settings.DEFAULT_FROM_EMAIL))
+        self.stdout.write('  To: {}'.format(to_email))
         try:
             send_mail(
                 subject='Test Email from {}'.format(getattr(settings, 'PAGE_TITLE', 'HindSight')),
