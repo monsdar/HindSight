@@ -298,6 +298,32 @@ if EMAIL_BACKEND == 'django_ses.SESBackend':
             'DEFAULT_FROM_EMAIL must be set when using AWS SES backend. '
             'Set it via the DEFAULT_FROM_EMAIL environment variable.'
         )
+    
+    # Python 3.12 compatibility fix for django-ses
+    # django-ses calls message.as_bytes(linesep="\n") but Python 3.12's email library
+    # no longer accepts the linesep parameter. This patch fixes the issue.
+    try:
+        from email.message import Message
+        import inspect
+        
+        # Store original as_bytes method
+        original_as_bytes = Message.as_bytes
+        
+        # Check if as_bytes accepts linesep parameter
+        sig = inspect.signature(original_as_bytes)
+        accepts_linesep = 'linesep' in sig.parameters
+        
+        if not accepts_linesep:
+            # Python 3.12+ doesn't accept linesep, create wrapper that ignores it
+            def patched_as_bytes(self, unixfrom=False, linesep=None):
+                # Ignore linesep parameter and call original method
+                return original_as_bytes(self, unixfrom=unixfrom)
+            
+            # Apply the patch to the Message class
+            Message.as_bytes = patched_as_bytes
+    except (ImportError, AttributeError):
+        # email library or Message not available, skip patching
+        pass
 # Optional SMTP settings for production (only needed if using SMTP backend)
 elif EMAIL_BACKEND == 'django.core.mail.backends.smtp.EmailBackend':
     EMAIL_HOST = os.environ.get('EMAIL_HOST', 'smtp.gmail.com')
