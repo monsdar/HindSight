@@ -1024,13 +1024,14 @@ class HomeViewTests(TestCase):
         self.assertTrue(alice_found, "Active user should be in leaderboard")
         self.assertEqual(alice_rank, 1, "Active user should be rank 1")
     
-    def test_leaderboard_shows_top_6_when_active_user_not_in_leaderboard(self) -> None:
-        """Test that leaderboard shows top 6 when active user has no scores."""
+    def test_leaderboard_shows_active_user_with_no_scores(self) -> None:
+        """Test that leaderboard shows active user even when they have 0 points (at bottom of list)."""
         user_model = get_user_model()
         
         # Set active user in session (Alice has no scores)
-        from hooptipp.user_context import set_active_user
-        set_active_user(self.client, self.alice)
+        session = self.client.session
+        session['active_user_id'] = self.alice.id
+        session.save()
         
         # Create 15 users with scores
         users = []
@@ -1055,17 +1056,89 @@ class HomeViewTests(TestCase):
         
         leaderboard_rows = response.context['leaderboard_rows']
         
-        # Should show top 6
+        # Should show rank 1 + divider + users around Alice (who is last with 0 points)
+        # Max 6 users (excluding divider)
         non_divider_rows = [r for r in leaderboard_rows if not hasattr(r, 'is_divider') or not r.is_divider]
-        self.assertLessEqual(len(non_divider_rows), 6)
+        self.assertLessEqual(len(non_divider_rows), 6, "Should show max 6 users")
         
-        # No divider should be present
+        # Alice should be in the leaderboard with 0 points
+        alice_found = False
         divider_found = False
+        rank_1_found = False
+        
         for row in leaderboard_rows:
             if hasattr(row, 'is_divider') and row.is_divider:
                 divider_found = True
+            elif hasattr(row, 'id') and row.id == self.alice.id:
+                alice_found = True
+                self.assertEqual(row.total_points, 0, "Alice should have 0 points")
+                self.assertEqual(row.event_count, 0, "Alice should have 0 events scored")
+                self.assertTrue(hasattr(row, 'is_active_user') and row.is_active_user, "Alice should be marked as active user")
+            elif hasattr(row, 'rank') and row.rank == 1:
+                rank_1_found = True
         
-        self.assertFalse(divider_found, "Divider should not be present when active user is not in leaderboard")
+        self.assertTrue(alice_found, "Alice should be in the leaderboard even with no scores")
+        self.assertTrue(divider_found, "Divider should be present when active user is at bottom")
+        self.assertTrue(rank_1_found, "Rank 1 should be shown")
+    
+    def test_leaderboard_zero_score_users_only_shown_when_active(self) -> None:
+        """Test that users with 0 points only appear when they are the active user."""
+        user_model = get_user_model()
+        
+        # Create 10 users with scores
+        users_with_scores = []
+        for i in range(10):
+            user = user_model.objects.create_user(
+                username=f'scorer{i}',
+                password='password123',
+            )
+            UserEventScore.objects.create(
+                user=user,
+                prediction_event=self.event,
+                base_points=100 - (i * 5),
+                lock_multiplier=1,
+                points_awarded=100 - (i * 5),
+            )
+            users_with_scores.append(user)
+        
+        # Create 2 users without any scores (besides alice from setUp)
+        user_no_score_1 = user_model.objects.create_user(
+            username='no_score_1',
+            password='password123',
+        )
+        user_no_score_2 = user_model.objects.create_user(
+            username='no_score_2',
+            password='password123',
+        )
+        
+        # Test 1: No active user - 0-score users should NOT be in top 6
+        response = self.client.get(reverse('predictions:home'))
+        leaderboard_rows = response.context['leaderboard_rows']
+        non_divider_rows = [r for r in leaderboard_rows if not hasattr(r, 'is_divider') or not r.is_divider]
+        user_ids = [row.id for row in non_divider_rows]
+        
+        self.assertNotIn(self.alice.id, user_ids, "Alice (0 points) should not be in top 6")
+        self.assertNotIn(user_no_score_1.id, user_ids, "0-score user should not be in top 6")
+        self.assertNotIn(user_no_score_2.id, user_ids, "0-score user should not be in top 6")
+        
+        # Test 2: Set user_no_score_1 as active - they SHOULD appear
+        session = self.client.session
+        session['active_user_id'] = user_no_score_1.id
+        session.save()
+        
+        response = self.client.get(reverse('predictions:home'))
+        leaderboard_rows = response.context['leaderboard_rows']
+        non_divider_rows = [r for r in leaderboard_rows if not hasattr(r, 'is_divider') or not r.is_divider]
+        user_ids = [row.id for row in non_divider_rows]
+        
+        self.assertIn(user_no_score_1.id, user_ids, "Active user with 0 points should be shown")
+        
+        # Verify the 0-score user has correct values
+        for row in non_divider_rows:
+            if row.id == user_no_score_1.id:
+                self.assertEqual(row.total_points, 0, "User should have 0 points")
+                self.assertEqual(row.event_count, 0, "User should have 0 events scored")
+                self.assertTrue(hasattr(row, 'is_active_user') and row.is_active_user, "Should be marked as active")
     
     def test_leaderboard_active_user_highlighted_in_template(self) -> None:
         """Test that active user is highlighted in the template."""
@@ -1107,11 +1180,10 @@ class HomeViewTests(TestCase):
         # (Alice should be in the leaderboard with her display name)
         self.assertContains(response, 'alice')
         
-        # Check that divider element is present (visually, not as text since user removed the text)
-        # We can check for the divider div structure with border
+        # Check that Alice is marked as active user with the accent border
         response_content = response.content.decode('utf-8')
-        # Check for divider visual element (two border divs)
-        self.assertTrue('border-t border-slate-700' in response_content, "Divider should be present")
+        # Alice should have the theme-accent-border class (for active user highlighting)
+        self.assertTrue('theme-accent-border' in response_content, "Active user should have accent border")
     
     def test_leaderboard_max_6_users_shown(self) -> None:
         """Test that leaderboard never shows more than 6 users (excluding divider)."""

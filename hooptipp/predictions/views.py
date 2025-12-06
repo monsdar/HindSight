@@ -488,19 +488,31 @@ def home(request):
     )
 
     # Build base queryset for leaderboard
-    leaderboard_score_filter = Q(usereventscore__isnull=False)
+    # Include all users, even those with no scores
     
-    # If active season exists, filter scores by season timeframe
+    # Build conditional expressions for filtering scores by season
     if active_season:
-        leaderboard_score_filter &= Q(
+        # Only count scores within the active season's date range
+        season_filter = Q(
             usereventscore__awarded_at__date__gte=active_season.start_date,
             usereventscore__awarded_at__date__lte=active_season.end_date
         )
-
-    leaderboard_users = User.objects.filter(leaderboard_score_filter).annotate(
-        total_points=Coalesce(Sum('usereventscore__points_awarded'), 0),
-        event_count=Coalesce(Count('usereventscore__prediction_event', distinct=True), 0),
-    ).order_by('-total_points', '-event_count', 'username')
+        leaderboard_users = User.objects.annotate(
+            total_points=Coalesce(
+                Sum('usereventscore__points_awarded', filter=season_filter),
+                0
+            ),
+            event_count=Coalesce(
+                Count('usereventscore__prediction_event', distinct=True, filter=season_filter),
+                0
+            ),
+        ).order_by('-total_points', '-event_count', 'username')
+    else:
+        # No active season, count all scores
+        leaderboard_users = User.objects.annotate(
+            total_points=Coalesce(Sum('usereventscore__points_awarded'), 0),
+            event_count=Coalesce(Count('usereventscore__prediction_event', distinct=True), 0),
+        ).order_by('-total_points', '-event_count', 'username')
 
     leaderboard_rows = list(leaderboard_users)
     leaderboard_user_ids = [row.id for row in leaderboard_rows]
