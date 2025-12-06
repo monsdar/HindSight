@@ -623,6 +623,7 @@ class Achievement(models.Model):
         SEASON_GOLD = 'season_gold', 'Season Gold Medal'
         SEASON_SILVER = 'season_silver', 'Season Silver Medal'
         SEASON_BRONZE = 'season_bronze', 'Season Bronze Medal'
+        BETA_TESTER = 'beta_tester', 'Beta Tester'
         # Future achievement types can be added here:
         # REGISTRATION_1YEAR = 'registration_1year', 'Registered 1 Year'
         # PREDICTIONS_100 = 'predictions_100', '100 Correct Predictions'

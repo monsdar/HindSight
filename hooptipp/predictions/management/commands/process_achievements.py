@@ -141,6 +141,7 @@ class Command(BaseCommand):
         """Get dictionary of achievement processors."""
         return {
             'season_achievements': self._process_season_achievements,
+            'beta_tester': self._process_beta_tester_achievements,
         }
 
     def _process_season_achievements(
@@ -324,4 +325,74 @@ class Command(BaseCommand):
             previous_event_count = event_count
         
         return rankings
+
+    def _process_beta_tester_achievements(
+        self,
+        dry_run: bool = False,
+        force: bool = False,
+    ) -> AchievementProcessorResult:
+        """
+        Process beta tester achievements for users registered before December 20, 2025.
+        """
+        result = AchievementProcessorResult(achievement_type='beta_tester')
+        
+        from django.contrib.auth import get_user_model
+        from datetime import datetime, date
+        User = get_user_model()
+        
+        # Beta tester cutoff date: December 20, 2025
+        beta_cutoff_date = date(2025, 12, 20)
+        beta_cutoff_datetime = timezone.make_aware(
+            datetime.combine(beta_cutoff_date, datetime.min.time())
+        )
+        
+        # Find all users registered before the cutoff date
+        beta_users = User.objects.filter(date_joined__lt=beta_cutoff_datetime)
+        
+        if not beta_users.exists():
+            result.skipped = 1
+            return result
+        
+        achievement_config = {
+            'type': Achievement.AchievementType.BETA_TESTER,
+            'name': 'Beta Tester',
+            'description': 'Participated in the BiBATiPP Betatest',
+            'emoji': '🤖',
+        }
+        
+        with transaction.atomic():
+            for user in beta_users:
+                # Check if achievement already exists
+                existing = Achievement.objects.filter(
+                    user=user,
+                    season=None,  # Beta tester is not season-specific
+                    achievement_type=achievement_config['type']
+                ).first()
+                
+                if existing and not force:
+                    result.skipped += 1
+                    continue
+                
+                if dry_run:
+                    result.created += 1
+                    continue
+                
+                # Create or update achievement
+                achievement, created = Achievement.objects.update_or_create(
+                    user=user,
+                    season=None,
+                    achievement_type=achievement_config['type'],
+                    defaults={
+                        'name': achievement_config['name'],
+                        'description': achievement_config['description'],
+                        'emoji': achievement_config['emoji'],
+                    }
+                )
+                
+                if created:
+                    result.created += 1
+                else:
+                    result.updated += 1
+        
+        return result
 

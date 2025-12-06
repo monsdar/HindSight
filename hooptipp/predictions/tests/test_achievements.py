@@ -508,3 +508,103 @@ class AchievementViewIntegrationTests(TestCase):
             self.assertTrue(hasattr(user2_row, 'user_achievements'))
             self.assertEqual(len(user2_row.user_achievements), 0)
 
+
+class BetaTesterAchievementTests(TestCase):
+    """Test beta tester achievement functionality."""
+
+    def setUp(self):
+        """Set up test data."""
+        self.user_model = get_user_model()
+        
+        # Create a user registered before cutoff (beta tester)
+        from datetime import datetime
+        beta_date = timezone.make_aware(
+            datetime(2025, 12, 15, 10, 0, 0)  # Before Dec 20, 2025
+        )
+        self.beta_user = self.user_model.objects.create_user(
+            username='betauser',
+            password='pass',
+        )
+        # Manually set date_joined to simulate early registration
+        self.user_model.objects.filter(id=self.beta_user.id).update(date_joined=beta_date)
+        self.beta_user.refresh_from_db()
+        
+        # Create a user registered after cutoff (not beta tester)
+        after_date = timezone.make_aware(
+            datetime(2025, 12, 25, 10, 0, 0)  # After Dec 20, 2025
+        )
+        self.regular_user = self.user_model.objects.create_user(
+            username='regularuser',
+            password='pass',
+        )
+        self.user_model.objects.filter(id=self.regular_user.id).update(date_joined=after_date)
+        self.regular_user.refresh_from_db()
+
+    def test_beta_tester_achievement_created(self):
+        """Test that beta tester achievement is created for eligible users."""
+        from io import StringIO
+        from django.core.management import call_command
+        
+        out = StringIO()
+        call_command('process_achievements', stdout=out)
+        
+        # Beta user should have the achievement
+        beta_achievement = Achievement.objects.filter(
+            user=self.beta_user,
+            achievement_type=Achievement.AchievementType.BETA_TESTER,
+            season=None
+        )
+        self.assertEqual(beta_achievement.count(), 1)
+        
+        achievement = beta_achievement.first()
+        self.assertEqual(achievement.name, 'Beta Tester')
+        self.assertEqual(achievement.emoji, '🤖')
+        self.assertIsNone(achievement.season)
+        
+        # Regular user should not have the achievement
+        regular_achievement = Achievement.objects.filter(
+            user=self.regular_user,
+            achievement_type=Achievement.AchievementType.BETA_TESTER
+        )
+        self.assertEqual(regular_achievement.count(), 0)
+
+    def test_beta_tester_achievement_idempotency(self):
+        """Test that running the command twice doesn't create duplicate beta tester achievements."""
+        from io import StringIO
+        from django.core.management import call_command
+        
+        out = StringIO()
+        
+        # Run first time
+        call_command('process_achievements', stdout=out)
+        first_count = Achievement.objects.filter(
+            achievement_type=Achievement.AchievementType.BETA_TESTER
+        ).count()
+        
+        # Run second time
+        call_command('process_achievements', stdout=out)
+        second_count = Achievement.objects.filter(
+            achievement_type=Achievement.AchievementType.BETA_TESTER
+        ).count()
+        
+        # Should have same number of achievements
+        self.assertEqual(first_count, second_count)
+
+    def test_beta_tester_achievement_dry_run(self):
+        """Test dry-run mode doesn't create beta tester achievements."""
+        from io import StringIO
+        from django.core.management import call_command
+        
+        out = StringIO()
+        call_command('process_achievements', '--dry-run', stdout=out)
+        
+        # No achievements should be created
+        beta_achievements = Achievement.objects.filter(
+            achievement_type=Achievement.AchievementType.BETA_TESTER
+        )
+        self.assertEqual(beta_achievements.count(), 0)
+        
+        # But output should indicate what would be created
+        output = out.getvalue()
+        self.assertIn('DRY RUN', output)
+
