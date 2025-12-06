@@ -247,4 +247,37 @@ class LockService:
         self._pending_ids.add(tip.id)
         if self._next_return_at is None or release_at < self._next_return_at:
             self._next_return_at = release_at
+    
+    def return_lock_for_forfeited_event(self, tip: UserTip) -> bool:
+        """Return a lock immediately for a forfeited match/event.
+        
+        When a match is forfeited (e.g., 20-0 forfeit in basketball), the match doesn't
+        count as correct or incorrect for anyone. Locks should be returned immediately
+        without any penalty or delay.
+        
+        This sets the status to NONE since the tip is neither correct nor incorrect.
+        """
+        if not self._initialised:
+            self.refresh()
+
+        if tip.id not in self._active_ids and not tip.is_locked:
+            return False
+
+        now = timezone.now()
+        tip.is_locked = False
+        tip.lock_status = UserTip.LockStatus.NONE
+        tip.lock_released_at = now
+        tip.lock_releases_at = None
+        tip.save(
+            update_fields=[
+                "is_locked",
+                "lock_status",
+                "lock_released_at",
+                "lock_releases_at",
+            ]
+        )
+        if tip.id in self._active_ids:
+            self._active_ids.remove(tip.id)
+        self.available = min(self.total, self.available + 1)
+        return True
 

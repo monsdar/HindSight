@@ -155,7 +155,8 @@ class Command(BaseCommand):
         """Process scores for a filtered set of events."""
         from hooptipp.predictions.models import UserEventScore, UserTip
         from hooptipp.predictions.scoring_service import (
-            _tip_matches_outcome, _calculate_lock_multiplier, _outcome_has_selection
+            _tip_matches_outcome, _calculate_lock_multiplier, _outcome_has_selection,
+            _is_forfeited_match, _return_locks_for_forfeited_match
         )
         from hooptipp.predictions.lock_service import LockService
         
@@ -171,6 +172,24 @@ class Command(BaseCommand):
             for event in events_queryset:
                 try:
                     outcome = event.outcome
+                    
+                    # Check if this is a forfeited match - if so, return locks but don't score
+                    if _is_forfeited_match(outcome):
+                        # Count locks before returning them
+                        locks_count = event.tips.filter(lock_status=UserTip.LockStatus.ACTIVE).count()
+                        # Return locks
+                        locks_returned_count = _return_locks_for_forfeited_match(outcome)
+                        total_locks_returned += locks_returned_count
+                        # Count all tips as skipped since no scoring occurred
+                        total_tips_skipped += event.tips.count()
+                        total_events_processed += 1
+                        
+                        # Mark outcome as "scored" (processed) to avoid re-processing
+                        outcome.scored_at = timezone.now()
+                        outcome.score_error = 'Forfeited match - no scoring'
+                        outcome.save(update_fields=['scored_at', 'score_error'])
+                        continue
+                    
                     if not _outcome_has_selection(outcome):
                         events_with_errors.append(f"{event.name}: No winning option specified")
                         continue

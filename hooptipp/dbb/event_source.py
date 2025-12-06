@@ -649,6 +649,7 @@ class DbbEventSource(EventSource):
         - score: nullable string (e.g., "85:78") - score string for backwards compatibility
         - is_finished: boolean
         - is_cancelled: boolean
+        - is_forfeit: boolean - true if the match was forfeited (typically 20-0 score)
         
         Args:
             event: The prediction event for this match
@@ -659,6 +660,14 @@ class DbbEventSource(EventSource):
             away_team: Away team name
             result: EventSourceResult to track outcome creation
         """
+        # Check if match is forfeited - these should not have outcomes created
+        # and any locks should be returned to users
+        is_forfeit = match_data.get('is_forfeit', False)
+        if is_forfeit:
+            logger.info(f'Match {match_id} was forfeited, returning locks but not creating outcome')
+            self._handle_forfeited_match(event)
+            return
+        
         # Check if outcome already exists
         existing_outcome = EventOutcome.objects.filter(prediction_event=event).first()
         if existing_outcome:
@@ -729,6 +738,7 @@ class DbbEventSource(EventSource):
                     'is_finished': match_data.get('is_finished', True),
                     'is_cancelled': match_data.get('is_cancelled', False),
                     'is_confirmed': match_data.get('is_confirmed', False),
+                    'is_forfeit': is_forfeit,
                     'match_id': match_id,
                     'score_string': score_str,
                 }
@@ -745,4 +755,32 @@ class DbbEventSource(EventSource):
                 logger.info(f'Created outcome for past match: {event.name} -> {winning_option.label}')
         except Exception as e:
             logger.exception(f'Error creating outcome for match {match_id}: {e}')
+    
+    def _handle_forfeited_match(self, event: PredictionEvent) -> None:
+        """
+        Handle a forfeited match by returning locks to users without creating an outcome.
+        
+        Forfeited matches (20-0 scores with is_forfeit flag) should not count as correct
+        or incorrect predictions. Any locks placed on these matches should be returned.
+        
+        Args:
+            event: The prediction event for the forfeited match
+        """
+        from hooptipp.predictions.models import UserTip
+        from hooptipp.predictions.lock_service import LockService
+        
+        # Get all tips with active locks for this event
+        tips_with_locks = UserTip.objects.filter(
+            prediction_event=event,
+            lock_status=UserTip.LockStatus.ACTIVE
+        ).select_related('user')
+        
+        for tip in tips_with_locks:
+            try:
+                lock_service = LockService(tip.user)
+                # Return the lock to the user
+                lock_service.return_lock_for_forfeited_event(tip)
+                logger.info(f'Returned lock to {tip.user.username} for forfeited match {event.name}')
+            except Exception as e:
+                logger.warning(f'Failed to return lock for forfeited match {event.name}: {e}')
 

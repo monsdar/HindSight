@@ -830,3 +830,262 @@ class ProcessAllUserScoresTests(TestCase):
         tip.refresh_from_db()
         # Status should remain WAS_LOCKED (idempotent)
         self.assertEqual(tip.lock_status, UserTip.LockStatus.WAS_LOCKED)
+
+
+class ForfeitedMatchTests(TestCase):
+    """Tests for handling forfeited matches (20-0 scores with is_forfeit flag)."""
+    
+    def setUp(self) -> None:
+        self.user_model = get_user_model()
+        
+        # Create option category for teams
+        self.teams_cat = OptionCategory.objects.create(
+            slug='dbb-teams',
+            name='DBB Teams'
+        )
+        
+        self.tip_type = TipType.objects.create(
+            name="DBB Matches",
+            slug="dbb-matches",
+            description="",
+            category=TipType.TipCategory.GAME,
+            default_points=1,
+            deadline=timezone.now() + timedelta(days=1),
+            is_active=True,
+        )
+        self.event = PredictionEvent.objects.create(
+            tip_type=self.tip_type,
+            name="Team A vs Team B",
+            description="",
+            target_kind=PredictionEvent.TargetKind.TEAM,
+            selection_mode=PredictionEvent.SelectionMode.CURATED,
+            points=3,
+            opens_at=timezone.now() - timedelta(hours=2),
+            deadline=timezone.now() - timedelta(hours=1),
+            reveal_at=timezone.now() - timedelta(hours=3),
+            is_active=True,
+        )
+        
+        # Create generic Options
+        self.team_a_option_obj = Option.objects.create(
+            category=self.teams_cat,
+            slug='team-a',
+            name='Team A',
+            short_name='A',
+        )
+        self.team_b_option_obj = Option.objects.create(
+            category=self.teams_cat,
+            slug='team-b',
+            name='Team B',
+            short_name='B',
+        )
+        
+        # Create PredictionOptions
+        self.team_a_option = PredictionOption.objects.create(
+            event=self.event,
+            label="Team A",
+            option=self.team_a_option_obj,
+            sort_order=1,
+        )
+        self.team_b_option = PredictionOption.objects.create(
+            event=self.event,
+            label="Team B",
+            option=self.team_b_option_obj,
+            sort_order=2,
+        )
+    
+    def test_score_event_outcome_handles_forfeited_match(self) -> None:
+        """Test that forfeited matches don't award points but return locks."""
+        user1 = self.user_model.objects.create_user("user1", "user1@example.com", "password")
+        user2 = self.user_model.objects.create_user("user2", "user2@example.com", "password")
+        
+        # Create tips with locks
+        tip1 = UserTip.objects.create(
+            user=user1,
+            tip_type=self.tip_type,
+            prediction_event=self.event,
+            prediction_option=self.team_a_option,
+            selected_option=self.team_a_option_obj,
+            prediction="Team A",
+            is_locked=True,
+            lock_status=UserTip.LockStatus.ACTIVE,
+        )
+        tip2 = UserTip.objects.create(
+            user=user2,
+            tip_type=self.tip_type,
+            prediction_event=self.event,
+            prediction_option=self.team_b_option,
+            selected_option=self.team_b_option_obj,
+            prediction="Team B",
+            is_locked=True,
+            lock_status=UserTip.LockStatus.ACTIVE,
+        )
+        
+        # Create outcome for forfeited match
+        outcome = EventOutcome.objects.create(
+            prediction_event=self.event,
+            winning_option=self.team_a_option,
+            winning_generic_option=self.team_a_option_obj,
+            metadata={
+                'home_score': 20,
+                'away_score': 0,
+                'is_forfeit': True  # Match was forfeited
+            }
+        )
+        
+        result = score_event_outcome(outcome)
+        
+        # No scores should be created (forfeited match)
+        self.assertEqual(result.created_count, 0)
+        self.assertEqual(result.updated_count, 0)
+        self.assertEqual(result.skipped_tips, 0)
+        self.assertEqual(UserEventScore.objects.count(), 0)
+        
+        # Both locks should be returned (not forfeited)
+        tip1.refresh_from_db()
+        tip2.refresh_from_db()
+        
+        self.assertFalse(tip1.is_locked)
+        self.assertEqual(tip1.lock_status, UserTip.LockStatus.NONE)
+        self.assertIsNotNone(tip1.lock_released_at)
+        
+        self.assertFalse(tip2.is_locked)
+        self.assertEqual(tip2.lock_status, UserTip.LockStatus.NONE)
+        self.assertIsNotNone(tip2.lock_released_at)
+    
+    def test_process_all_scores_handles_forfeited_matches(self) -> None:
+        """Test that process_all_user_scores correctly handles forfeited matches."""
+        user1 = self.user_model.objects.create_user("user1", "user1@example.com", "password")
+        user2 = self.user_model.objects.create_user("user2", "user2@example.com", "password")
+        
+        # Create tips with locks
+        tip1 = UserTip.objects.create(
+            user=user1,
+            tip_type=self.tip_type,
+            prediction_event=self.event,
+            prediction_option=self.team_a_option,
+            selected_option=self.team_a_option_obj,
+            prediction="Team A",
+            is_locked=True,
+            lock_status=UserTip.LockStatus.ACTIVE,
+        )
+        tip2 = UserTip.objects.create(
+            user=user2,
+            tip_type=self.tip_type,
+            prediction_event=self.event,
+            prediction_option=self.team_b_option,
+            selected_option=self.team_b_option_obj,
+            prediction="Team B",
+            is_locked=True,
+            lock_status=UserTip.LockStatus.ACTIVE,
+        )
+        
+        # Create outcome for forfeited match
+        outcome = EventOutcome.objects.create(
+            prediction_event=self.event,
+            winning_option=self.team_a_option,
+            winning_generic_option=self.team_a_option_obj,
+            metadata={
+                'home_score': 20,
+                'away_score': 0,
+                'is_forfeit': True  # Match was forfeited
+            }
+        )
+        
+        result = process_all_user_scores()
+        
+        # Event should be processed but no scores created
+        self.assertEqual(result.total_events_processed, 1)
+        self.assertEqual(result.total_scores_created, 0)
+        self.assertEqual(result.total_scores_updated, 0)
+        self.assertEqual(result.total_tips_skipped, 2)  # Both tips skipped
+        self.assertEqual(result.total_locks_returned, 2)  # Both locks returned
+        self.assertEqual(result.total_locks_forfeited, 0)  # No locks forfeited
+        self.assertEqual(len(result.events_with_errors), 0)
+        
+        # Outcome should be marked as scored (processed)
+        outcome.refresh_from_db()
+        self.assertIsNotNone(outcome.scored_at)
+        self.assertEqual(outcome.score_error, 'Forfeited match - no scoring')
+        
+        # Both locks should be returned
+        tip1.refresh_from_db()
+        tip2.refresh_from_db()
+        
+        self.assertFalse(tip1.is_locked)
+        self.assertEqual(tip1.lock_status, UserTip.LockStatus.NONE)
+        
+        self.assertFalse(tip2.is_locked)
+        self.assertEqual(tip2.lock_status, UserTip.LockStatus.NONE)
+    
+    def test_forfeited_match_does_not_award_points_to_correct_prediction(self) -> None:
+        """Test that even correct predictions don't get points for forfeited matches."""
+        user = self.user_model.objects.create_user("user", "user@example.com", "password")
+        
+        # Create tip predicting Team A (which would be the "winner" in forfeit)
+        tip = UserTip.objects.create(
+            user=user,
+            tip_type=self.tip_type,
+            prediction_event=self.event,
+            prediction_option=self.team_a_option,
+            selected_option=self.team_a_option_obj,
+            prediction="Team A",
+            is_locked=False,
+            lock_status=UserTip.LockStatus.NONE,
+        )
+        
+        # Create outcome for forfeited match (Team A "wins" 20-0)
+        outcome = EventOutcome.objects.create(
+            prediction_event=self.event,
+            winning_option=self.team_a_option,
+            winning_generic_option=self.team_a_option_obj,
+            metadata={
+                'home_score': 20,
+                'away_score': 0,
+                'is_forfeit': True  # Match was forfeited
+            }
+        )
+        
+        result = score_event_outcome(outcome)
+        
+        # No scores should be created (forfeited match doesn't count)
+        self.assertEqual(result.created_count, 0)
+        self.assertEqual(result.updated_count, 0)
+        self.assertEqual(UserEventScore.objects.count(), 0)
+    
+    def test_forfeited_match_does_not_count_as_incorrect(self) -> None:
+        """Test that incorrect predictions on forfeited matches don't forfeit locks."""
+        user = self.user_model.objects.create_user("user", "user@example.com", "password")
+        
+        # Create tip predicting Team B (which would be the "loser" in forfeit)
+        tip = UserTip.objects.create(
+            user=user,
+            tip_type=self.tip_type,
+            prediction_event=self.event,
+            prediction_option=self.team_b_option,
+            selected_option=self.team_b_option_obj,
+            prediction="Team B",
+            is_locked=True,
+            lock_status=UserTip.LockStatus.ACTIVE,
+        )
+        
+        # Create outcome for forfeited match (Team A "wins" 20-0)
+        outcome = EventOutcome.objects.create(
+            prediction_event=self.event,
+            winning_option=self.team_a_option,
+            winning_generic_option=self.team_a_option_obj,
+            metadata={
+                'home_score': 20,
+                'away_score': 0,
+                'is_forfeit': True  # Match was forfeited
+            }
+        )
+        
+        result = score_event_outcome(outcome)
+        
+        # Lock should be returned, not forfeited
+        tip.refresh_from_db()
+        self.assertFalse(tip.is_locked)
+        self.assertEqual(tip.lock_status, UserTip.LockStatus.NONE)
+        self.assertIsNotNone(tip.lock_released_at)
+        self.assertIsNone(tip.lock_releases_at)  # No scheduled forfeit return

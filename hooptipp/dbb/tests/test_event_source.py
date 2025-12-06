@@ -797,4 +797,119 @@ class DbbEventSourceTest(TestCase):
         
         dbb_match = DbbMatch.objects.get(external_match_id='1')
         self.assertEqual(dbb_match.venue, 'SLAPI Arena')
+    
+    @patch('hooptipp.dbb.event_source.build_slapi_client')
+    def test_sync_events_handles_forfeited_matches(self, mock_build_client):
+        """Test that forfeited matches (20-0 with is_forfeit flag) don't create outcomes."""
+        mock_client = MagicMock()
+        mock_build_client.return_value = mock_client
+        
+        # Sync options first
+        self.event_source.sync_options()
+
+        # Mock past match data with forfeit flag
+        past_date = (timezone.now() - timedelta(days=7)).isoformat()
+        mock_client.get_league_matches.return_value = [
+            {
+                'match_id': 1,
+                'home_team': {'id': 't1', 'name': 'BG Test Team 1'},
+                'away_team': {'id': 't2', 'name': 'BG Test Team 2'},
+                'datetime': past_date,
+                'location': 'Test Arena',
+                'score': '20:0',  # Typical forfeit score
+                'score_home': 20,
+                'score_away': 0,
+                'is_finished': True,
+                'is_cancelled': False,
+                'is_forfeit': True  # Match was forfeited
+            }
+        ]
+
+        result = self.event_source.sync_events()
+
+        # Should create event
+        self.assertEqual(result.events_created, 1)
+        event = PredictionEvent.objects.get(source_id='dbb-slapi', source_event_id='1')
+        
+        # Should NOT create outcome (match was forfeited)
+        self.assertFalse(EventOutcome.objects.filter(prediction_event=event).exists())
+    
+    @patch('hooptipp.dbb.event_source.build_slapi_client')
+    def test_sync_events_returns_locks_for_forfeited_matches(self, mock_build_client):
+        """Test that locks are returned to users when a match is forfeited."""
+        from django.contrib.auth import get_user_model
+        from hooptipp.predictions.models import UserTip
+        
+        User = get_user_model()
+        mock_client = MagicMock()
+        mock_build_client.return_value = mock_client
+        
+        # Sync options first
+        self.event_source.sync_options()
+
+        # First sync: create a future match
+        future_date = (timezone.now() + timedelta(days=7)).isoformat()
+        mock_client.get_league_matches.return_value = [
+            {
+                'match_id': 1,
+                'home_team': {'id': 't1', 'name': 'BG Test Team 1'},
+                'away_team': {'id': 't2', 'name': 'BG Test Team 2'},
+                'datetime': future_date,
+                'location': 'Test Arena',
+                'is_finished': False,
+                'is_cancelled': False
+            }
+        ]
+
+        result = self.event_source.sync_events()
+        self.assertEqual(result.events_created, 1)
+        event = PredictionEvent.objects.get(source_id='dbb-slapi', source_event_id='1')
+        
+        # Create a user and a tip with an active lock
+        user = User.objects.create_user('testuser', 'test@example.com', 'password')
+        tip_type = TipType.objects.get(slug='dbb-matches')
+        option = PredictionOption.objects.filter(event=event).first()
+        tip = UserTip.objects.create(
+            user=user,
+            tip_type=tip_type,
+            prediction_event=event,
+            prediction_option=option,
+            selected_option=option.option,
+            prediction=option.label,
+            is_locked=True,
+            lock_status=UserTip.LockStatus.ACTIVE,
+        )
+        
+        # Verify lock is active
+        self.assertTrue(tip.is_locked)
+        self.assertEqual(tip.lock_status, UserTip.LockStatus.ACTIVE)
+
+        # Second sync: match is now in the past and forfeited
+        past_date = (timezone.now() - timedelta(days=1)).isoformat()
+        mock_client.get_league_matches.return_value = [
+            {
+                'match_id': 1,
+                'home_team': {'id': 't1', 'name': 'BG Test Team 1'},
+                'away_team': {'id': 't2', 'name': 'BG Test Team 2'},
+                'datetime': past_date,
+                'location': 'Test Arena',
+                'score': '20:0',  # Typical forfeit score
+                'score_home': 20,
+                'score_away': 0,
+                'is_finished': True,
+                'is_cancelled': False,
+                'is_forfeit': True  # Match was forfeited
+            }
+        ]
+
+        result = self.event_source.sync_events()
+        
+        # Should NOT create outcome (match was forfeited)
+        self.assertFalse(EventOutcome.objects.filter(prediction_event=event).exists())
+        
+        # Lock should be returned to user
+        tip.refresh_from_db()
+        self.assertFalse(tip.is_locked)
+        self.assertEqual(tip.lock_status, UserTip.LockStatus.NONE)
+        self.assertIsNotNone(tip.lock_released_at)
 

@@ -61,6 +61,13 @@ def score_event_outcome(outcome: EventOutcome, *, force: bool = False) -> ScoreE
     if event is None:
         raise ValueError("EventOutcome must be associated with a PredictionEvent before scoring.")
 
+    # Check if this is a forfeited match - if so, don't score it
+    if _is_forfeited_match(outcome):
+        # Return all locks for forfeited matches without scoring
+        locks_returned = _return_locks_for_forfeited_match(outcome)
+        # Return empty result since no scoring occurred
+        return ScoreEventResult(event=event, outcome=outcome, awarded_scores=[], skipped_tips=0)
+
     if not _outcome_has_selection(outcome):
         raise ValueError("EventOutcome must specify a winning option, team, or player before scoring.")
 
@@ -153,6 +160,33 @@ def _calculate_lock_multiplier(tip: UserTip) -> int:
     return 1
 
 
+def _is_forfeited_match(outcome: EventOutcome) -> bool:
+    """Check if an outcome represents a forfeited match."""
+    metadata = outcome.metadata or {}
+    return metadata.get('is_forfeit', False)
+
+
+def _return_locks_for_forfeited_match(outcome: EventOutcome) -> int:
+    """Return all locks for a forfeited match without scoring.
+    
+    Returns:
+        Number of locks returned
+    """
+    event = outcome.prediction_event
+    tips_with_locks = UserTip.objects.filter(
+        prediction_event=event,
+        lock_status=UserTip.LockStatus.ACTIVE
+    ).select_related('user')
+    
+    count = 0
+    for tip in tips_with_locks:
+        lock_service = LockService(tip.user)
+        if lock_service.return_lock_for_forfeited_event(tip):
+            count += 1
+    
+    return count
+
+
 @dataclass(frozen=True)
 class ProcessAllScoresResult:
     """Summary returned when processing all user scores."""
@@ -201,6 +235,25 @@ def process_all_user_scores(*, force: bool = False) -> ProcessAllScoresResult:
         for event in events_with_outcomes:
             try:
                 outcome = event.outcome
+                
+                # Check if this is a forfeited match - if so, return locks but don't score
+                if _is_forfeited_match(outcome):
+                    # Count locks before returning them
+                    locks_count = event.tips.filter(lock_status=UserTip.LockStatus.ACTIVE).count()
+                    # Return locks
+                    locks_returned_count = _return_locks_for_forfeited_match(outcome)
+                    total_locks_returned += locks_returned_count
+                    # Count all tips as skipped since no scoring occurred
+                    total_tips_skipped += event.tips.count()
+                    total_events_processed += 1
+                    
+                    # Mark outcome as "scored" (processed) to avoid re-processing
+                    if not outcome.scored_at:
+                        outcome.scored_at = timezone.now()
+                        outcome.score_error = 'Forfeited match - no scoring'
+                        outcome.save(update_fields=['scored_at', 'score_error'])
+                    continue
+                
                 if not _outcome_has_selection(outcome):
                     events_with_errors.append(f"{event.name}: No winning option specified")
                     continue
