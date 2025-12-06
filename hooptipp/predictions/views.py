@@ -506,6 +506,20 @@ def home(request):
     leaderboard_user_ids = [row.id for row in leaderboard_rows]
     leaderboard_display_name_map = _build_display_name_map(leaderboard_user_ids)
 
+    # Fetch achievements for all leaderboard users
+    from .models import Achievement
+    achievements_by_user = {}
+    if leaderboard_user_ids:
+        achievements = Achievement.objects.filter(
+            user_id__in=leaderboard_user_ids
+        ).select_related('season').order_by('awarded_at')
+        
+        for achievement in achievements:
+            user_id = achievement.user_id
+            if user_id not in achievements_by_user:
+                achievements_by_user[user_id] = []
+            achievements_by_user[user_id].append(achievement)
+
     # Calculate 3-day score change for each user
     three_days_ago = now - timedelta(days=3)
     for index, row in enumerate(leaderboard_rows, start=1):
@@ -525,6 +539,9 @@ def home(request):
             total=Coalesce(Sum('points_awarded'), 0)
         )['total']
         row.points_change_3d = int(points_last_3_days) if points_last_3_days else 0
+        
+        # Add achievements for this user (use different name to avoid conflict with related manager)
+        row.user_achievements = achievements_by_user.get(row.id, [])
         
         # Add lock summary for each user
         try:

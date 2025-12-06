@@ -15,6 +15,7 @@ from hooptipp.nba.models import ScheduledGame
 from . import scoring_service
 from .event_sources import list_sources, get_source
 from .models import (
+    Achievement,
     DatenschutzSection,
     EventOutcome,
     ImpressumSection,
@@ -745,6 +746,25 @@ class UserPreferencesAdmin(admin.ModelAdmin):
         return bool(obj.activation_pin)
     has_pin.boolean = True
     has_pin.short_description = 'Has PIN'
+
+
+@admin.register(Achievement)
+class AchievementAdmin(admin.ModelAdmin):
+    list_display = ('user', 'achievement_type', 'season', 'name', 'emoji', 'awarded_at')
+    list_filter = ('achievement_type', 'season')
+    search_fields = ('user__username', 'season__name', 'name')
+    autocomplete_fields = ('user', 'season')
+    readonly_fields = ('awarded_at',)
+    
+    fieldsets = (
+        (None, {
+            'fields': ('user', 'achievement_type', 'season', 'name', 'description', 'emoji')
+        }),
+        ('Timestamps', {
+            'fields': ('awarded_at',),
+            'classes': ('collapse',),
+        }),
+    )
 
 
 @admin.register(Season)

@@ -43,17 +43,13 @@
                         <p class="font-semibold {% if row.is_active_user %}theme-accent-text{% else %}text-slate-200{% endif %}">
                           {{ row.display_name }}
                         </p>
-                        <div class="flex items-center gap-1" title="Lock status: Available (🔒), Active (🔒 greyed), Forfeited (❌)">
-                          {% for i in "123"|make_list %}
-                            {% if forloop.counter0 < row.lock_summary.available %}
-                              <span title="Available lock">🔒</span>
-                            {% elif forloop.counter0 < row.lock_summary.available|add:row.lock_summary.active %}
-                              <span title="Active lock (in use)" class="opacity-40">🔒</span>
-                            {% else %}
-                              <span title="Forfeited lock (on cooldown)">❌</span>
-                            {% endif %}
-                          {% endfor %}
-                        </div>
+                        {% if row.user_achievements %}
+                          <div class="flex items-center gap-1">
+                            {% for achievement in row.user_achievements %}
+                              <span title="{% if achievement.season %}{{ achievement.name }} - {{ achievement.season.name }}{% else %}{{ achievement.name }}{% endif %}">{{ achievement.emoji }}</span>
+                            {% endfor %}
+                          </div>
+                        {% endif %}
                       </div>
                       <p class="text-xs text-slate-500">{{ row.event_count }} event{{ row.event_count|pluralize }} scored</p>
                     </div>

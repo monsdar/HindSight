@@ -612,6 +612,70 @@ class Season(models.Model):
             ).first()
 
 
+class Achievement(models.Model):
+    """
+    Represents an achievement awarded to a user.
+    
+    Achievements can be tied to seasons (e.g., top 3 finishers) or be
+    independent (e.g., registration milestones, prediction counts).
+    """
+    class AchievementType(models.TextChoices):
+        SEASON_GOLD = 'season_gold', 'Season Gold Medal'
+        SEASON_SILVER = 'season_silver', 'Season Silver Medal'
+        SEASON_BRONZE = 'season_bronze', 'Season Bronze Medal'
+        # Future achievement types can be added here:
+        # REGISTRATION_1YEAR = 'registration_1year', 'Registered 1 Year'
+        # PREDICTIONS_100 = 'predictions_100', '100 Correct Predictions'
+        # LAST_PLACE = 'last_place', 'Last Place Finisher'
+    
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='achievements'
+    )
+    season = models.ForeignKey(
+        'Season',
+        on_delete=models.CASCADE,
+        related_name='achievements',
+        null=True,
+        blank=True,
+        help_text="Season this achievement is tied to (null for non-season achievements)"
+    )
+    achievement_type = models.CharField(
+        max_length=50,
+        choices=AchievementType.choices,
+        help_text="Type of achievement"
+    )
+    name = models.CharField(
+        max_length=200,
+        help_text="Display name of the achievement (e.g., 'Season Champion')"
+    )
+    description = models.TextField(
+        blank=True,
+        help_text="Short description of the achievement"
+    )
+    emoji = models.CharField(
+        max_length=10,
+        help_text="Emoji icon for the achievement (e.g., '🥇')"
+    )
+    awarded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('user', 'season', 'achievement_type')
+        ordering = ['-awarded_at', 'achievement_type']
+        verbose_name = 'Achievement'
+        verbose_name_plural = 'Achievements'
+        indexes = [
+            models.Index(fields=['user']),
+            models.Index(fields=['season']),
+            models.Index(fields=['achievement_type']),
+        ]
+
+    def __str__(self) -> str:
+        season_str = f" - {self.season.name}" if self.season else ""
+        return f"{self.user.username}: {self.name}{season_str}"
+
+
 class ImpressumSection(models.Model):
     """
     Represents a section of the Impressum (legal notice).
