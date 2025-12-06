@@ -187,41 +187,46 @@ class AchievementCommandTests(TestCase):
             datetime.combine(score_date, datetime.min.time())
         )
         
-        UserEventScore.objects.create(
+        # Note: awarded_at has auto_now_add=True, so we need to update it after creation
+        score1 = UserEventScore.objects.create(
             user=self.user1,
             prediction_event=self.event1,
             base_points=10,
             lock_multiplier=1,
             points_awarded=30,  # Highest
-            awarded_at=score_time,
         )
+        score1.awarded_at = score_time
+        score1.save(update_fields=['awarded_at'])
         
-        UserEventScore.objects.create(
+        score2 = UserEventScore.objects.create(
             user=self.user2,
             prediction_event=self.event1,
             base_points=10,
             lock_multiplier=1,
             points_awarded=20,  # Second
-            awarded_at=score_time,
         )
+        score2.awarded_at = score_time
+        score2.save(update_fields=['awarded_at'])
         
-        UserEventScore.objects.create(
+        score3 = UserEventScore.objects.create(
             user=self.user3,
             prediction_event=self.event1,
             base_points=10,
             lock_multiplier=1,
             points_awarded=10,  # Third
-            awarded_at=score_time,
         )
+        score3.awarded_at = score_time
+        score3.save(update_fields=['awarded_at'])
         
-        UserEventScore.objects.create(
+        score4 = UserEventScore.objects.create(
             user=self.user4,
             prediction_event=self.event1,
             base_points=10,
             lock_multiplier=1,
             points_awarded=5,  # Fourth (no medal)
-            awarded_at=score_time,
         )
+        score4.awarded_at = score_time
+        score4.save(update_fields=['awarded_at'])
 
     def test_process_season_achievements_creates_medals(self):
         """Test that the command creates gold, silver, and bronze medals."""
@@ -233,14 +238,6 @@ class AchievementCommandTests(TestCase):
         out = StringIO()
         call_command('process_achievements', stdout=out)
         output = out.getvalue()
-        
-        # Debug output
-        if 'Created: 0' in output:
-            print(f"\nCommand output: {output}")
-            print(f"Season: {self.season.start_date} to {self.season.end_date}")
-            print(f"Scores in season: {scores_in_season.count()}")
-            for score in scores_in_season[:3]:
-                print(f"  Score: user={score.user.username}, points={score.points_awarded}, date={score.awarded_at.date()}")
         
         # Check that achievements were created
         gold = Achievement.objects.filter(
@@ -264,9 +261,12 @@ class AchievementCommandTests(TestCase):
         )
         self.assertEqual(bronze.count(), 1)
         
-        # User4 should not have any achievements
-        user4_achievements = Achievement.objects.filter(user=self.user4)
-        self.assertEqual(user4_achievements.count(), 0)
+        # User4 should not have any season achievements (they may have beta tester achievement)
+        user4_season_achievements = Achievement.objects.filter(
+            user=self.user4,
+            season__isnull=False
+        )
+        self.assertEqual(user4_season_achievements.count(), 0)
 
     def test_process_season_achievements_handles_ties(self):
         """Test that ties are handled correctly (all tied users get the medal)."""
@@ -340,7 +340,8 @@ class AchievementCommandTests(TestCase):
         call_command('process_achievements', stdout=out)
         
         # Only achievements for completed season should exist
-        achievements = Achievement.objects.all()
+        # Filter to only season achievements (beta tester achievements have season=None)
+        achievements = Achievement.objects.filter(season__isnull=False)
         for achievement in achievements:
             self.assertEqual(achievement.season, self.season)
             self.assertNotEqual(achievement.season, active_season)

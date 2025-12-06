@@ -238,8 +238,9 @@ class EmailVerificationViewsTests(TestCase):
         url = reverse('resend_verification')
         data = {'email': self.user.email}
         
-        # Clear any existing emails
+        # Clear any existing emails and cache (to avoid rate limiting from other tests)
         mail.outbox.clear()
+        cache.clear()
         
         response = self.client.post(url, data)
         

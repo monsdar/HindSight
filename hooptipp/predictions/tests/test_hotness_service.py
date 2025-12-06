@@ -65,7 +65,7 @@ class HotnessServiceTests(TestCase):
         self.assertEqual(HotnessKudos.objects.count(), 3)
     
     def test_hotness_decay_with_default_rate(self):
-        """Test decay with default rate of 0.1 per hour."""
+        """Test decay with default rate of 0.5 per hour."""
         # Create hotness without calling get_or_create to avoid automatic decay
         hotness = UserHotness.objects.create(
             user=self.user1,
@@ -79,8 +79,8 @@ class HotnessServiceTests(TestCase):
         hotness.refresh_from_db()
         
         hotness.decay()
-        # Should lose 10 hours * 0.1 = 1.0 hotness
-        self.assertAlmostEqual(hotness.score, 49.0, places=1)
+        # Should lose 10 hours * 0.5 = 5.0 hotness (default is 0.5 per hour)
+        self.assertAlmostEqual(hotness.score, 45.0, places=1)
     
     def test_hotness_decay_respects_setting(self):
         """Test that decay uses HOTNESS_DECAY_PER_HOUR setting."""
