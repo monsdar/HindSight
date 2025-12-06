@@ -558,7 +558,7 @@ class BetaTesterAchievementTests(TestCase):
         
         achievement = beta_achievement.first()
         self.assertEqual(achievement.name, 'Beta Tester')
-        self.assertEqual(achievement.emoji, '🤖')
+        self.assertEqual(achievement.emoji, '🏅')
         self.assertIsNone(achievement.season)
         
         # Regular user should not have the achievement
