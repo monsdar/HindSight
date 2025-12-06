@@ -6,7 +6,7 @@ from django.db import transaction
 from django.utils import timezone
 from django.contrib.auth import get_user_model
 
-from .models import UserHotness, HotnessKudos, Season, UserTip, UserEventScore
+from .models import UserHotness, HotnessKudos, Season, UserTip, UserEventScore, EventOutcome
 
 User = get_user_model()
 
@@ -87,13 +87,26 @@ def award_hotness_for_correct_prediction(
         hotness.score += HOTNESS_LOCK_WIN
     
     # Check for streak bonus
-    recent_correct_count = UserEventScore.objects.filter(
-        user=user,
-        points_awarded__gt=0
-    ).order_by('-awarded_at')[:STREAK_LENGTH].count()
+    # Get the most recent STREAK_LENGTH resolved events for which the user made a tip
+    # Order by resolved_at to get chronological order of resolved predictions
+    recent_resolved_events = list(
+        EventOutcome.objects.filter(
+            prediction_event__tips__user=user
+        ).select_related('prediction_event').distinct().order_by('-resolved_at')[:STREAK_LENGTH]
+    )
     
-    if recent_correct_count >= STREAK_LENGTH:
-        hotness.score += HOTNESS_STREAK_BONUS
+    # Check if we have at least STREAK_LENGTH resolved events
+    if len(recent_resolved_events) >= STREAK_LENGTH:
+        # Check if all of them have a UserEventScore (meaning all were correct)
+        event_ids = [outcome.prediction_event_id for outcome in recent_resolved_events]
+        correct_count = UserEventScore.objects.filter(
+            user=user,
+            prediction_event_id__in=event_ids
+        ).count()
+        
+        # Only award streak bonus if all STREAK_LENGTH most recent resolved predictions were correct
+        if correct_count >= STREAK_LENGTH:
+            hotness.score += HOTNESS_STREAK_BONUS
     
     hotness.save(update_fields=['score'])
 
