@@ -77,6 +77,112 @@
       #teilnahmebedingungen-content ol li::marker {
         color: rgb(203 213 225); /* slate-300 to match text color */
       }
+      
+      /* Hotness System Styles */
+      .kudos-btn {
+        width: 32px;
+        height: 32px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 50%;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        background: transparent;
+        border: none;
+        padding: 0;
+      }
+      
+      .kudos-btn .fire-icon {
+        font-size: 20px;
+        transition: all 0.3s ease;
+      }
+      
+      .kudos-btn.kudos-available .fire-icon {
+        filter: grayscale(1) brightness(0.5);
+      }
+      
+      .kudos-btn.kudos-available:hover {
+        transform: scale(1.1);
+      }
+      
+      .kudos-btn.kudos-available:hover .fire-icon {
+        filter: grayscale(0.5) brightness(0.8);
+      }
+      
+      .kudos-btn.kudos-given .fire-icon {
+        filter: grayscale(0);
+      }
+      
+      .kudos-spacer {
+        width: 32px;
+        height: 32px;
+      }
+      
+      /* Fire animation on kudos click */
+      @keyframes kudos-animation {
+        0% {
+          transform: scale(1);
+        }
+        25% {
+          transform: scale(1.3) rotate(-10deg);
+        }
+        50% {
+          transform: scale(1.3) rotate(10deg);
+        }
+        75% {
+          transform: scale(1.3) rotate(-10deg);
+        }
+        100% {
+          transform: scale(1);
+        }
+      }
+      
+      .kudos-animating .fire-icon {
+        animation: kudos-animation 0.6s ease;
+      }
+      
+      /* Row flash on kudos */
+      @keyframes row-flash {
+        0%, 100% {
+          background-color: rgb(2, 6, 23);
+        }
+        50% {
+          background-color: rgba(239, 68, 68, 0.2);
+        }
+      }
+      
+      .leaderboard-row-wrapper.flash-animation > div {
+        animation: row-flash 0.6s ease;
+      }
+      
+      /* Hotness glow effects */
+      .warm-glow {
+        box-shadow: 0 0 10px rgba(249, 115, 22, 0.3);
+      }
+      
+      .hot-glow {
+        box-shadow: 0 0 15px rgba(239, 68, 68, 0.4);
+      }
+      
+      .fire-glow {
+        animation: fire-pulse 2s ease-in-out infinite;
+      }
+      
+      @keyframes fire-pulse {
+        0%, 100% { 
+          box-shadow: 0 0 20px rgba(239, 68, 68, 0.6),
+                      0 0 40px rgba(234, 179, 8, 0.4);
+        }
+        50% { 
+          box-shadow: 0 0 30px rgba(239, 68, 68, 0.8),
+                      0 0 60px rgba(234, 179, 8, 0.6);
+        }
+      }
+      
+      .hotness-text-glow {
+        text-shadow: 0 0 10px rgba(239, 68, 68, 0.6);
+      }
     </style>
     {% block head %}{% endblock %}
   </head>

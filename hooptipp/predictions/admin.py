@@ -18,6 +18,7 @@ from .models import (
     Achievement,
     DatenschutzSection,
     EventOutcome,
+    HotnessKudos,
     ImpressumSection,
     Option,
     OptionCategory,
@@ -28,6 +29,7 @@ from .models import (
     TipType,
     UserEventScore,
     UserFavorite,
+    UserHotness,
     UserPreferences,
     UserTip,
 )
@@ -869,6 +871,32 @@ class TeilnahmebedingungenSectionAdmin(admin.ModelAdmin):
         }),
     )
     readonly_fields = ('created_at', 'updated_at')
+
+
+@admin.register(UserHotness)
+class UserHotnessAdmin(admin.ModelAdmin):
+    list_display = ('user', 'score_display', 'get_level', 'season', 'last_decay', 'updated_at')
+    list_filter = ('season', 'last_decay')
+    search_fields = ('user__username',)
+    readonly_fields = ('last_decay', 'updated_at')
+    ordering = ('-score',)
+    
+    def score_display(self, obj):
+        return f"{obj.score:.1f}"
+    score_display.short_description = 'Score'
+    
+    def get_level(self, obj):
+        return obj.get_level()
+    get_level.short_description = 'Hotness Level'
+
+
+@admin.register(HotnessKudos)
+class HotnessKudosAdmin(admin.ModelAdmin):
+    list_display = ('from_user', 'to_user', 'created_at', 'season')
+    list_filter = ('season', 'created_at')
+    search_fields = ('from_user__username', 'to_user__username')
+    date_hierarchy = 'created_at'
+    ordering = ('-created_at',)
 
 
 # Register the EventSourceAdmin manually

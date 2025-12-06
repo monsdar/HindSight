@@ -377,3 +377,6 @@ CACHES = {
         'LOCATION': 'unique-snowflake',
     }
 }
+
+# Hotness System Configuration
+HOTNESS_DECAY_PER_HOUR = float(os.environ.get('HOTNESS_DECAY_PER_HOUR', '0.1'))

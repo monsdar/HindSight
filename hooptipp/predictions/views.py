@@ -555,6 +555,13 @@ def home(request):
         # Add achievements for this user (use different name to avoid conflict with related manager)
         row.user_achievements = achievements_by_user.get(row.id, [])
         
+        # Add hotness data for each user
+        from .hotness_service import get_or_create_hotness, get_kudos_count_today
+        hotness = get_or_create_hotness(row, active_season)
+        row.hotness_score = hotness.score
+        row.hotness_level = hotness.get_level()
+        row.kudos_today = get_kudos_count_today(row)
+        
         # Add lock summary for each user
         try:
             lock_service = LockService(row)
@@ -563,6 +570,13 @@ def home(request):
             # If there's any issue getting lock data, default to all locks available
             from .lock_service import LockSummary
             row.lock_summary = LockSummary(total=3, available=3, active=0, pending=0, next_return_at=None)
+    
+    # Get kudos status for active user
+    if active_user:
+        from .hotness_service import get_user_kudos_given_today
+        kudos_status = get_user_kudos_given_today(active_user, leaderboard_rows)
+    else:
+        kudos_status = {}
     
     # Filter leaderboard rows based on requirements (max 6 users):
     # - If less than 6 users total: show all users
@@ -751,6 +765,7 @@ def home(request):
         'open_predictions': open_predictions,
         'enable_user_selection': settings.ENABLE_USER_SELECTION,
         'active_season': active_season,
+        'kudos_status': kudos_status,
     }
     return render(request, 'predictions/home.html', context)
 
@@ -999,5 +1014,61 @@ def get_teilnahmebedingungen(request):
     return JsonResponse({
         'sections': sections_data
     })
+
+
+@require_http_methods(["POST"])
+def give_kudos_view(request):
+    """Handle kudos giving via AJAX."""
+    from .hotness_service import give_kudos
+    
+    User = get_user_model()
+    
+    # Get active user from session (user selection mode)
+    active_user = None
+    if settings.ENABLE_USER_SELECTION:
+        active_user_id = request.session.get('active_user_id')
+        if active_user_id:
+            active_user = User.objects.filter(id=active_user_id).first()
+    else:
+        # Authentication mode
+        if request.user.is_authenticated:
+            active_user = request.user
+    
+    if not active_user:
+        return JsonResponse({
+            'success': False,
+            'message': 'No active user'
+        }, status=403)
+    
+    try:
+        data = json.loads(request.body)
+        to_user_id = data.get('user_id')
+        
+        if not to_user_id:
+            return JsonResponse({
+                'success': False,
+                'message': 'Missing user_id'
+            }, status=400)
+        
+        to_user = User.objects.get(id=to_user_id)
+        result = give_kudos(active_user, to_user)
+        
+        return JsonResponse(result)
+        
+    except User.DoesNotExist:
+        return JsonResponse({
+            'success': False,
+            'message': 'User not found'
+        }, status=404)
+    except json.JSONDecodeError:
+        return JsonResponse({
+            'success': False,
+            'message': 'Invalid JSON'
+        }, status=400)
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'message': str(e)
+        }, status=500)
 
 

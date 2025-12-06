@@ -12,4 +12,5 @@ urlpatterns = [
     path('api/impressum/', views.get_impressum, name='impressum_api'),
     path('api/datenschutz/', views.get_datenschutz, name='datenschutz_api'),
     path('api/teilnahmebedingungen/', views.get_teilnahmebedingungen, name='teilnahmebedingungen_api'),
+    path('api/give-kudos/', views.give_kudos_view, name='give_kudos'),
 ]

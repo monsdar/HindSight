@@ -120,6 +120,16 @@ def score_event_outcome(outcome: EventOutcome, *, force: bool = False) -> ScoreE
             )
             awarded.append(AwardedScore(score=score, created=created))
             
+            # Award hotness for correct prediction
+            from .hotness_service import award_hotness_for_correct_prediction
+            from .models import Season
+            active_season = Season.get_active_season()
+            award_hotness_for_correct_prediction(
+                user=tip.user,
+                was_locked=multiplier > 1,
+                season=active_season
+            )
+            
             # Return lock to user if they had an active lock
             # Use WAS_LOCKED status to preserve bonus points for idempotency
             if tip.lock_status == UserTip.LockStatus.ACTIVE:

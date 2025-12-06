@@ -752,6 +752,98 @@ class TeilnahmebedingungenSection(models.Model):
         return self.caption
 
 
+class UserHotness(models.Model):
+    """
+    Tracks a user's current hotness score - a dynamic social + performance metric.
+    Resets when new season starts. Decays over time based on HOTNESS_DECAY_PER_HOUR setting.
+    """
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='hotness_scores'
+    )
+    score = models.FloatField(default=0.0)
+    season = models.ForeignKey(
+        'Season',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='hotness_scores',
+        help_text="Season this hotness score belongs to"
+    )
+    last_decay = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        unique_together = ('user', 'season')
+        ordering = ['-score', 'user__username']
+        verbose_name = 'User hotness'
+        verbose_name_plural = 'User hotness scores'
+    
+    def __str__(self):
+        season_str = f" ({self.season.name})" if self.season else " (All-time)"
+        return f"{self.user.username}: {self.score:.1f}{season_str}"
+    
+    def get_level(self) -> int:
+        """Returns hotness level 0-4 based on score."""
+        if self.score >= 100: return 4
+        if self.score >= 50: return 3
+        if self.score >= 25: return 2
+        if self.score >= 10: return 1
+        return 0
+    
+    def decay(self) -> None:
+        """Apply time-based decay based on HOTNESS_DECAY_PER_HOUR setting."""
+        from django.conf import settings
+        
+        now = timezone.now()
+        hours_elapsed = (now - self.last_decay).total_seconds() / 3600
+        decay_amount = hours_elapsed * settings.HOTNESS_DECAY_PER_HOUR
+        
+        if decay_amount > 0:
+            self.score = max(0.0, self.score - decay_amount)
+            self.last_decay = now
+            self.save(update_fields=['score', 'last_decay'])
+
+
+class HotnessKudos(models.Model):
+    """
+    Tracks kudos given from one user to another.
+    Limited to 1 kudos per user per target per day (enforced in service layer).
+    """
+    from_user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='kudos_given'
+    )
+    to_user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='kudos_received'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    season = models.ForeignKey(
+        'Season',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='kudos'
+    )
+    
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'Hotness kudos'
+        verbose_name_plural = 'Hotness kudos'
+        indexes = [
+            models.Index(fields=['to_user', 'created_at']),
+            models.Index(fields=['from_user', 'created_at']),
+            models.Index(fields=['from_user', 'to_user', 'created_at']),
+        ]
+    
+    def __str__(self):
+        return f"{self.from_user.username} -> {self.to_user.username} ({self.created_at.date()})"
+
+
 @receiver(post_save, sender=UserPreferences)
 def process_profile_picture_signal(sender, instance, created, **kwargs):
     """Automatically process and resize profile pictures when saved."""
