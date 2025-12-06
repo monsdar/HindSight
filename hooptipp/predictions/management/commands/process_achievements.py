@@ -357,7 +357,7 @@ class Command(BaseCommand):
             'type': Achievement.AchievementType.BETA_TESTER,
             'name': 'Beta Tester',
             'description': 'Participated in the BiBATiPP Betatest',
-            'emoji': '🤖',
+            'emoji': '🏅',
         }
         
         with transaction.atomic():
