@@ -10,10 +10,10 @@ from .models import UserHotness, HotnessKudos, Season, UserTip, UserEventScore
 
 User = get_user_model()
 
-HOTNESS_CORRECT_PREDICTION = 2
-HOTNESS_LOCK_WIN = 10
-HOTNESS_STREAK_BONUS = 5
-HOTNESS_KUDOS = 1
+HOTNESS_CORRECT_PREDICTION = 10
+HOTNESS_LOCK_WIN = 20
+HOTNESS_STREAK_BONUS = 50
+HOTNESS_KUDOS = 2
 STREAK_LENGTH = 3
 
 
@@ -92,7 +92,7 @@ def award_hotness_for_correct_prediction(
         points_awarded__gt=0
     ).order_by('-awarded_at')[:STREAK_LENGTH].count()
     
-    if recent_correct_count == STREAK_LENGTH:
+    if recent_correct_count >= STREAK_LENGTH:
         hotness.score += HOTNESS_STREAK_BONUS
     
     hotness.save(update_fields=['score'])

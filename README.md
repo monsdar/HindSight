@@ -104,7 +104,7 @@ Flexible organization system:
    BALLDONTLIE_API_TOKEN=YOUR_TOKEN_HERE
 
    # Hotness System (optional)
-   HOTNESS_DECAY_PER_HOUR=0.1  # Default: 0.1 (1 point per 10 hours)
+   HOTNESS_DECAY_PER_HOUR=0.5  # Default: 0.5 (1 point per 2 hours)
 
    # User Selection (defaults to True if not set)
    ENABLE_USER_SELECTION=True
@@ -261,7 +261,7 @@ PRIVACY_GATE_ANSWER=GSW,LAL,BOS,OKC
 BALLDONTLIE_API_TOKEN=your_token
 
 # Hotness System (optional)
-HOTNESS_DECAY_PER_HOUR=0.1  # Default: 0.1 (1 point per 10 hours)
+HOTNESS_DECAY_PER_HOUR=0.5  # Default: 0.5 (1 point per 2 hours)
 
 # Customization
 PAGE_TITLE=Family Predictions
@@ -319,7 +319,7 @@ DEFAULT_FROM_EMAIL=noreply@yourdomain.com
 BALLDONTLIE_API_TOKEN=your_token
 
 # Hotness System (optional)
-HOTNESS_DECAY_PER_HOUR=0.1  # Default: 0.1 (1 point per 10 hours)
+HOTNESS_DECAY_PER_HOUR=0.5  # Default: 0.5 (1 point per 2 hours)
 
 # Customization
 PAGE_TITLE=HindSight
