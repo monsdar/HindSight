@@ -227,6 +227,15 @@ class Command(BaseCommand):
                         
                         if created:
                             total_scores_created += 1
+                            # Award hotness for correct prediction (only when score is first created)
+                            from hooptipp.predictions.hotness_service import award_hotness_for_correct_prediction
+                            from hooptipp.predictions.models import Season
+                            active_season = Season.get_active_season()
+                            award_hotness_for_correct_prediction(
+                                user=tip.user,
+                                was_locked=multiplier > 1,
+                                season=active_season
+                            )
                         else:
                             total_scores_updated += 1
                         
