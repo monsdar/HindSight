@@ -14,6 +14,7 @@ from hooptipp.predictions.models import (
     OptionCategory,
     PredictionEvent,
     PredictionOption,
+    Season,
     TipType,
     UserEventScore,
     UserTip,
@@ -225,6 +226,60 @@ class EventSourceAdminTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn('sources', response.context)
         self.assertIsInstance(response.context['sources'], list)
+
+
+class SeasonAdminTests(TestCase):
+    """Tests for SeasonAdmin to ensure changelist works correctly."""
+    
+    def setUp(self) -> None:
+        self.user = get_user_model().objects.create_superuser(
+            username='admin',
+            email='admin@example.com',
+            password='password123',
+        )
+        self.client.force_login(self.user)
+        super().setUp()
+    
+    def test_changelist_view_loads_without_error(self) -> None:
+        """Test that the Season changelist view loads without errors."""
+        from datetime import date
+        
+        # Create a test season
+        Season.objects.create(
+            name='Test Season',
+            start_date=date(2025, 1, 1),
+            end_date=date(2025, 12, 31)
+        )
+        
+        url = reverse('admin:predictions_season_changelist')
+        
+        response = self.client.get(url)
+        
+        # Should return 200 without errors
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Seasons')
+        self.assertContains(response, 'Test Season')
+    
+    def test_changelist_displays_is_active_status(self) -> None:
+        """Test that the changelist displays the is_active_display column."""
+        from datetime import date
+        
+        # Create a test season
+        season = Season.objects.create(
+            name='Active Season',
+            start_date=date(2024, 1, 1),
+            end_date=date(2026, 12, 31)
+        )
+        
+        url = reverse('admin:predictions_season_changelist')
+        
+        response = self.client.get(url)
+        
+        # Should return 200 and contain the season
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Active Season')
+        # Should contain the status column (either Active or Inactive)
+        self.assertIn('Status', response.content.decode())
 
 
 class EventOutcomeBatchAddTests(TestCase):

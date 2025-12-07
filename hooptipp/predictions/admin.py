@@ -793,12 +793,36 @@ class SeasonAdmin(admin.ModelAdmin):
     
     def is_active_display(self, obj):
         """Display whether the season is currently active."""
-        is_active = obj.is_active()
-        if is_active:
-            return format_html('<span style="color: green;">● Active</span>')
-        return format_html('<span style="color: gray;">○ Inactive</span>')
+        if obj is None:
+            return '-'
+        try:
+            is_active = obj.is_active()
+            if is_active:
+                return format_html('<span style="color: green;">● Active</span>')
+            return format_html('<span style="color: gray;">○ Inactive</span>')
+        except Exception:
+            return '-'
     is_active_display.short_description = 'Status'
     is_active_display.boolean = False
+    
+    def changelist_view(self, request, extra_context=None):
+        """Override changelist_view to handle errors gracefully."""
+        try:
+            return super().changelist_view(request, extra_context=extra_context)
+        except (IncorrectLookupParameters, ValueError, TypeError) as e:
+            # Handle invalid lookup parameters (e.g., invalid date in date_hierarchy)
+            # or other errors that might prevent changelist construction
+            request.GET = request.GET.copy()
+            # Remove problematic date parameters that might cause issues
+            for key in list(request.GET.keys()):
+                if key.startswith('start_date') or key.startswith('end_date'):
+                    del request.GET[key]
+            # Try again with cleaned parameters
+            try:
+                return super().changelist_view(request, extra_context=extra_context)
+            except Exception:
+                # If it still fails, re-raise the original error
+                raise e
     
     def save_model(self, request, obj, form, change):
         """Override save to show helpful messages."""
