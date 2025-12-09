@@ -19,6 +19,7 @@ from .models import (
     DatenschutzSection,
     EventOutcome,
     HotnessKudos,
+    HotnessSettings,
     ImpressumSection,
     Option,
     OptionCategory,
@@ -921,6 +922,60 @@ class HotnessKudosAdmin(admin.ModelAdmin):
     search_fields = ('from_user__username', 'to_user__username')
     date_hierarchy = 'created_at'
     ordering = ('-created_at',)
+
+
+@admin.register(HotnessSettings)
+class HotnessSettingsAdmin(admin.ModelAdmin):
+    """Admin for HotnessSettings singleton model."""
+    
+    def has_add_permission(self, request):
+        # Only allow adding if no instance exists
+        return not HotnessSettings.objects.exists()
+    
+    def has_delete_permission(self, request, obj=None):
+        # Don't allow deleting the settings
+        return False
+    
+    def changelist_view(self, request, extra_context=None):
+        """Redirect to the single instance if it exists, or create it."""
+        settings = HotnessSettings.get_settings()
+        return HttpResponseRedirect(
+            reverse('admin:predictions_hotnesssettings_change', args=[settings.pk])
+        )
+    
+    list_display = (
+        'correct_prediction_points',
+        'lock_win_points',
+        'streak_bonus_points',
+        'kudos_points',
+        'streak_length',
+        'decay_per_hour',
+        'updated_at',
+    )
+    fieldsets = (
+        ('Points Configuration', {
+            'fields': (
+                'correct_prediction_points',
+                'lock_win_points',
+                'streak_bonus_points',
+                'kudos_points',
+            ),
+            'description': 'Configure the hotness points awarded for various actions.'
+        }),
+        ('Streak Configuration', {
+            'fields': ('streak_length',),
+            'description': 'Number of consecutive correct predictions required for streak bonus.'
+        }),
+        ('Decay Configuration', {
+            'fields': ('decay_per_hour',),
+            'description': 'Hotness points lost per hour (decay rate).'
+        }),
+        ('Timestamps', {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',),
+        }),
+    )
+    readonly_fields = ('created_at', 'updated_at')
 
 
 # Register the EventSourceAdmin manually

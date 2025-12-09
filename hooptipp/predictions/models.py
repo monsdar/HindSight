@@ -755,7 +755,7 @@ class TeilnahmebedingungenSection(models.Model):
 class UserHotness(models.Model):
     """
     Tracks a user's current hotness score - a dynamic social + performance metric.
-    Resets when new season starts. Decays over time based on HOTNESS_DECAY_PER_HOUR setting.
+    Resets when new season starts. Decays over time based on HotnessSettings.decay_per_hour.
     """
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -793,12 +793,12 @@ class UserHotness(models.Model):
         return 0
     
     def decay(self) -> None:
-        """Apply time-based decay based on HOTNESS_DECAY_PER_HOUR setting."""
-        from django.conf import settings
+        """Apply time-based decay based on HotnessSettings.decay_per_hour."""
+        hotness_settings = HotnessSettings.get_settings()
         
         now = timezone.now()
         hours_elapsed = (now - self.last_decay).total_seconds() / 3600
-        decay_amount = hours_elapsed * settings.HOTNESS_DECAY_PER_HOUR
+        decay_amount = hours_elapsed * hotness_settings.decay_per_hour
         
         if decay_amount > 0:
             self.score = max(0.0, self.score - decay_amount)
@@ -842,6 +842,83 @@ class HotnessKudos(models.Model):
     
     def __str__(self):
         return f"{self.from_user.username} -> {self.to_user.username} ({self.created_at.date()})"
+
+
+class HotnessSettings(models.Model):
+    """
+    Singleton model for configuring hotness system parameters.
+    
+    Only one instance should exist. Use get_settings() to get or create it.
+    """
+    # Points awarded for correct predictions
+    correct_prediction_points = models.FloatField(
+        default=10.0,
+        help_text="Points awarded for a correct prediction"
+    )
+    # Bonus points for winning with a locked prediction
+    lock_win_points = models.FloatField(
+        default=20.0,
+        help_text="Bonus points awarded when a locked prediction is correct"
+    )
+    # Bonus points for streak of correct predictions
+    streak_bonus_points = models.FloatField(
+        default=50.0,
+        help_text="Bonus points awarded for a streak of correct predictions"
+    )
+    # Points awarded per kudos received
+    kudos_points = models.FloatField(
+        default=2.0,
+        help_text="Points awarded per kudos received from another user"
+    )
+    # Number of consecutive correct predictions required for streak bonus
+    streak_length = models.PositiveIntegerField(
+        default=3,
+        help_text="Number of consecutive correct predictions required for streak bonus"
+    )
+    # Decay rate per hour
+    decay_per_hour = models.FloatField(
+        default=0.5,
+        help_text="Hotness points lost per hour (decay rate)"
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        verbose_name = 'Hotness Settings'
+        verbose_name_plural = 'Hotness Settings'
+    
+    def __str__(self):
+        return "Hotness Settings"
+    
+    def save(self, *args, **kwargs):
+        """Ensure only one instance exists."""
+        # If this is a new instance and another already exists, update that one instead
+        if not self.pk:
+            existing = HotnessSettings.objects.first()
+            if existing:
+                # Update existing instance instead of creating new one
+                for field in self._meta.fields:
+                    if field.name not in ('id', 'pk', 'created_at', 'updated_at'):
+                        setattr(existing, field.name, getattr(self, field.name))
+                existing.save()
+                return
+        super().save(*args, **kwargs)
+    
+    @classmethod
+    def get_settings(cls) -> 'HotnessSettings':
+        """Get or create the singleton settings instance."""
+        settings, created = cls.objects.get_or_create(
+            pk=1,
+            defaults={
+                'correct_prediction_points': 10.0,
+                'lock_win_points': 20.0,
+                'streak_bonus_points': 50.0,
+                'kudos_points': 2.0,
+                'streak_length': 3,
+                'decay_per_hour': 0.5,
+            }
+        )
+        return settings
 
 
 @receiver(post_save, sender=UserPreferences)

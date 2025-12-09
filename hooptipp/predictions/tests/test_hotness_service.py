@@ -6,11 +6,11 @@ from datetime import timedelta
 
 from ..models import (
     UserHotness, HotnessKudos, Season, PredictionEvent, EventOutcome,
-    UserTip, UserEventScore, TipType, OptionCategory, Option, PredictionOption
+    UserTip, UserEventScore, TipType, OptionCategory, Option, PredictionOption,
+    HotnessSettings
 )
 from ..hotness_service import (
-    give_kudos, award_hotness_for_correct_prediction, get_or_create_hotness,
-    HOTNESS_CORRECT_PREDICTION, HOTNESS_STREAK_BONUS, STREAK_LENGTH
+    give_kudos, award_hotness_for_correct_prediction, get_or_create_hotness
 )
 
 User = get_user_model()
@@ -25,6 +25,8 @@ class HotnessServiceTests(TestCase):
             start_date=timezone.now().date(),
             end_date=timezone.now().date() + timedelta(days=30)
         )
+        # Ensure default settings exist
+        self.settings = HotnessSettings.get_settings()
     
     def test_give_kudos_success(self):
         result = give_kudos(self.user1, self.user2)
@@ -83,9 +85,10 @@ class HotnessServiceTests(TestCase):
         self.assertAlmostEqual(hotness.score, 45.0, places=1)
     
     def test_hotness_decay_respects_setting(self):
-        """Test that decay uses HOTNESS_DECAY_PER_HOUR setting."""
-        # Store original setting
-        original_decay = settings.HOTNESS_DECAY_PER_HOUR
+        """Test that decay uses HotnessSettings.decay_per_hour."""
+        # Update settings to a specific value
+        self.settings.decay_per_hour = 1.0
+        self.settings.save()
         
         # Create hotness without calling get_or_create to avoid automatic decay
         hotness = UserHotness.objects.create(
@@ -102,10 +105,13 @@ class HotnessServiceTests(TestCase):
         # Apply decay
         hotness.decay()
         
-        # Should lose 5 hours * HOTNESS_DECAY_PER_HOUR
-        expected_loss = 5 * original_decay
-        expected_score = 100.0 - expected_loss
+        # Should lose 5 hours * 1.0 = 5.0
+        expected_score = 100.0 - 5.0
         self.assertAlmostEqual(hotness.score, expected_score, places=1)
+        
+        # Reset to default
+        self.settings.decay_per_hour = 0.5
+        self.settings.save()
     
     def test_hotness_levels(self):
         hotness = get_or_create_hotness(self.user1, self.season)
@@ -250,7 +256,7 @@ class HotnessServiceTests(TestCase):
         
         hotness = UserHotness.objects.get(user=self.user1, season=self.season)
         # Should get base hotness + streak bonus
-        expected_score = initial_score + HOTNESS_CORRECT_PREDICTION + HOTNESS_STREAK_BONUS
+        expected_score = initial_score + self.settings.correct_prediction_points + self.settings.streak_bonus_points
         self.assertEqual(hotness.score, expected_score)
     
     def test_streak_bonus_not_awarded_when_incorrect_prediction_in_between(self):
@@ -336,11 +342,11 @@ class HotnessServiceTests(TestCase):
         
         hotness = UserHotness.objects.get(user=self.user1, season=self.season)
         # Should get base hotness but NO streak bonus (because event 2 was wrong)
-        expected_score = initial_score + HOTNESS_CORRECT_PREDICTION
+        expected_score = initial_score + self.settings.correct_prediction_points
         self.assertEqual(hotness.score, expected_score)
     
     def test_streak_bonus_not_awarded_when_fewer_than_streak_length(self):
-        """Test that streak bonus is NOT awarded when there are fewer than STREAK_LENGTH resolved predictions."""
+        """Test that streak bonus is NOT awarded when there are fewer than required streak_length resolved predictions."""
         # Create tip type and category
         tip_type = TipType.objects.create(
             name="Test Type",
@@ -353,7 +359,7 @@ class HotnessServiceTests(TestCase):
         category = OptionCategory.objects.create(slug='test', name='Test')
         option = Option.objects.create(category=category, slug='opt1', name='Option 1')
         
-        # Create only 2 events (less than STREAK_LENGTH which is 3)
+        # Create only 2 events (less than streak_length which defaults to 3)
         for i in range(2):
             event = PredictionEvent.objects.create(
                 tip_type=tip_type,
@@ -399,7 +405,7 @@ class HotnessServiceTests(TestCase):
         award_hotness_for_correct_prediction(self.user1, season=self.season)
         
         hotness = UserHotness.objects.get(user=self.user1, season=self.season)
-        # Should get base hotness but NO streak bonus (only 2 predictions, need 3)
-        expected_score = initial_score + HOTNESS_CORRECT_PREDICTION
+        # Should get base hotness but NO streak bonus (only 2 predictions, need streak_length)
+        expected_score = initial_score + self.settings.correct_prediction_points
         self.assertEqual(hotness.score, expected_score)
 

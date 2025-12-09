@@ -6,15 +6,9 @@ from django.db import transaction
 from django.utils import timezone
 from django.contrib.auth import get_user_model
 
-from .models import UserHotness, HotnessKudos, Season, UserTip, UserEventScore, EventOutcome
+from .models import UserHotness, HotnessKudos, Season, UserTip, UserEventScore, EventOutcome, HotnessSettings
 
 User = get_user_model()
-
-HOTNESS_CORRECT_PREDICTION = 10
-HOTNESS_LOCK_WIN = 20
-HOTNESS_STREAK_BONUS = 50
-HOTNESS_KUDOS = 2
-STREAK_LENGTH = 3
 
 
 def get_or_create_hotness(user: User, season: Season | None = None) -> UserHotness:
@@ -51,6 +45,8 @@ def give_kudos(from_user: User, to_user: User) -> dict:
         if existing:
             return {'success': False, 'message': 'Already gave kudos to this user today'}
     
+    settings = HotnessSettings.get_settings()
+    
     with transaction.atomic():
         # Create kudos record
         HotnessKudos.objects.create(
@@ -61,7 +57,7 @@ def give_kudos(from_user: User, to_user: User) -> dict:
         
         # Award hotness
         hotness = get_or_create_hotness(to_user, active_season)
-        hotness.score += HOTNESS_KUDOS
+        hotness.score += settings.kudos_points
         hotness.save(update_fields=['score'])
     
     return {
@@ -77,26 +73,27 @@ def award_hotness_for_correct_prediction(
     season: Season | None = None
 ) -> None:
     """Award hotness when user gets prediction correct."""
+    settings = HotnessSettings.get_settings()
     hotness = get_or_create_hotness(user, season)
     
     # Base hotness for correct prediction
-    hotness.score += HOTNESS_CORRECT_PREDICTION
+    hotness.score += settings.correct_prediction_points
     
     # Bonus for locked prediction
     if was_locked:
-        hotness.score += HOTNESS_LOCK_WIN
+        hotness.score += settings.lock_win_points
     
     # Check for streak bonus
-    # Get the most recent STREAK_LENGTH resolved events for which the user made a tip
+    # Get the most recent streak_length resolved events for which the user made a tip
     # Order by resolved_at to get chronological order of resolved predictions
     recent_resolved_events = list(
         EventOutcome.objects.filter(
             prediction_event__tips__user=user
-        ).select_related('prediction_event').distinct().order_by('-resolved_at')[:STREAK_LENGTH]
+        ).select_related('prediction_event').distinct().order_by('-resolved_at')[:settings.streak_length]
     )
     
-    # Check if we have at least STREAK_LENGTH resolved events
-    if len(recent_resolved_events) >= STREAK_LENGTH:
+    # Check if we have at least streak_length resolved events
+    if len(recent_resolved_events) >= settings.streak_length:
         # Check if all of them have a UserEventScore (meaning all were correct)
         event_ids = [outcome.prediction_event_id for outcome in recent_resolved_events]
         correct_count = UserEventScore.objects.filter(
@@ -104,9 +101,9 @@ def award_hotness_for_correct_prediction(
             prediction_event_id__in=event_ids
         ).count()
         
-        # Only award streak bonus if all STREAK_LENGTH most recent resolved predictions were correct
-        if correct_count >= STREAK_LENGTH:
-            hotness.score += HOTNESS_STREAK_BONUS
+        # Only award streak bonus if all streak_length most recent resolved predictions were correct
+        if correct_count >= settings.streak_length:
+            hotness.score += settings.streak_bonus_points
     
     hotness.save(update_fields=['score'])
 
