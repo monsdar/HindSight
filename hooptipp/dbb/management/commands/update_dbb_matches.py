@@ -8,6 +8,7 @@ match records and prediction events.
 from __future__ import annotations
 
 import logging
+from datetime import timedelta
 
 from django.core.management.base import BaseCommand
 from django.db import transaction
@@ -16,7 +17,9 @@ from django.utils import timezone
 from hooptipp.dbb.client import build_slapi_client
 from hooptipp.dbb.models import TrackedLeague
 from hooptipp.dbb.event_source import DbbEventSource
-from hooptipp.predictions.models import EventOutcome
+from hooptipp.predictions.models import EventOutcome, UserTip
+from hooptipp.predictions.lock_service import LockService
+from hooptipp.predictions.event_sources.base import RescheduledEvent
 
 logger = logging.getLogger(__name__)
 
@@ -119,6 +122,22 @@ class Command(BaseCommand):
             else:
                 self.stdout.write('  No swapped scores found')
 
+            # Return locks for rescheduled matches
+            if events_result.rescheduled_events:
+                self.stdout.write('Returning locks for rescheduled matches...')
+                returned_count = self._return_locks_for_rescheduled_events(
+                    events_result.rescheduled_events, dry_run
+                )
+                
+                if returned_count > 0:
+                    self.stdout.write(
+                        self.style.SUCCESS(f'  Returned {returned_count} lock(s) for rescheduled matches')
+                    )
+                else:
+                    self.stdout.write('  No locks to return for rescheduled matches')
+            else:
+                self.stdout.write('  No rescheduled matches found')
+
             self.stdout.write(self.style.SUCCESS('Match update completed'))
 
     def _fix_swapped_scores(self, event_source: DbbEventSource, dry_run: bool) -> int:
@@ -215,4 +234,53 @@ class Command(BaseCommand):
                 continue
         
         return fixed_count
+
+    def _return_locks_for_rescheduled_events(
+        self, rescheduled_events: list[RescheduledEvent], dry_run: bool
+    ) -> int:
+        """
+        Return locks for events that were rescheduled significantly into the future.
+        
+        Args:
+            rescheduled_events: List of RescheduledEvent objects from sync_events
+            dry_run: If True, only report what would be returned
+            
+        Returns:
+            Number of locks returned
+        """
+        returned_count = 0
+        
+        for rescheduled in rescheduled_events:
+            event = rescheduled.event
+            
+            # Get all tips with active locks for this event
+            tips_with_locks = UserTip.objects.filter(
+                prediction_event=event,
+                lock_status=UserTip.LockStatus.ACTIVE
+            ).select_related('user')
+            
+            for tip in tips_with_locks:
+                if dry_run:
+                    self.stdout.write(
+                        f'  Would return lock for {tip.user.username} on event "{event.name}" '
+                        f'(rescheduled from {rescheduled.old_deadline} to {rescheduled.new_deadline}, '
+                        f'delta: {rescheduled.reschedule_delta})'
+                    )
+                    returned_count += 1
+                else:
+                    try:
+                        lock_service = LockService(tip.user)
+                        if lock_service.return_lock_for_forfeited_event(tip):
+                            logger.info(
+                                f'Returned lock to {tip.user.username} for rescheduled match '
+                                f'{event.name} (rescheduled from {rescheduled.old_deadline} to '
+                                f'{rescheduled.new_deadline}, delta: {rescheduled.reschedule_delta})'
+                            )
+                            returned_count += 1
+                    except Exception as e:
+                        logger.warning(
+                            f'Failed to return lock for rescheduled match {event.name}: {e}'
+                        )
+        
+        return returned_count
 

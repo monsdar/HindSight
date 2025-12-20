@@ -14,7 +14,7 @@ from zoneinfo import ZoneInfo
 from django.db import transaction
 from django.utils import timezone
 
-from hooptipp.predictions.event_sources.base import EventSource, EventSourceResult
+from hooptipp.predictions.event_sources.base import EventSource, EventSourceResult, RescheduledEvent
 from hooptipp.predictions.models import (
     EventOutcome,
     Option,
@@ -271,6 +271,11 @@ class DbbEventSource(EventSource):
                         ).first()
 
                         if existing_event:
+                            # Check if the deadline was rescheduled significantly
+                            old_deadline = existing_event.deadline
+                            deadline_shift = match_date - old_deadline
+                            reschedule_threshold = timedelta(hours=48)
+                            
                             # Update existing event
                             existing_event.deadline = match_date
                             existing_event.name = f"{home_team} vs. {away_team}"
@@ -286,6 +291,17 @@ class DbbEventSource(EventSource):
                             existing_event.save()
                             event = existing_event
                             result.events_updated += 1
+                            
+                            # Track if the match was rescheduled significantly into the future
+                            if deadline_shift > reschedule_threshold:
+                                result.rescheduled_events.append(
+                                    RescheduledEvent(
+                                        event=event,
+                                        old_deadline=old_deadline,
+                                        new_deadline=match_date,
+                                        reschedule_delta=deadline_shift
+                                    )
+                                )
                         else:
                             # Create new prediction event
                             event = PredictionEvent.objects.create(

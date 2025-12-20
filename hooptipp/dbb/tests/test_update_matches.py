@@ -1,6 +1,7 @@
 """Tests for update_dbb_matches management command."""
 
 from io import StringIO
+from datetime import timedelta
 from unittest.mock import patch, MagicMock
 
 from django.core.management import call_command
@@ -8,6 +9,10 @@ from django.test import TestCase
 from django.utils import timezone
 
 from hooptipp.dbb.models import TrackedLeague, TrackedTeam
+from hooptipp.predictions.models import PredictionEvent, UserTip, TipType, OptionCategory, Option
+from django.contrib.auth import get_user_model
+
+User = get_user_model()
 
 
 class UpdateDbbMatchesCommandTest(TestCase):
@@ -120,4 +125,156 @@ class UpdateDbbMatchesCommandTest(TestCase):
         
         output = out.getvalue()
         self.assertIn('No active tracked leagues', output)
+
+    @patch('hooptipp.dbb.management.commands.update_dbb_matches.DbbEventSource')
+    @patch('hooptipp.dbb.management.commands.update_dbb_matches.build_slapi_client')
+    def test_returns_locks_for_rescheduled_matches(self, mock_build_client, mock_event_source_class):
+        """Test that locks are returned for matches that were rescheduled after lock was committed."""
+        mock_client = MagicMock()
+        mock_build_client.return_value = mock_client
+        
+        mock_event_source = MagicMock()
+        mock_event_source_class.return_value = mock_event_source
+        
+        from hooptipp.predictions.event_sources.base import EventSourceResult, RescheduledEvent
+        mock_event_source.sync_options.return_value = EventSourceResult()
+        mock_event_source.is_configured.return_value = True
+        
+        # Create a user
+        user = User.objects.create_user(username='testuser', email='test@example.com', password='testpass')
+        
+        # Create tip type and category
+        tip_type = TipType.objects.create(
+            slug='dbb-matches',
+            name='DBB Matches',
+            category=TipType.TipCategory.GAME,
+            is_active=True,
+            default_points=1,
+            deadline=timezone.now() + timedelta(days=30)
+        )
+        category = OptionCategory.objects.create(
+            slug='dbb-teams',
+            name='DBB Teams',
+            is_active=True
+        )
+        
+        # Simulate a match that was rescheduled:
+        # - Old deadline was 2 days from now (close)
+        # - Match was rescheduled to 10 days in the future (far)
+        now = timezone.now()
+        old_deadline = now + timedelta(days=2)  # Original deadline was close
+        new_deadline = now + timedelta(days=10)  # Rescheduled to 10 days from now
+        
+        event = PredictionEvent.objects.create(
+            tip_type=tip_type,
+            name='Team A vs Team B',
+            source_id='dbb-slapi',
+            source_event_id='match123',
+            deadline=new_deadline,  # Current deadline after rescheduling
+            is_active=True,
+            opens_at=timezone.now(),
+            reveal_at=timezone.now()
+        )
+        
+        # Create a tip with an active lock
+        tip = UserTip.objects.create(
+            user=user,
+            tip_type=tip_type,
+            prediction_event=event,
+            prediction='Team A',
+            is_locked=True,
+            lock_status=UserTip.LockStatus.ACTIVE,
+            lock_committed_at=now - timedelta(days=1)  # Lock was placed yesterday
+        )
+        
+        # Mock the sync_events result to include this rescheduled event
+        events_result = EventSourceResult()
+        events_result.events_updated = 1
+        events_result.rescheduled_events = [
+            RescheduledEvent(
+                event=event,
+                old_deadline=old_deadline,
+                new_deadline=new_deadline,
+                reschedule_delta=new_deadline - old_deadline
+            )
+        ]
+        mock_event_source.sync_events.return_value = events_result
+        
+        out = StringIO()
+        call_command('update_dbb_matches', stdout=out)
+        
+        output = out.getvalue()
+        self.assertIn('Returning locks for rescheduled matches', output)
+        
+        # Verify lock was returned
+        tip.refresh_from_db()
+        self.assertFalse(tip.is_locked)
+        self.assertEqual(tip.lock_status, UserTip.LockStatus.NONE)
+        self.assertIsNotNone(tip.lock_released_at)
+
+    @patch('hooptipp.dbb.management.commands.update_dbb_matches.DbbEventSource')
+    @patch('hooptipp.dbb.management.commands.update_dbb_matches.build_slapi_client')
+    def test_does_not_return_locks_for_normally_scheduled_far_future_matches(self, mock_build_client, mock_event_source_class):
+        """Test that locks are NOT returned for matches that were always scheduled far in the future."""
+        mock_client = MagicMock()
+        mock_build_client.return_value = mock_client
+        
+        mock_event_source = MagicMock()
+        mock_event_source_class.return_value = mock_event_source
+        
+        from hooptipp.predictions.event_sources.base import EventSourceResult
+        mock_event_source.sync_options.return_value = EventSourceResult()
+        mock_event_source.sync_events.return_value = EventSourceResult()  # No rescheduled events
+        mock_event_source.is_configured.return_value = True
+        
+        # Create a user
+        user = User.objects.create_user(username='testuser2', email='test2@example.com', password='testpass')
+        
+        # Create tip type
+        tip_type = TipType.objects.create(
+            slug='dbb-matches',
+            name='DBB Matches',
+            category=TipType.TipCategory.GAME,
+            is_active=True,
+            default_points=1,
+            deadline=timezone.now() + timedelta(days=30)
+        )
+        
+        # Simulate a match that was always scheduled far in the future:
+        # - Match is scheduled for 3 days in the future (not rescheduled)
+        now = timezone.now()
+        far_future_deadline = now + timedelta(days=3)  # Match scheduled for 3 days from now
+        
+        event = PredictionEvent.objects.create(
+            tip_type=tip_type,
+            name='Team C vs Team D',
+            source_id='dbb-slapi',
+            source_event_id='match456',
+            deadline=far_future_deadline,
+            is_active=True,
+            opens_at=timezone.now(),
+            reveal_at=timezone.now()
+        )
+        
+        # Create a tip with an active lock
+        tip = UserTip.objects.create(
+            user=user,
+            tip_type=tip_type,
+            prediction_event=event,
+            prediction='Team C',
+            is_locked=True,
+            lock_status=UserTip.LockStatus.ACTIVE,
+            lock_committed_at=now
+        )
+        
+        out = StringIO()
+        call_command('update_dbb_matches', stdout=out)
+        
+        output = out.getvalue()
+        self.assertIn('No rescheduled matches found', output)
+        
+        # Verify lock was NOT returned (no rescheduled events in result)
+        tip.refresh_from_db()
+        self.assertTrue(tip.is_locked)
+        self.assertEqual(tip.lock_status, UserTip.LockStatus.ACTIVE)
 

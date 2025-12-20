@@ -11,10 +11,21 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta
 from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:
-    from ..models import PredictionEvent
+# Import PredictionEvent for RescheduledEvent dataclass
+from ..models import PredictionEvent
+
+
+@dataclass
+class RescheduledEvent:
+    """Information about a rescheduled event."""
+    
+    event: PredictionEvent
+    old_deadline: datetime
+    new_deadline: datetime
+    reschedule_delta: timedelta
 
 
 @dataclass
@@ -28,6 +39,7 @@ class EventSourceResult:
     options_updated: int = 0
     options_removed: int = 0
     errors: list[str] = field(default_factory=list)
+    rescheduled_events: list[RescheduledEvent] = field(default_factory=list)
 
     @property
     def changed(self) -> bool:
@@ -61,6 +73,7 @@ class EventSourceResult:
         self.options_updated += other.options_updated
         self.options_removed += other.options_removed
         self.errors.extend(other.errors)
+        self.rescheduled_events.extend(other.rescheduled_events)
 
 
 class EventSource(ABC):
