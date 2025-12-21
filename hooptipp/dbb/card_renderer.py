@@ -21,6 +21,18 @@ class DbbCardRenderer(CardRenderer):
 
     def get_event_template(self, event: PredictionEvent) -> str:
         """Return DBB match template."""
+        # For backward compatibility, return long template if available, otherwise short
+        long_template = self.get_event_template_long(event)
+        if long_template:
+            return long_template
+        return self.get_event_template_short(event) or "dbb/cards/match.html"
+
+    def get_event_template_short(self, event: PredictionEvent) -> str | None:
+        """Return short template for DBB matches."""
+        return "dbb/cards/match_short.html"
+
+    def get_event_template_long(self, event: PredictionEvent) -> str | None:
+        """Return long template for DBB matches."""
         return "dbb/cards/match.html"
 
     def get_result_template(self, outcome: EventOutcome) -> str:

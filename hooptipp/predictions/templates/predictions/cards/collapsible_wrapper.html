@@ -1,0 +1,85 @@
+{% comment %}
+Collapsible wrapper for prediction cards with short and long views.
+Manages toggle state and smooth transitions between collapsed/expanded states.
+Defaults to collapsed (short view visible).
+{% endcomment %}
+
+<div class="collapsible-card-wrapper" data-event-id="{{ event.id }}">
+  
+  {# Short View - Visible by default #}
+  <div class="card-short-view">
+    {{ short_template_html|safe }}
+  </div>
+  
+  {# Long View - Hidden by default #}
+  <div class="card-long-view hidden">
+    {{ long_template_html|safe }}
+  </div>
+  
+</div>
+
+{# JavaScript for toggle functionality #}
+<script>
+// Use a global flag to prevent multiple initializations
+if (!window.hooptippCollapsibleCardInitialized) {
+  window.hooptippCollapsibleCardInitialized = true;
+  
+  document.addEventListener('DOMContentLoaded', function() {
+    // Find all collapsible card wrappers
+    const wrappers = document.querySelectorAll('.collapsible-card-wrapper');
+    
+    wrappers.forEach(wrapper => {
+      const shortView = wrapper.querySelector('.card-short-view');
+      const longView = wrapper.querySelector('.card-long-view');
+      
+      if (!shortView || !longView) {
+        return; // Skip if views are missing
+      }
+      
+      // Find the toggle placeholder in short view
+      const togglePlaceholder = shortView.querySelector('.card-toggle-placeholder');
+      
+      if (togglePlaceholder) {
+        // Create toggle button
+        const toggleButton = document.createElement('button');
+        toggleButton.type = 'button';
+        toggleButton.className = 'card-toggle-btn flex items-center justify-center w-6 h-6 rounded transition-all duration-200 text-slate-400 hover:text-slate-200 hover:bg-slate-800';
+        toggleButton.setAttribute('aria-label', 'Toggle card details');
+        toggleButton.setAttribute('aria-expanded', 'false');
+        
+        // Chevron down icon (collapsed state)
+        const chevronIcon = document.createElement('span');
+        chevronIcon.className = 'chevron-icon text-lg transition-transform duration-200';
+        chevronIcon.textContent = '▼';
+        toggleButton.appendChild(chevronIcon);
+        
+        // Replace placeholder with toggle button
+        togglePlaceholder.replaceWith(toggleButton);
+        
+        // Toggle functionality
+        toggleButton.addEventListener('click', function(e) {
+          e.preventDefault();
+          e.stopPropagation();
+          
+          const isExpanded = !longView.classList.contains('hidden');
+          
+          if (isExpanded) {
+            // Collapse: show short, hide long
+            shortView.classList.remove('hidden');
+            longView.classList.add('hidden');
+            chevronIcon.textContent = '▼';
+            toggleButton.setAttribute('aria-expanded', 'false');
+          } else {
+            // Expand: hide short, show long
+            shortView.classList.add('hidden');
+            longView.classList.remove('hidden');
+            chevronIcon.textContent = '▲';
+            toggleButton.setAttribute('aria-expanded', 'true');
+          }
+        });
+      }
+    });
+  });
+}
+</script>
+

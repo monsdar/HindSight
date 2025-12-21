@@ -1,0 +1,271 @@
+{% comment %}
+DBB match prediction card - short/collapsed view.
+Compact layout with team logos, names, and lock symbol.
+Interactive: team selection and lock toggle work in this view.
+{% endcomment %}
+
+<div class="prediction-card-short dbb-match-card-short flex items-center gap-3 p-3 rounded-lg border border-slate-800 bg-slate-900 {% if user_tip %}ring-2 ring-theme-accent/30 bg-gradient-to-br from-slate-900 to-slate-800{% endif %}">
+  
+  {# Toggle button placeholder - actual toggle is in wrapper #}
+  <div class="card-toggle-placeholder w-6 flex-shrink-0"></div>
+  
+  {# Team Matchup - Compact #}
+  <div class="flex-1 flex items-center gap-2 min-w-0">
+    
+    {# Home Team - Selectable #}
+    {% if active_user %}
+      <button type="button" 
+              class="team-select-btn flex items-center gap-2 px-2 py-1 rounded transition-all duration-200 {% if user_tip and user_tip.prediction_option_id == card_context.home_team_option_id %}theme-accent-border theme-accent-bg-subtle{% else %}border border-slate-600{% endif %}"
+              data-event-id="{{ event.id }}"
+              data-option-id="{{ card_context.home_team_option_id }}"
+              data-team-name="{{ card_context.home_team }}">
+    {% else %}
+      <div class="flex items-center gap-2 px-2 py-1 rounded border border-slate-700">
+    {% endif %}
+        {# Team logo or placeholder #}
+        {% if card_context.home_team_logo %}
+          {% load static %}
+          <img src="{% static 'dbb/'|add:card_context.home_team_logo %}" 
+               alt="{{ card_context.home_team }}" 
+               class="h-8 w-8 object-contain flex-shrink-0">
+        {% else %}
+          <div class="h-8 w-8 flex items-center justify-center bg-slate-800 rounded flex-shrink-0">
+            <span class="text-xs font-bold text-slate-500">{{ card_context.home_team|slice:":2"|upper }}</span>
+          </div>
+        {% endif %}
+        <span class="text-sm font-semibold text-slate-200 truncate">
+          {{ card_context.home_team }}
+        </span>
+    {% if active_user %}</button>{% else %}</div>{% endif %}
+    
+    {# Separator #}
+    <span class="text-sm font-bold theme-accent-text flex-shrink-0">vs.</span>
+    
+    {# Away Team - Selectable #}
+    {% if active_user %}
+      <button type="button" 
+              class="team-select-btn flex items-center gap-2 px-2 py-1 rounded transition-all duration-200 {% if user_tip and user_tip.prediction_option_id == card_context.away_team_option_id %}theme-accent-border theme-accent-bg-subtle{% else %}border border-slate-600{% endif %}"
+              data-event-id="{{ event.id }}"
+              data-option-id="{{ card_context.away_team_option_id }}"
+              data-team-name="{{ card_context.away_team }}">
+    {% else %}
+      <div class="flex items-center gap-2 px-2 py-1 rounded border border-slate-700">
+    {% endif %}
+        {# Team logo or placeholder #}
+        {% if card_context.away_team_logo %}
+          {% load static %}
+          <img src="{% static 'dbb/'|add:card_context.away_team_logo %}" 
+               alt="{{ card_context.away_team }}" 
+               class="h-8 w-8 object-contain flex-shrink-0">
+        {% else %}
+          <div class="h-8 w-8 flex items-center justify-center bg-slate-800 rounded flex-shrink-0">
+            <span class="text-xs font-bold text-slate-500">{{ card_context.away_team|slice:":2"|upper }}</span>
+          </div>
+        {% endif %}
+        <span class="text-sm font-semibold text-slate-200 truncate">
+          {{ card_context.away_team }}
+        </span>
+    {% if active_user %}</button>{% else %}</div>{% endif %}
+    
+  </div>
+  
+  {# Lock Button - Compact #}
+  {% if active_user %}
+    <button type="button" 
+            class="lock-toggle-btn flex items-center justify-center w-7 h-7 rounded-full border-2 transition-all duration-200 flex-shrink-0 {% if user_tip and user_tip.is_locked %}theme-accent-border theme-accent-bg-subtle{% else %}border-slate-600{% endif %}"
+            data-event-id="{{ event.id }}"
+            {% if lock_summary and lock_summary.available == 0 and not user_tip.is_locked %}disabled{% endif %}
+            title="{% if user_tip and user_tip.is_locked %}Unlock this pick{% else %}Lock this pick{% endif %}">
+      <span class="text-base transition-transform duration-200">{% if user_tip and user_tip.is_locked %}🔒{% else %}🔓{% endif %}</span>
+    </button>
+  {% endif %}
+  
+</div>
+
+{# JavaScript for interactive functionality - same as long view #}
+<script>
+// Use a global flag to prevent multiple initializations
+if (!window.hooptippDbbMatchCardShortInitialized) {
+  window.hooptippDbbMatchCardShortInitialized = true;
+  
+  document.addEventListener('DOMContentLoaded', function() {
+    // Team selection functionality
+    const teamButtons = document.querySelectorAll('.dbb-match-card-short .team-select-btn');
+    
+    teamButtons.forEach(button => {
+      if (!button.hasAttribute('data-listener-attached')) {
+        button.setAttribute('data-listener-attached', 'true');
+        button.addEventListener('click', function() {
+          const eventId = this.dataset.eventId;
+          const optionId = this.dataset.optionId;
+          
+          // Remove selection from other teams in this event
+          const allTeamButtons = document.querySelectorAll(`[data-event-id="${eventId}"].team-select-btn`);
+          allTeamButtons.forEach(btn => {
+            btn.classList.remove('theme-accent-border', 'theme-accent-bg-subtle');
+            btn.classList.add('border-slate-600');
+          });
+          
+          // Add selection to clicked team
+          this.classList.remove('border-slate-600');
+          this.classList.add('theme-accent-border', 'theme-accent-bg-subtle');
+                    
+          // Save prediction immediately via AJAX
+          savePredictionImmediately(eventId, optionId);
+        });
+      }
+    });
+    
+    // Lock toggle functionality
+    const lockButtons = document.querySelectorAll('.dbb-match-card-short .lock-toggle-btn');
+    
+    lockButtons.forEach(button => {
+      if (!button.hasAttribute('data-listener-attached')) {
+        button.setAttribute('data-listener-attached', 'true');
+        button.addEventListener('click', function(e) {
+          e.preventDefault();
+          e.stopPropagation();
+          
+          const eventId = this.dataset.eventId;
+          const isCurrentlyLocked = this.querySelector('span').textContent === '🔒';
+          
+          // Toggle lock state immediately via AJAX
+          toggleLockImmediately(eventId, !isCurrentlyLocked, this);
+        });
+      }
+    });
+    
+    // AJAX function to save prediction immediately
+    async function savePredictionImmediately(eventId, optionId) {
+      try {
+        const response = await fetch('/api/save-prediction/', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+          },
+          body: JSON.stringify({
+            event_id: eventId,
+            option_id: optionId
+          })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+          showTemporaryMessage('Prediction saved!', 'success');
+        } else {
+          showTemporaryMessage('Failed to save prediction: ' + data.error, 'error');
+        }
+      } catch (error) {
+        console.error('Error saving prediction:', error);
+        showTemporaryMessage('Error saving prediction', 'error');
+      }
+    }
+    
+    // AJAX function to toggle lock immediately
+    async function toggleLockImmediately(eventId, shouldLock, buttonElement) {
+      try {
+        const response = await fetch('/api/toggle-lock/', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+          },
+          body: JSON.stringify({
+            event_id: eventId,
+            should_lock: shouldLock
+          })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+          // Update button appearance
+          const lockSpan = buttonElement.querySelector('span');
+          if (data.is_locked) {
+            lockSpan.textContent = '🔒';
+            buttonElement.classList.remove('border-slate-600', 'border-2');
+            buttonElement.classList.add('theme-accent-border', 'theme-accent-bg-subtle', 'border-2');
+            buttonElement.title = 'Unlock this pick';
+          } else {
+            lockSpan.textContent = '🔓';
+            buttonElement.classList.remove('theme-accent-border', 'theme-accent-bg-subtle', 'border-2');
+            buttonElement.classList.add('border-slate-600', 'border-2');
+            buttonElement.title = 'Lock this pick';
+          }
+          
+          // Update lock summary if available
+          if (data.lock_summary) {
+            updateLockSummary(data.lock_summary);
+            
+            if (data.lock_summary.available > 0) {
+              enableLockButtons();
+            } else {
+              setTimeout(() => {
+                disableRemainingLockButtons();
+              }, 100);
+            }
+          }
+          
+          showTemporaryMessage(data.message, 'success');
+        } else {
+          showTemporaryMessage('Failed to toggle lock: ' + data.error, 'error');
+        }
+      } catch (error) {
+        console.error('Error toggling lock:', error);
+        showTemporaryMessage('Error toggling lock', 'error');
+      }
+    }
+    
+    // Function to show temporary messages
+    function showTemporaryMessage(message, type) {
+      const messageEl = document.createElement('div');
+      messageEl.className = `fixed top-4 right-4 z-50 px-4 py-2 rounded-lg text-sm font-medium transition-opacity duration-300 ${
+        type === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'
+      }`;
+      messageEl.textContent = message;
+      
+      document.body.appendChild(messageEl);
+      
+      setTimeout(() => {
+        messageEl.style.opacity = '0';
+        setTimeout(() => messageEl.remove(), 300);
+      }, 3000);
+    }
+    
+    // Function to update lock summary display
+    function updateLockSummary(lockSummary) {
+      const lockSummaryEl = document.querySelector('.lock-summary-display');
+      if (lockSummaryEl) {
+        lockSummaryEl.textContent = `Locks remaining: ${lockSummary.available} / ${lockSummary.total}`;
+      }
+    }
+    
+    // Function to disable remaining lock buttons when limit reached
+    function disableRemainingLockButtons() {
+      const lockButtons = document.querySelectorAll('.lock-toggle-btn');
+      lockButtons.forEach(button => {
+        const isCurrentlyLocked = button.querySelector('span').textContent === '🔒';
+        if (!isCurrentlyLocked) {
+          button.disabled = true;
+          button.classList.add('opacity-50', 'cursor-not-allowed');
+        }
+      });
+    }
+    
+    // Function to re-enable lock buttons when locks become available
+    function enableLockButtons() {
+      const lockButtons = document.querySelectorAll('.lock-toggle-btn');
+      lockButtons.forEach(button => {
+        const isCurrentlyLocked = button.querySelector('span').textContent === '🔒';
+        if (!isCurrentlyLocked) {
+          button.disabled = false;
+          button.classList.remove('opacity-50', 'cursor-not-allowed');
+        }
+      });
+    }
+  });
+}
+</script>
+

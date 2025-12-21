@@ -19,6 +19,23 @@ class NbaCardRenderer(CardRenderer):
 
     def get_event_template(self, event: PredictionEvent) -> str:
         """Return appropriate NBA template based on event type."""
+        # For backward compatibility, return long template if available, otherwise short
+        long_template = self.get_event_template_long(event)
+        if long_template:
+            return long_template
+        return self.get_event_template_short(event) or "nba/cards/game.html"
+
+    def get_event_template_short(self, event: PredictionEvent) -> str | None:
+        """Return short template for NBA events."""
+        event_type = event.metadata.get("event_type", "game")
+        
+        # Only game events have short templates for now
+        if event_type == "game":
+            return "nba/cards/game_short.html"
+        return None
+
+    def get_event_template_long(self, event: PredictionEvent) -> str | None:
+        """Return long template for NBA events."""
         event_type = event.metadata.get("event_type", "game")
 
         template_map = {

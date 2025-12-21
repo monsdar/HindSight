@@ -53,6 +53,53 @@ class CardRenderer(ABC):
         """
         pass
 
+    def get_event_template_short(self, event: PredictionEvent) -> str | None:
+        """
+        Return the template path for rendering a short/collapsed view of an event.
+
+        Override to provide a compact template. Returns None by default.
+        If both short and long templates exist, a toggle will be shown.
+
+        Args:
+            event: PredictionEvent instance
+
+        Returns:
+            Template path relative to templates directory, or None if no short template
+            Example: 'nba/cards/game_short.html'
+        """
+        return None
+
+    def get_event_template_long(self, event: PredictionEvent) -> str | None:
+        """
+        Return the template path for rendering a long/expanded view of an event.
+
+        Override to provide a detailed template. Returns None by default.
+        If both short and long templates exist, a toggle will be shown.
+
+        Args:
+            event: PredictionEvent instance
+
+        Returns:
+            Template path relative to templates directory, or None if no long template
+            Example: 'nba/cards/game.html'
+        """
+        return None
+
+    def has_both_templates(self, event: PredictionEvent) -> bool:
+        """
+        Check if both short and long templates are available for this event.
+
+        Args:
+            event: PredictionEvent instance
+
+        Returns:
+            True if both short and long templates exist, False otherwise
+        """
+        return (
+            self.get_event_template_short(event) is not None
+            and self.get_event_template_long(event) is not None
+        )
+
     def get_result_template(self, outcome: EventOutcome) -> str:
         """
         Return the template path for rendering a resolved prediction result.

@@ -22,6 +22,7 @@ def render_prediction_card(context, event, user_tip=None):
     Render a prediction event card using the appropriate template.
 
     Finds the right card renderer via the registry and delegates rendering.
+    If both short and long templates exist, renders a collapsible wrapper.
 
     Usage:
         {% render_prediction_card event user_tip %}
@@ -29,16 +30,15 @@ def render_prediction_card(context, event, user_tip=None):
     # Find the appropriate renderer
     renderer = registry.get_renderer(event)
 
-    # Get template and context from renderer
-    template_name = renderer.get_event_template(event)
+    # Get context from renderer
     card_context = renderer.get_event_context(event, user=context.get("active_user"))
 
     # Get users who have predicted this event
     event_tip_users = context.get("event_tip_users", {})
     users_who_predicted = event_tip_users.get(event.id, [])
 
-    # Build render context
-    render_context = {
+    # Build base render context
+    base_context = {
         "event": event,
         "user_tip": user_tip,
         "active_user": context.get("active_user"),
@@ -48,7 +48,37 @@ def render_prediction_card(context, event, user_tip=None):
         "users_who_predicted": users_who_predicted,
     }
 
-    return render_to_string(template_name, render_context, request=context.get("request"))
+    # Check if both short and long templates exist
+    short_template = renderer.get_event_template_short(event)
+    long_template = renderer.get_event_template_long(event)
+
+    if short_template and long_template:
+        # Both templates exist - render collapsible wrapper
+        short_html = render_to_string(short_template, base_context, request=context.get("request"))
+        long_html = render_to_string(long_template, base_context, request=context.get("request"))
+        
+        wrapper_context = {
+            **base_context,
+            "short_template_html": short_html,
+            "long_template_html": long_html,
+            "has_toggle": True,
+        }
+        
+        return render_to_string(
+            "predictions/cards/collapsible_wrapper.html",
+            wrapper_context,
+            request=context.get("request")
+        )
+    elif short_template:
+        # Only short template exists
+        return render_to_string(short_template, base_context, request=context.get("request"))
+    elif long_template:
+        # Only long template exists
+        return render_to_string(long_template, base_context, request=context.get("request"))
+    else:
+        # Fallback to original get_event_template method
+        template_name = renderer.get_event_template(event)
+        return render_to_string(template_name, base_context, request=context.get("request"))
 
 
 @register.simple_tag(takes_context=True)
