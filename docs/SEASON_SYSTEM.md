@@ -160,7 +160,8 @@ elif displayed_season.end_date >= today:
 
 For recently ended seasons (within 7 days), the view calculates:
 - Top 3 users by points
-- Total picks made
+- Correct Pick Rate: Percentage of correct picks vs incorrect picks (only counts picks for events with outcomes)
+- Total Matches: Number of events that were part of the season
 - Participant count
 - Rendered markdown description
 
@@ -302,15 +303,16 @@ Displayed for recently ended seasons (within 7 days of end date).
 - Season name and description
 - Statistics:
   - Participant count
-  - Total picks made
-  - Number of top finishers
+  - Correct Pick Rate (percentage of correct picks vs incorrect picks)
+  - Total Matches (number of events that were part of the season)
 - Top 3 users with their points
 
 **Template Context**:
 - `season_results`: Dictionary containing:
   - `season`: The ended season
   - `top_users`: List of top 3 users
-  - `total_picks`: Total number of picks
+  - `correct_pick_rate`: Percentage of correct picks (None if no outcomes available)
+  - `total_matches`: Number of events that were part of the season
   - `participant_count`: Number of participants
   - `description_html`: Rendered markdown description
 

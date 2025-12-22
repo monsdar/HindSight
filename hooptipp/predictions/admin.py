@@ -774,8 +774,9 @@ class AchievementAdmin(admin.ModelAdmin):
 class SeasonParticipantInline(admin.TabularInline):
     model = SeasonParticipant
     extra = 0
-    readonly_fields = ('user', 'enrolled_at')
+    readonly_fields = ('enrolled_at',)
     can_delete = False  # Prevent accidental deletion of enrollments
+    autocomplete_fields = ('user',)
 
 
 @admin.register(Season)

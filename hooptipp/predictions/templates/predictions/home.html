@@ -5,66 +5,18 @@
 
 {% block content %}
     <div class="space-y-8">
-
-      {# 0. SEASON INFORMATION #}
-      {% if displayed_season %}
-      <section class="space-y-4 rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-lg shadow-slate-900/30">
-        <header>
-          <h2 class="text-xl font-semibold theme-accent-text">Season {{ displayed_season.name }}</h2>
-        </header>
-        
-        {% if season_description_html %}
-        <div class="prose prose-invert max-w-none text-slate-300">
-          {{ season_description_html|safe }}
-        </div>
-        {% endif %}
-        
-        <div class="flex flex-wrap items-center gap-4 text-sm text-slate-400">
-          <span>{{ participant_count }} participant{{ participant_count|pluralize }}</span>
-          {% if countdown_text %}
-          <span>{{ countdown_text }}</span>
-          {% endif %}
-        </div>
-        
-        {% if not is_enrolled and active_user %}
-        <div>
-          <button id="enroll-season-btn" 
-                  data-season-id="{{ displayed_season.id }}"
-                  class="px-4 py-2 rounded-lg theme-accent-bg theme-accent-text font-semibold hover:opacity-90 transition-opacity">
-            Sign Up for Season
-          </button>
-        </div>
-        {% endif %}
-      </section>
-      {% endif %}
-
-      {# 0.5. SEASON RESULTS #}
+      {# 0. SEASON RESULTS #}
       {% if season_results %}
       <section class="space-y-4 rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-lg shadow-slate-900/30">
         <header>
           <h2 class="text-xl font-semibold theme-accent-text">Season Results: {{ season_results.season.name }}</h2>
         </header>
-        
+
         {% if season_results.description_html %}
-        <div class="prose prose-invert max-w-none text-slate-300">
+        <div id="season-results-description" class="prose prose-invert max-w-none text-slate-300">
           {{ season_results.description_html|safe }}
         </div>
         {% endif %}
-        
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div class="text-center">
-            <p class="text-2xl font-bold theme-accent-text">{{ season_results.participant_count }}</p>
-            <p class="text-sm text-slate-400">Participants</p>
-          </div>
-          <div class="text-center">
-            <p class="text-2xl font-bold theme-accent-text">{{ season_results.total_picks }}</p>
-            <p class="text-sm text-slate-400">Total Picks</p>
-          </div>
-          <div class="text-center">
-            <p class="text-2xl font-bold theme-accent-text">{{ season_results.top_users|length }}</p>
-            <p class="text-sm text-slate-400">Top Finishers</p>
-          </div>
-        </div>
         
         {% if season_results.top_users %}
         <div class="space-y-2">
@@ -83,6 +35,55 @@
             </div>
           </div>
           {% endfor %}
+        </div>
+        {% endif %}
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div class="text-center">
+            <p class="text-2xl font-bold theme-accent-text">{{ season_results.participant_count }}</p>
+            <p class="text-sm text-slate-400">Participants</p>
+          </div>
+          <div class="text-center">
+            <p class="text-2xl font-bold theme-accent-text">
+              {{ season_results.correct_pick_rate|default:"0" }}%
+            </p>
+            <p class="text-sm text-slate-400">Correct Pick Rate</p>
+          </div>
+          <div class="text-center">
+            <p class="text-2xl font-bold theme-accent-text">{{ season_results.total_matches }}</p>
+            <p class="text-sm text-slate-400">Total Matches</p>
+          </div>
+        </div>
+      </section>
+      {% endif %}
+
+      {# 0.5 SEASON INFORMATION #}
+      {% if displayed_season %}
+      <section class="space-y-4 rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-lg shadow-slate-900/30">
+        <header>
+          <h2 class="text-xl font-semibold theme-accent-text">Season {{ displayed_season.name }}</h2>
+        </header>
+        
+        {% if season_description_html %}
+        <div id="season-description" class="prose prose-invert max-w-none text-slate-300">
+          {{ season_description_html|safe }}
+        </div>
+        {% endif %}
+        
+        <div class="flex flex-wrap items-center gap-4 text-sm text-slate-400">
+          <span>{{ participant_count }} participant{{ participant_count|pluralize }}</span>
+          {% if countdown_text %}
+          <span>{{ countdown_text }}</span>
+          {% endif %}
+        </div>
+        
+        {% if not is_enrolled and active_user %}
+        <div>
+          <button id="enroll-season-btn" 
+                  data-season-id="{{ displayed_season.id }}"
+                  class="px-4 py-2 rounded-lg theme-accent-bg theme-accent-text font-semibold hover:opacity-90 transition-opacity">
+            Sign Up for Season
+          </button>
         </div>
         {% endif %}
       </section>

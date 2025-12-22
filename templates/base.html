@@ -78,6 +78,53 @@
         color: rgb(203 213 225); /* slate-300 to match text color */
       }
       
+      /* Ensure lists in season description sections have proper styling - Tailwind's reset removes list styles */
+      #season-description ul,
+      #season-results-description ul {
+        list-style-type: disc;
+        margin-left: 1.5rem;
+        margin-top: 0.5rem;
+        margin-bottom: 0.5rem;
+        padding-left: 0;
+      }
+      #season-description ol,
+      #season-results-description ol {
+        list-style-type: decimal;
+        margin-left: 1.5rem;
+        margin-top: 0.5rem;
+        margin-bottom: 0.5rem;
+        padding-left: 0;
+      }
+      #season-description ul ul,
+      #season-results-description ul ul {
+        list-style-type: circle;
+        margin-top: 0.25rem;
+        margin-bottom: 0.25rem;
+      }
+      #season-description ul ul ul,
+      #season-results-description ul ul ul {
+        list-style-type: square;
+      }
+      #season-description ol ol,
+      #season-results-description ol ol {
+        list-style-type: lower-alpha;
+        margin-top: 0.25rem;
+        margin-bottom: 0.25rem;
+      }
+      #season-description li,
+      #season-results-description li {
+        margin-top: 0.25rem;
+        margin-bottom: 0.25rem;
+        padding-left: 0.25rem;
+        display: list-item;
+      }
+      #season-description ul li::marker,
+      #season-description ol li::marker,
+      #season-results-description ul li::marker,
+      #season-results-description ol li::marker {
+        color: rgb(203 213 225); /* slate-300 to match text color */
+      }
+      
       /* Hotness System Styles */
       .kudos-btn {
         width: 32px;

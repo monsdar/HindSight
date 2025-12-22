@@ -368,7 +368,7 @@ def home(request):
         if displayed_season.description:
             season_description_html = markdown2.markdown(
                 displayed_season.description,
-                extras=['fenced-code-blocks', 'tables', 'break-on-newline']
+                extras=['fenced-code-blocks', 'tables', 'break-on-newline', 'cuddled-lists']
             )
         
         # Calculate countdown
@@ -396,13 +396,16 @@ def home(request):
         if recently_ended_seasons:
             ended_season = recently_ended_seasons[0]
             
-            # Get top 3 users for this season
+            # Get top 3 users for this season (only enrolled users)
             season_filter = Q(
                 usereventscore__awarded_at__date__gte=ended_season.start_date,
                 usereventscore__awarded_at__date__lte=ended_season.end_date
             )
             
-            top_users = User.objects.annotate(
+            # Filter to only include enrolled users for the ended season
+            enrolled_user_ids = SeasonParticipant.objects.filter(season=ended_season).values_list('user_id', flat=True)
+            
+            top_users = User.objects.filter(id__in=enrolled_user_ids).annotate(
                 total_points=Coalesce(
                     Sum('usereventscore__points_awarded', filter=season_filter),
                     0
@@ -411,32 +414,80 @@ def home(request):
                 total_points__gt=0
             ).order_by('-total_points')[:3]
             
-            # Count total picks for this season
-            total_picks = UserTip.objects.filter(
+            # Calculate correct pick rate (only for enrolled users)
+            # Get all tips within the season date range from enrolled users only
+            season_tips = UserTip.objects.filter(
+                user_id__in=enrolled_user_ids,
                 prediction_event__deadline__date__gte=ended_season.start_date,
                 prediction_event__deadline__date__lte=ended_season.end_date
-            ).count()
+            ).select_related('prediction_option', 'selected_option', 'prediction_option__option')
+            
+            # Get all outcomes for events in this season
+            season_events = PredictionEvent.objects.filter(
+                deadline__date__gte=ended_season.start_date,
+                deadline__date__lte=ended_season.end_date
+            )
+            season_outcomes = {
+                outcome.prediction_event_id: outcome
+                for outcome in EventOutcome.objects.filter(
+                    prediction_event__in=season_events
+                ).select_related('winning_option', 'winning_generic_option', 'winning_option__option')
+            }
+            
+            # Count correct and incorrect picks (using same logic as scoring_service.py)
+            correct_picks = 0
+            total_picks_with_outcomes = 0
+            
+            for tip in season_tips:
+                outcome = season_outcomes.get(tip.prediction_event_id)
+                if outcome:
+                    total_picks_with_outcomes += 1
+                    # Check if tip matches outcome (same logic as in scoring_service.py)
+                    is_correct = False
+                    if outcome.winning_option_id:
+                        if tip.prediction_option_id == outcome.winning_option_id:
+                            is_correct = True
+                        elif tip.selected_option_id and outcome.winning_option and outcome.winning_option.option_id:
+                            is_correct = (tip.selected_option_id == outcome.winning_option.option_id)
+                    elif outcome.winning_generic_option_id:
+                        is_correct = (tip.selected_option_id == outcome.winning_generic_option_id)
+                    
+                    if is_correct:
+                        correct_picks += 1
+            
+            # Calculate correct pick rate as percentage
+            if total_picks_with_outcomes > 0:
+                correct_pick_rate = round((correct_picks / total_picks_with_outcomes) * 100, 1)
+            else:
+                # No picks with outcomes yet - show 0%
+                correct_pick_rate = 0.0
+            
+            # Count total matches (events) in the season
+            total_matches = season_events.count()
             
             # Count participants
             season_participant_count = SeasonParticipant.objects.filter(
                 season=ended_season
             ).count()
             
-            # Render markdown description
-            season_results_description_html = ''
-            if ended_season.description:
-                season_results_description_html = markdown2.markdown(
-                    ended_season.description,
-                    extras=['fenced-code-blocks', 'tables', 'break-on-newline']
-                )
-            
-            season_results = {
-                'season': ended_season,
-                'top_users': list(top_users),
-                'total_picks': total_picks,
-                'participant_count': season_participant_count,
-                'description_html': season_results_description_html,
-            }
+            # Only show season results if there were participants
+            if season_participant_count > 0:
+                # Render markdown description
+                season_results_description_html = ''
+                if ended_season.description:
+                    season_results_description_html = markdown2.markdown(
+                        ended_season.description,
+                        extras=['fenced-code-blocks', 'tables', 'break-on-newline', 'cuddled-lists']
+                    )
+                
+                season_results = {
+                    'season': ended_season,
+                    'top_users': list(top_users),
+                    'correct_pick_rate': correct_pick_rate,
+                    'total_matches': total_matches,
+                    'participant_count': season_participant_count,
+                    'description_html': season_results_description_html,
+                }
     
     lock_summary = None
     scoreboard_summary = None
