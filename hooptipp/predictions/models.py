@@ -540,6 +540,10 @@ class Season(models.Model):
     start_date = models.DateField()
     end_date = models.DateField()
     description = models.TextField(blank=True)
+    season_end_description = models.TextField(
+        blank=True,
+        help_text="Description to display when the season has ended (replaces normal description)"
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

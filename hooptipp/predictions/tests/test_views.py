@@ -12,6 +12,7 @@ from hooptipp.predictions.models import (
     OptionCategory,
     PredictionEvent,
     PredictionOption,
+    Season,
     TipType,
     UserPreferences,
     UserEventScore,
@@ -1314,6 +1315,66 @@ class HomeViewTests(TestCase):
         self.assertEqual(our_events[0].id, event_today.id)
         self.assertEqual(our_events[1].id, event_3_days.id)
         self.assertEqual(our_events[2].id, event_6_days.id)
+
+    def test_season_end_description_displayed_when_season_ended(self) -> None:
+        """Test that season_end_description is used when season has ended."""
+        today = timezone.now().date()
+        
+        # Create an active season - should use regular description
+        active_season = Season.objects.create(
+            name='Active Season',
+            start_date=today - timedelta(days=5),
+            end_date=today + timedelta(days=5),
+            description='Active season description',
+            season_end_description='This should not be shown yet'
+        )
+        
+        session = self.client.session
+        session['active_user_id'] = self.alice.id
+        session.save()
+        
+        response = self.client.get(reverse('predictions:home'))
+        self.assertEqual(response.status_code, 200)
+        
+        # Check that regular description is used for active season
+        season_description_html = response.context.get('season_description_html', '')
+        self.assertIn('Active season description', season_description_html)
+        self.assertNotIn('This should not be shown yet', season_description_html)
+        
+        # Delete the active season to avoid overlap
+        active_season.delete()
+        
+        # Test season_end_description in season_results for ended seasons
+        # Create a recently ended season with both descriptions
+        ended_season = Season.objects.create(
+            name='Ended Season',
+            start_date=today - timedelta(days=30),
+            end_date=today - timedelta(days=1),  # Ended yesterday (within 7 days)
+            description='Regular season description',
+            season_end_description='Season has ended! Thanks for playing.'
+        )
+        
+        # Enroll user in the ended season so season_results are shown
+        from hooptipp.predictions.models import SeasonParticipant
+        SeasonParticipant.objects.create(user=self.alice, season=ended_season)
+        
+        # Create some scores so season_results are calculated
+        UserEventScore.objects.create(
+            user=self.alice,
+            prediction_event=self.event,
+            base_points=10,
+            points_awarded=10
+        )
+        
+        response = self.client.get(reverse('predictions:home'))
+        self.assertEqual(response.status_code, 200)
+        
+        # Check that season_end_description is used in season_results
+        season_results = response.context.get('season_results')
+        if season_results:
+            description_html = season_results.get('description_html', '')
+            self.assertIn('Season has ended! Thanks for playing.', description_html)
+            self.assertNotIn('Regular season description', description_html)
 
 
 @override_settings(ENABLE_USER_SELECTION=True)

@@ -783,13 +783,17 @@ class SeasonParticipantInline(admin.TabularInline):
 class SeasonAdmin(admin.ModelAdmin):
     list_display = ('name', 'start_date', 'end_date', 'is_active_display', 'participant_count_display', 'created_at')
     list_filter = ('start_date', 'end_date')
-    search_fields = ('name', 'description')
+    search_fields = ('name', 'description', 'season_end_description')
     date_hierarchy = 'start_date'
     inlines = [SeasonParticipantInline]
     
     fieldsets = (
         (None, {
-            'fields': ('name', 'description')
+            'fields': ('name',)
+        }),
+        ('Descriptions', {
+            'fields': ('description', 'season_end_description'),
+            'description': 'Regular description is shown during the season. Season end description is shown after the season ends (if provided).'
         }),
         ('Timeframe', {
             'fields': ('start_date', 'end_date'),

@@ -364,15 +364,24 @@ def home(request):
             season=displayed_season
         ).count()
         
-        # Render markdown description
-        if displayed_season.description:
+        # Calculate countdown and determine which description to use
+        today = timezone.now().date()
+        season_has_ended = displayed_season.end_date < today
+        
+        # Render markdown description - use season_end_description if season has ended
+        description_text = None
+        if season_has_ended and displayed_season.season_end_description:
+            description_text = displayed_season.season_end_description
+        elif displayed_season.description:
+            description_text = displayed_season.description
+        
+        if description_text:
             season_description_html = markdown2.markdown(
-                displayed_season.description,
+                description_text,
                 extras=['fenced-code-blocks', 'tables', 'break-on-newline', 'cuddled-lists']
             )
         
         # Calculate countdown
-        today = timezone.now().date()
         if displayed_season.start_date > today:
             # Season hasn't started yet - countdown to start
             days_until = (displayed_season.start_date - today).days
@@ -472,11 +481,17 @@ def home(request):
             
             # Only show season results if there were participants
             if season_participant_count > 0:
-                # Render markdown description
+                # Render markdown description - use season_end_description if available, otherwise description
                 season_results_description_html = ''
-                if ended_season.description:
+                description_text = None
+                if ended_season.season_end_description:
+                    description_text = ended_season.season_end_description
+                elif ended_season.description:
+                    description_text = ended_season.description
+                
+                if description_text:
                     season_results_description_html = markdown2.markdown(
-                        ended_season.description,
+                        description_text,
                         extras=['fenced-code-blocks', 'tables', 'break-on-newline', 'cuddled-lists']
                     )
                 
