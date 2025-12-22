@@ -30,6 +30,7 @@ from .models import (
     PredictionEvent,
     PredictionOption,
     Season,
+    SeasonParticipant,
     TeilnahmebedingungenSection,
     TipType,
     UserPreferences,
@@ -328,10 +329,114 @@ def home(request):
                 )
             return redirect('predictions:home')
 
-    all_users = list(get_user_model().objects.select_related('preferences').order_by('username'))
+    User = get_user_model()
+    all_users = list(User.objects.select_related('preferences').order_by('username'))
     
     # Get active season (if any) - needed for scoreboard filtering
     active_season = Season.get_active_season()
+    
+    # Get next upcoming season if no active season
+    next_upcoming_season = None
+    if not active_season:
+        today = timezone.now().date()
+        next_upcoming_season = Season.objects.filter(
+            start_date__gt=today
+        ).order_by('start_date').first()
+    
+    # Determine which season to display (active or next upcoming)
+    displayed_season = active_season or next_upcoming_season
+    
+    # Check enrollment status if we have a displayed season and active user
+    is_enrolled = False
+    participant_count = 0
+    season_description_html = ''
+    countdown_text = ''
+    
+    if displayed_season and active_user:
+        is_enrolled = SeasonParticipant.objects.filter(
+            user=active_user,
+            season=displayed_season
+        ).exists()
+    
+    if displayed_season:
+        # Count participants
+        participant_count = SeasonParticipant.objects.filter(
+            season=displayed_season
+        ).count()
+        
+        # Render markdown description
+        if displayed_season.description:
+            season_description_html = markdown2.markdown(
+                displayed_season.description,
+                extras=['fenced-code-blocks', 'tables', 'break-on-newline']
+            )
+        
+        # Calculate countdown
+        today = timezone.now().date()
+        if displayed_season.start_date > today:
+            # Season hasn't started yet - countdown to start
+            days_until = (displayed_season.start_date - today).days
+            countdown_text = f"{days_until} day{'s' if days_until != 1 else ''} until season starts"
+        elif displayed_season.end_date >= today:
+            # Season is active or ending today - countdown to end
+            days_until = (displayed_season.end_date - today).days
+            countdown_text = f"{days_until} day{'s' if days_until != 1 else ''} until season ends"
+    
+    # Calculate season results for recently ended seasons (within 7 days)
+    season_results = None
+    if active_user:
+        today = timezone.now().date()
+        seven_days_ago = today - timedelta(days=7)
+        
+        recently_ended_seasons = Season.objects.filter(
+            end_date__gte=seven_days_ago,
+            end_date__lt=today
+        ).order_by('-end_date')[:1]
+        
+        if recently_ended_seasons:
+            ended_season = recently_ended_seasons[0]
+            
+            # Get top 3 users for this season
+            season_filter = Q(
+                usereventscore__awarded_at__date__gte=ended_season.start_date,
+                usereventscore__awarded_at__date__lte=ended_season.end_date
+            )
+            
+            top_users = User.objects.annotate(
+                total_points=Coalesce(
+                    Sum('usereventscore__points_awarded', filter=season_filter),
+                    0
+                ),
+            ).filter(
+                total_points__gt=0
+            ).order_by('-total_points')[:3]
+            
+            # Count total picks for this season
+            total_picks = UserTip.objects.filter(
+                prediction_event__deadline__date__gte=ended_season.start_date,
+                prediction_event__deadline__date__lte=ended_season.end_date
+            ).count()
+            
+            # Count participants
+            season_participant_count = SeasonParticipant.objects.filter(
+                season=ended_season
+            ).count()
+            
+            # Render markdown description
+            season_results_description_html = ''
+            if ended_season.description:
+                season_results_description_html = markdown2.markdown(
+                    ended_season.description,
+                    extras=['fenced-code-blocks', 'tables', 'break-on-newline']
+                )
+            
+            season_results = {
+                'season': ended_season,
+                'top_users': list(top_users),
+                'total_picks': total_picks,
+                'participant_count': season_participant_count,
+                'description_html': season_results_description_html,
+            }
     
     lock_summary = None
     scoreboard_summary = None
@@ -469,7 +574,6 @@ def home(request):
 
     # Fetch leaderboard data for dashboard
     # (active_season already retrieved above for scoreboard_summary)
-    User = get_user_model()
     bonus_event_points_expr = Case(
         When(
             usereventscore__prediction_event__is_bonus_event=True,
@@ -497,7 +601,11 @@ def home(request):
             usereventscore__awarded_at__date__gte=active_season.start_date,
             usereventscore__awarded_at__date__lte=active_season.end_date
         )
-        leaderboard_users = User.objects.annotate(
+        
+        # Filter leaderboard to only include enrolled users for the active season
+        enrolled_user_ids = SeasonParticipant.objects.filter(season=active_season).values_list('user_id', flat=True)
+        
+        leaderboard_users = User.objects.filter(id__in=enrolled_user_ids).annotate(
             total_points=Coalesce(
                 Sum('usereventscore__points_awarded', filter=season_filter),
                 0
@@ -765,9 +873,45 @@ def home(request):
         'open_predictions': open_predictions,
         'enable_user_selection': settings.ENABLE_USER_SELECTION,
         'active_season': active_season,
+        'displayed_season': displayed_season,
+        'is_enrolled': is_enrolled,
+        'participant_count': participant_count,
+        'season_description_html': season_description_html,
+        'countdown_text': countdown_text,
+        'season_results': season_results,
         'kudos_status': kudos_status,
     }
     return render(request, 'predictions/home.html', context)
+
+
+@require_http_methods(["POST"])
+@csrf_exempt
+def enroll_in_season(request):
+    """Enroll the active user in a season via AJAX."""
+    active_user = get_active_user(request)
+    if not active_user:
+        return JsonResponse({'error': 'Authentication required'}, status=401)
+
+    try:
+        data = json.loads(request.body)
+        season_id = data.get('season_id')
+
+        if not season_id:
+            return JsonResponse({'error': 'Missing season_id'}, status=400)
+
+        season = get_object_or_404(Season, id=season_id)
+
+        # Check if already enrolled
+        if SeasonParticipant.objects.filter(user=active_user, season=season).exists():
+            return JsonResponse({'success': True, 'message': 'Already enrolled'}, status=200)
+
+        SeasonParticipant.objects.create(user=active_user, season=season)
+        return JsonResponse({'success': True, 'message': f'Successfully enrolled in {season.name}'})
+
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
 
 
 @require_http_methods(["POST"])
@@ -778,6 +922,16 @@ def save_prediction(request):
     active_user = get_active_user(request)
     if not active_user:
         return JsonResponse({'error': 'No active user'}, status=400)
+    
+    # Check if user is enrolled in active season
+    active_season = Season.get_active_season()
+    if active_season:
+        is_enrolled = SeasonParticipant.objects.filter(
+            user=active_user,
+            season=active_season
+        ).exists()
+        if not is_enrolled:
+            return JsonResponse({'error': 'You must be enrolled in the active season to make predictions'}, status=403)
     
     try:
         data = json.loads(request.body)

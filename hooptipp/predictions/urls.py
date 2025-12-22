@@ -13,4 +13,5 @@ urlpatterns = [
     path('api/datenschutz/', views.get_datenschutz, name='datenschutz_api'),
     path('api/teilnahmebedingungen/', views.get_teilnahmebedingungen, name='teilnahmebedingungen_api'),
     path('api/give-kudos/', views.give_kudos_view, name='give_kudos'),
+    path('api/enroll-in-season/', views.enroll_in_season, name='enroll_in_season'),
 ]

@@ -26,6 +26,7 @@ from .models import (
     PredictionEvent,
     PredictionOption,
     Season,
+    SeasonParticipant,
     TeilnahmebedingungenSection,
     TipType,
     UserEventScore,
@@ -770,12 +771,20 @@ class AchievementAdmin(admin.ModelAdmin):
     )
 
 
+class SeasonParticipantInline(admin.TabularInline):
+    model = SeasonParticipant
+    extra = 0
+    readonly_fields = ('user', 'enrolled_at')
+    can_delete = False  # Prevent accidental deletion of enrollments
+
+
 @admin.register(Season)
 class SeasonAdmin(admin.ModelAdmin):
-    list_display = ('name', 'start_date', 'end_date', 'is_active_display', 'created_at')
+    list_display = ('name', 'start_date', 'end_date', 'is_active_display', 'participant_count_display', 'created_at')
     list_filter = ('start_date', 'end_date')
     search_fields = ('name', 'description')
     date_hierarchy = 'start_date'
+    inlines = [SeasonParticipantInline]
     
     fieldsets = (
         (None, {
@@ -805,6 +814,10 @@ class SeasonAdmin(admin.ModelAdmin):
             return '-'
     is_active_display.short_description = 'Status'
     is_active_display.boolean = False
+    
+    def participant_count_display(self, obj):
+        return obj.seasonparticipant_set.count()
+    participant_count_display.short_description = 'Participants'
     
     def changelist_view(self, request, extra_context=None):
         """Override changelist_view to handle errors gracefully."""

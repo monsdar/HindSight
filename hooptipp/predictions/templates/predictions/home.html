@@ -6,7 +6,90 @@
 {% block content %}
     <div class="space-y-8">
 
+      {# 0. SEASON INFORMATION #}
+      {% if displayed_season %}
+      <section class="space-y-4 rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-lg shadow-slate-900/30">
+        <header>
+          <h2 class="text-xl font-semibold theme-accent-text">Season {{ displayed_season.name }}</h2>
+        </header>
+        
+        {% if season_description_html %}
+        <div class="prose prose-invert max-w-none text-slate-300">
+          {{ season_description_html|safe }}
+        </div>
+        {% endif %}
+        
+        <div class="flex flex-wrap items-center gap-4 text-sm text-slate-400">
+          <span>{{ participant_count }} participant{{ participant_count|pluralize }}</span>
+          {% if countdown_text %}
+          <span>{{ countdown_text }}</span>
+          {% endif %}
+        </div>
+        
+        {% if not is_enrolled and active_user %}
+        <div>
+          <button id="enroll-season-btn" 
+                  data-season-id="{{ displayed_season.id }}"
+                  class="px-4 py-2 rounded-lg theme-accent-bg theme-accent-text font-semibold hover:opacity-90 transition-opacity">
+            Sign Up for Season
+          </button>
+        </div>
+        {% endif %}
+      </section>
+      {% endif %}
+
+      {# 0.5. SEASON RESULTS #}
+      {% if season_results %}
+      <section class="space-y-4 rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-lg shadow-slate-900/30">
+        <header>
+          <h2 class="text-xl font-semibold theme-accent-text">Season Results: {{ season_results.season.name }}</h2>
+        </header>
+        
+        {% if season_results.description_html %}
+        <div class="prose prose-invert max-w-none text-slate-300">
+          {{ season_results.description_html|safe }}
+        </div>
+        {% endif %}
+        
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div class="text-center">
+            <p class="text-2xl font-bold theme-accent-text">{{ season_results.participant_count }}</p>
+            <p class="text-sm text-slate-400">Participants</p>
+          </div>
+          <div class="text-center">
+            <p class="text-2xl font-bold theme-accent-text">{{ season_results.total_picks }}</p>
+            <p class="text-sm text-slate-400">Total Picks</p>
+          </div>
+          <div class="text-center">
+            <p class="text-2xl font-bold theme-accent-text">{{ season_results.top_users|length }}</p>
+            <p class="text-sm text-slate-400">Top Finishers</p>
+          </div>
+        </div>
+        
+        {% if season_results.top_users %}
+        <div class="space-y-2">
+          <h3 class="text-lg font-semibold theme-accent-text">Top 3</h3>
+          {% for user in season_results.top_users %}
+          <div class="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-950 px-4 py-3">
+            <div class="flex items-center gap-3">
+              <span class="flex h-8 w-8 items-center justify-center rounded-full theme-accent-pill font-bold text-sm">
+                {{ forloop.counter }}
+              </span>
+              <span class="font-semibold text-slate-200">{{ user.username }}</span>
+            </div>
+            <div class="text-right">
+              <p class="text-xl font-bold theme-accent-text">{{ user.total_points }}</p>
+              <p class="text-xs text-slate-500">points</p>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+        {% endif %}
+      </section>
+      {% endif %}
+
       {# 1. CURRENT RANKING #}
+      {% if active_season %}
       <section class="space-y-4 rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-lg shadow-slate-900/30">
         <header>
           <h2 class="text-xl font-semibold theme-accent-text">
@@ -96,6 +179,7 @@
           <p class="text-sm text-slate-400">No scores have been recorded yet. Start making predictions!</p>
         {% endif %}
       </section>
+      {% endif %}
 
       {# 2. USER SELECTION, ACTIVATION AND CUSTOMIZATION #}
       {% if enable_user_selection %}
@@ -308,13 +392,18 @@
         </header>
 
         {% if open_predictions %}
-          <div class="grid gap-4 lg:grid-cols-2">
+          <div class="grid gap-4 lg:grid-cols-2 {% if not active_season or not is_enrolled %}opacity-60 pointer-events-none{% endif %}">
             {% for event in open_predictions %}
               {% with user_tip=user_tips|get_item:event.id %}
                 {% render_prediction_card event user_tip %}
               {% endwith %}
             {% endfor %}
           </div>
+          {% if not active_season %}
+            <p class="text-sm text-slate-400 mt-4">No active season. Predictions are disabled.</p>
+          {% elif not is_enrolled %}
+            <p class="text-sm text-slate-400 mt-4">You must be enrolled in the active season to make predictions.</p>
+          {% endif %}
         {% else %}
           <div class="rounded-2xl border border-slate-800 bg-slate-900 p-6 text-slate-300">
             <p>There are no open prediction windows right now. Please check back soon for new events.</p>
@@ -674,8 +763,51 @@
   {% endif %}
 
   <script>
-  document.addEventListener('DOMContentLoaded', function() {
-    // Kudos button handling
+    document.addEventListener('DOMContentLoaded', function() {
+      // Season enrollment button handling
+      const enrollSeasonBtn = document.getElementById('enroll-season-btn');
+      if (enrollSeasonBtn) {
+        enrollSeasonBtn.addEventListener('click', async function() {
+          const seasonId = this.dataset.seasonId;
+          if (!seasonId) {
+            alert('Error: Season ID not found');
+            return;
+          }
+
+          // Disable button during request
+          this.disabled = true;
+          this.textContent = 'Enrolling...';
+
+          try {
+            const response = await fetch('{% url "predictions:enroll_in_season" %}', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCookie('csrftoken')
+              },
+              body: JSON.stringify({ season_id: seasonId })
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+              // Reload page to show updated enrollment status
+              window.location.reload();
+            } else {
+              alert('Error: ' + (data.error || 'Failed to enroll in season'));
+              this.disabled = false;
+              this.textContent = 'Sign Up for Season';
+            }
+          } catch (error) {
+            console.error('Enrollment error:', error);
+            alert('Error: Failed to enroll in season. Please try again.');
+            this.disabled = false;
+            this.textContent = 'Sign Up for Season';
+          }
+        });
+      }
+      
+      // Kudos button handling
     document.querySelectorAll('.kudos-btn').forEach(btn => {
       btn.addEventListener('click', async function(e) {
         e.stopPropagation();

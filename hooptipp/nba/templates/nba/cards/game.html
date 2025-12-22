@@ -150,6 +150,13 @@ if (!window.hooptippGameCardInitialized) {
           const optionId = this.dataset.optionId;
           const teamName = this.dataset.teamName;
           
+          // Validate that we have the required data
+          if (!eventId || !optionId) {
+            console.error('Missing event_id or option_id:', { eventId, optionId });
+            showTemporaryMessage('Error: Missing prediction data. Please refresh the page.', 'error');
+            return;
+          }
+          
           // Remove selection from other teams in this event
           const allTeamButtons = document.querySelectorAll(`[data-event-id="${eventId}"]`);
           allTeamButtons.forEach(btn => {

@@ -72,11 +72,76 @@ class NbaCardRenderer(CardRenderer):
             )
             
             # Add option IDs for team selection
+            # If options don't exist, try to find or create them
+            away_option_id = None
+            home_option_id = None
+            
             for option in event.options.all():
                 if option.option.short_name == game.away_team_tricode:
-                    context["away_team_option_id"] = option.id
+                    away_option_id = option.id
                 elif option.option.short_name == game.home_team_tricode:
-                    context["home_team_option_id"] = option.id
+                    home_option_id = option.id
+            
+            # If options are missing, try to find/create them from the Option model
+            if not away_option_id or not home_option_id:
+                from hooptipp.predictions.models import Option, PredictionOption
+                from hooptipp.nba.managers import NbaTeamManager
+                
+                # Try to find or create the team options
+                if not away_option_id:
+                    # Try to find existing team option
+                    team_option = NbaTeamManager.get_by_abbreviation(game.away_team_tricode)
+                    if not team_option:
+                        # Create team option if it doesn't exist
+                        category = NbaTeamManager.get_category()
+                        # Generate slug from abbreviation (lowercase) or name
+                        slug = game.away_team_tricode.lower() if game.away_team_tricode else game.away_team.lower().replace(" ", "-")
+                        team_option, _ = Option.objects.get_or_create(
+                            category=category,
+                            slug=slug,
+                            defaults={
+                                'name': game.away_team,
+                                'short_name': game.away_team_tricode,
+                                'is_active': True
+                            }
+                        )
+                    
+                    # Create prediction option for this event
+                    pred_option, _ = PredictionOption.objects.get_or_create(
+                        event=event,
+                        option=team_option,
+                        defaults={'label': game.away_team}
+                    )
+                    away_option_id = pred_option.id
+                
+                if not home_option_id:
+                    # Try to find existing team option
+                    team_option = NbaTeamManager.get_by_abbreviation(game.home_team_tricode)
+                    if not team_option:
+                        # Create team option if it doesn't exist
+                        category = NbaTeamManager.get_category()
+                        # Generate slug from abbreviation (lowercase) or name
+                        slug = game.home_team_tricode.lower() if game.home_team_tricode else game.home_team.lower().replace(" ", "-")
+                        team_option, _ = Option.objects.get_or_create(
+                            category=category,
+                            slug=slug,
+                            defaults={
+                                'name': game.home_team,
+                                'short_name': game.home_team_tricode,
+                                'is_active': True
+                            }
+                        )
+                    
+                    # Create prediction option for this event
+                    pred_option, _ = PredictionOption.objects.get_or_create(
+                        event=event,
+                        option=team_option,
+                        defaults={'label': game.home_team}
+                    )
+                    home_option_id = pred_option.id
+            
+            context["away_team_option_id"] = away_option_id
+            context["home_team_option_id"] = home_option_id
 
 
             # Add playoff context if applicable

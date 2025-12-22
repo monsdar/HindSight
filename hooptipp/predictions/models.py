@@ -612,6 +612,24 @@ class Season(models.Model):
             ).first()
 
 
+class SeasonParticipant(models.Model):
+    """
+    Represents a user's enrollment in a specific season.
+    """
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    season = models.ForeignKey(Season, on_delete=models.CASCADE)
+    enrolled_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('user', 'season')
+        ordering = ['-enrolled_at']
+        verbose_name = 'Season Participant'
+        verbose_name_plural = 'Season Participants'
+
+    def __str__(self) -> str:
+        return f"{self.user.username} - {self.season.name}"
+
+
 class Achievement(models.Model):
     """
     Represents an achievement awarded to a user.
