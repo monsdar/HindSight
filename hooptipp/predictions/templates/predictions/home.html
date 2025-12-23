@@ -350,38 +350,38 @@
       {% if active_user %}
       <section class="space-y-4 rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-lg shadow-slate-900/30">
         <header>
-          <h2 class="text-xl font-semibold theme-accent-text">Locks</h2>
+          <h2 class="text-xl font-semibold theme-accent-text">Locks 🔒</h2>
         </header>
 
         <div class="space-y-4">
           <div class="space-y-3 text-sm text-slate-300">
-            <p><strong class="text-slate-200">What is a Lock?</strong> Lock a prediction when you are very sure it will be correct:</p>
+            <p><strong class="text-slate-200">Was sind Locks?</strong> Locks sind eine Möglichkeit, deine Punkte zu verdoppeln. Nutze Locks wenn du dir sehr sicher bist, dass deine Vorhersage richtig ist:</p>
             <ul class="list-disc list-inside space-y-1 ml-2 text-slate-300">
-              <li><strong class="text-slate-200">Reward:</strong> If correct, you get double points.</li>
-              <li><strong class="text-slate-200">Risk:</strong> If wrong, you lose the lock for 30 days.</li>
-              <li><strong class="text-slate-200">Limit:</strong> You only have 3 locks available. Choose carefully!</li>
+              <li><strong class="text-slate-200">Belohnung:</strong> Wenn richtig, erhältst du doppelte Punkte.</li>
+              <li><strong class="text-slate-200">Risiko:</strong> Wenn falsch, verlierst du das Lock für 30 Tage.</li>
+              <li><strong class="text-slate-200">Limit:</strong> Du hast nur 3 Locks verfügbar. Wähle sorgfältig!</li>
             </ul>
           </div>
 
           {% if lock_summary %}
             <div class="theme-accent-border theme-accent-surface flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-800 bg-slate-950 px-4 py-3 text-sm text-slate-300">
               <div class="flex items-center gap-3">
-                <span class="font-semibold text-slate-100 lock-summary-display">Locks remaining: {{ lock_summary.available }} / {{ lock_summary.total }}</span>
+                <span class="font-semibold text-slate-100 lock-summary-display">Verfügbare Locks: {{ lock_summary.available }} / {{ lock_summary.total }}</span>
               </div>
               <div class="flex flex-wrap items-center gap-3 text-xs">
                 <span>
-                  Active locks: {{ lock_summary.active }}
+                  Aktive Locks: {{ lock_summary.active }}
                   {% if lock_summary.pending %}
-                    &bull; Pending returns: {{ lock_summary.pending }}
+                    &bull; Locks in Rückgabe: {{ lock_summary.pending }}
                   {% endif %}
                 </span>
                 {% if lock_summary.next_return_at %}
-                  <span>Next lock returns {{ lock_summary.next_return_at|date:"M d, Y" }}</span>
+                  <span>Nächstes Lock wird zurückgegeben am {{ lock_summary.next_return_at|date:"d.m.Y" }}</span>
                 {% endif %}
               </div>
             </div>
           {% else %}
-            <p class="text-sm text-slate-400">Unable to load lock information.</p>
+            <p class="text-sm text-slate-400">Lock-Informationen konnten nicht geladen werden.</p>
           {% endif %}
         </div>
       </section>
