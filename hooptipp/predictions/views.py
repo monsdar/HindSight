@@ -495,9 +495,16 @@ def home(request):
                         extras=['fenced-code-blocks', 'tables', 'break-on-newline', 'cuddled-lists']
                     )
                 
+                # Apply display names to top_users (using nicknames if available)
+                top_users_list = list(top_users)
+                top_user_ids = [user.id for user in top_users_list]
+                top_users_display_name_map = _build_display_name_map(top_user_ids)
+                for user in top_users_list:
+                    user.display_name = top_users_display_name_map.get(user.id, user.username)
+                
                 season_results = {
                     'season': ended_season,
-                    'top_users': list(top_users),
+                    'top_users': top_users_list,
                     'correct_pick_rate': correct_pick_rate,
                     'total_matches': total_matches,
                     'participant_count': season_participant_count,
