@@ -19,7 +19,7 @@
         {% endif %}
         
         <div class="flex flex-wrap items-center gap-4 text-sm text-slate-400">
-          <span>{{ participant_count }} participant{{ participant_count|pluralize }}</span>
+          <span>{{ participant_count }} Teilnehmer</span>
           {% if countdown_text %}
           <span>{{ countdown_text }}</span>
           {% endif %}
@@ -77,17 +77,17 @@
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div class="text-center">
                 <p class="text-2xl font-bold theme-accent-text">{{ season_results.participant_count }}</p>
-                <p class="text-sm text-slate-400">Participants</p>
+                <p class="text-sm text-slate-400">Teilnehmer</p>
               </div>
               <div class="text-center">
                 <p class="text-2xl font-bold theme-accent-text">
                   {{ season_results.correct_pick_rate|default:"0" }}%
                 </p>
-                <p class="text-sm text-slate-400">Correct Pick Rate</p>
+                <p class="text-sm text-slate-400">Korrekte Vorhersagen</p>
               </div>
               <div class="text-center">
                 <p class="text-2xl font-bold theme-accent-text">{{ season_results.total_matches }}</p>
-                <p class="text-sm text-slate-400">Total Matches</p>
+                <p class="text-sm text-slate-400">Spiele</p>
               </div>
             </div>
           </div>
@@ -325,12 +325,12 @@
       {# 3. RECENTLY RESOLVED PREDICTIONS #}
       <section class="space-y-4 rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-lg shadow-slate-900/30">
         <header>
-          <h2 class="text-xl font-semibold theme-accent-text">Recent Resolutions</h2>
+          <h2 class="text-xl font-semibold theme-accent-text">Letzte Ergebnisse</h2>
           <p class="text-sm text-slate-400">
             {% if resolved_predictions %}
-              Last {{ resolved_predictions|length }} resolved prediction{{ resolved_predictions|length|pluralize }}
+              Letzte {{ resolved_predictions|length }} Spiele
             {% else %}
-              No resolved predictions yet
+              Keine Spiele bis jetzt
             {% endif %}
           </p>
         </header>
@@ -342,7 +342,7 @@
             {% endfor %}
           </div>
         {% else %}
-          <p class="text-sm text-slate-400">No predictions have been resolved yet.</p>
+          <p class="text-sm text-slate-400">Keine Ergebnisse bis jetzt.</p>
         {% endif %}
       </section>
 
@@ -390,10 +390,10 @@
       {# 5. OPEN ACTIVE PREDICTIONS #}
       <section class="space-y-4 rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-lg shadow-slate-900/30">
         <header>
-          <h2 class="text-xl font-semibold theme-accent-text">Open Predictions</h2>
+          <h2 class="text-xl font-semibold theme-accent-text">Offene Spiele</h2>
           <p class="text-sm text-slate-400">
             {% if open_predictions %}
-              {{ open_predictions|length }} open prediction{{ open_predictions|length|pluralize }} available
+              {{ open_predictions|length }} offene Spiele verfügbar
             {% endif %}
           </p>
         </header>

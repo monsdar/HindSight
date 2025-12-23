@@ -385,11 +385,11 @@ def home(request):
         if displayed_season.start_date > today:
             # Season hasn't started yet - countdown to start
             days_until = (displayed_season.start_date - today).days
-            countdown_text = f"{days_until} day{'s' if days_until != 1 else ''} until season starts"
+            countdown_text = f"{days_until} Tag{'e' if days_until != 1 else ''} bis zum Start"
         elif displayed_season.end_date >= today:
             # Season is active or ending today - countdown to end
             days_until = (displayed_season.end_date - today).days
-            countdown_text = f"{days_until} day{'s' if days_until != 1 else ''} until season ends"
+            countdown_text = f"{days_until} Tag{'e' if days_until != 1 else ''} bis zum Ende"
     
     # Calculate season results for recently ended seasons (within 7 days)
     season_results = None

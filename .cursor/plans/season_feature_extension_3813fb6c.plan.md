@@ -277,5 +277,3 @@ Create migration for `SeasonParticipant` model:
 7. `hooptipp/predictions/tests/test_views.py` - Add view tests for new functionality
 
 ## Notes
-
-- Reuse existing markdown2 pattern from impressum/teilnahmebedingungen views
