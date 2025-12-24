@@ -339,7 +339,6 @@ def home(request):
     next_upcoming_season = None
     if not active_season:
         now = timezone.now()
-        from django.db.models import Q
         # Find seasons that start in the future (checking both date and time)
         next_upcoming_season = Season.objects.filter(
             start_date__isnull=False,
