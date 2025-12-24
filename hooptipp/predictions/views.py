@@ -339,10 +339,14 @@ def home(request):
     next_upcoming_season = None
     if not active_season:
         now = timezone.now()
+        from django.db.models import Q
+        # Find seasons that start in the future (checking both date and time)
         next_upcoming_season = Season.objects.filter(
             start_date__isnull=False,
             end_date__isnull=False,
-            start_date__gt=now.date()
+        ).filter(
+            Q(start_date__gt=now.date()) |
+            Q(start_date=now.date(), start_time__gt=now.time())
         ).order_by('start_date', 'start_time').first()
     
     # Determine which season to display (active or next upcoming)
@@ -401,13 +405,26 @@ def home(request):
         now = timezone.now()
         seven_days_ago = now - timedelta(days=7)
         
-        recently_ended_seasons = Season.objects.filter(
-            end_date__lte=now.date(),
+        # Get all seasons that ended in the last 7 days
+        # We need to check the actual end_datetime, not just the date
+        recently_ended_seasons = []
+        for season in Season.objects.filter(
+            end_date__isnull=False,
+            start_date__isnull=False,
             end_date__gte=seven_days_ago.date()
-        ).order_by('-end_date', '-end_time')[:1]
+        ).order_by('-end_date', '-end_time'):
+            try:
+                # Only include seasons that have actually ended (end_datetime < now)
+                if season.end_datetime < now:
+                    recently_ended_seasons.append(season)
+            except (ValueError, AttributeError):
+                # Skip seasons with invalid data
+                continue
         
-        if recently_ended_seasons:
-            ended_season = recently_ended_seasons[0]
+        # Take the most recently ended season
+        ended_season = recently_ended_seasons[0] if recently_ended_seasons else None
+        
+        if ended_season:
             
             # Get top 3 users for this season (only enrolled users)
             season_filter = Q(
