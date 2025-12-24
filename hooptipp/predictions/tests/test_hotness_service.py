@@ -20,10 +20,14 @@ class HotnessServiceTests(TestCase):
     def setUp(self):
         self.user1 = User.objects.create_user(username='user1')
         self.user2 = User.objects.create_user(username='user2')
+        from datetime import time as time_type
+        now = timezone.now()
         self.season = Season.objects.create(
             name='Test Season',
-            start_date=timezone.now().date(),
-            end_date=timezone.now().date() + timedelta(days=30)
+            start_date=now.date(),
+            start_time=time_type(0, 0, 0),
+            end_date=(now + timedelta(days=30)).date(),
+            end_time=time_type(23, 59, 59)
         )
         # Ensure default settings exist
         self.settings = HotnessSettings.get_settings()
@@ -173,10 +177,13 @@ class HotnessServiceTests(TestCase):
         hotness1.save()
         
         # Create another season
+        from datetime import time as time_type
         season2 = Season.objects.create(
             name='Season 2',
-            start_date=self.season.end_date + timedelta(days=1),
-            end_date=self.season.end_date + timedelta(days=60)
+            start_date=(self.season.end_datetime + timedelta(days=1)).date(),
+            start_time=time_type(0, 0, 0),
+            end_date=(self.season.end_datetime + timedelta(days=60)).date(),
+            end_time=time_type(23, 59, 59)
         )
         
         # Create hotness for second season

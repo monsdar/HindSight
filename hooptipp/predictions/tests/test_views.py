@@ -1318,13 +1318,13 @@ class HomeViewTests(TestCase):
 
     def test_season_end_description_displayed_when_season_ended(self) -> None:
         """Test that season_end_description is used when season has ended."""
-        today = timezone.now().date()
+        now = timezone.now()
         
         # Create an active season - should use regular description
         active_season = Season.objects.create(
             name='Active Season',
-            start_date=today - timedelta(days=5),
-            end_date=today + timedelta(days=5),
+            start_date=now - timedelta(days=5),
+            end_date=now + timedelta(days=5),
             description='Active season description',
             season_end_description='This should not be shown yet'
         )
@@ -1348,8 +1348,8 @@ class HomeViewTests(TestCase):
         # Create a recently ended season with both descriptions
         ended_season = Season.objects.create(
             name='Ended Season',
-            start_date=today - timedelta(days=30),
-            end_date=today - timedelta(days=1),  # Ended yesterday (within 7 days)
+            start_date=now - timedelta(days=30),
+            end_date=now - timedelta(days=1),  # Ended yesterday (within 7 days)
             description='Regular season description',
             season_end_description='Season has ended! Thanks for playing.'
         )

@@ -338,10 +338,12 @@ def home(request):
     # Get next upcoming season if no active season
     next_upcoming_season = None
     if not active_season:
-        today = timezone.now().date()
+        now = timezone.now()
         next_upcoming_season = Season.objects.filter(
-            start_date__gt=today
-        ).order_by('start_date').first()
+            start_date__isnull=False,
+            end_date__isnull=False,
+            start_date__gt=now.date()
+        ).order_by('start_date', 'start_time').first()
     
     # Determine which season to display (active or next upcoming)
     displayed_season = active_season or next_upcoming_season
@@ -365,8 +367,8 @@ def home(request):
         ).count()
         
         # Calculate countdown and determine which description to use
-        today = timezone.now().date()
-        season_has_ended = displayed_season.end_date < today
+        now = timezone.now()
+        season_has_ended = displayed_season.end_datetime < now
         
         # Render markdown description - use season_end_description if season has ended
         description_text = None
@@ -382,33 +384,35 @@ def home(request):
             )
         
         # Calculate countdown
-        if displayed_season.start_date > today:
+        if displayed_season.start_datetime > now:
             # Season hasn't started yet - countdown to start
-            days_until = (displayed_season.start_date - today).days
+            delta = displayed_season.start_datetime - now
+            days_until = delta.days
             countdown_text = f"{days_until} Tag{'e' if days_until != 1 else ''} bis zum Start"
-        elif displayed_season.end_date >= today:
-            # Season is active or ending today - countdown to end
-            days_until = (displayed_season.end_date - today).days
+        elif displayed_season.end_datetime >= now:
+            # Season is active or ending - countdown to end
+            delta = displayed_season.end_datetime - now
+            days_until = delta.days
             countdown_text = f"{days_until} Tag{'e' if days_until != 1 else ''} bis zum Ende"
     
     # Calculate season results for recently ended seasons (within 7 days)
     season_results = None
     if active_user:
-        today = timezone.now().date()
-        seven_days_ago = today - timedelta(days=7)
+        now = timezone.now()
+        seven_days_ago = now - timedelta(days=7)
         
         recently_ended_seasons = Season.objects.filter(
-            end_date__gte=seven_days_ago,
-            end_date__lt=today
-        ).order_by('-end_date')[:1]
+            end_date__lte=now.date(),
+            end_date__gte=seven_days_ago.date()
+        ).order_by('-end_date', '-end_time')[:1]
         
         if recently_ended_seasons:
             ended_season = recently_ended_seasons[0]
             
             # Get top 3 users for this season (only enrolled users)
             season_filter = Q(
-                usereventscore__awarded_at__date__gte=ended_season.start_date,
-                usereventscore__awarded_at__date__lte=ended_season.end_date
+                usereventscore__awarded_at__gte=ended_season.start_datetime,
+                usereventscore__awarded_at__lte=ended_season.end_datetime
             )
             
             # Filter to only include enrolled users for the ended season
@@ -424,17 +428,17 @@ def home(request):
             ).order_by('-total_points')[:3]
             
             # Calculate correct pick rate (only for enrolled users)
-            # Get all tips within the season date range from enrolled users only
+            # Get all tips within the season datetime range from enrolled users only
             season_tips = UserTip.objects.filter(
                 user_id__in=enrolled_user_ids,
-                prediction_event__deadline__date__gte=ended_season.start_date,
-                prediction_event__deadline__date__lte=ended_season.end_date
+                prediction_event__deadline__gte=ended_season.start_datetime,
+                prediction_event__deadline__lte=ended_season.end_datetime
             ).select_related('prediction_option', 'selected_option', 'prediction_option__option')
             
             # Get all outcomes for events in this season
             season_events = PredictionEvent.objects.filter(
-                deadline__date__gte=ended_season.start_date,
-                deadline__date__lte=ended_season.end_date
+                deadline__gte=ended_season.start_datetime,
+                deadline__lte=ended_season.end_datetime
             )
             season_outcomes = {
                 outcome.prediction_event_id: outcome
@@ -526,8 +530,8 @@ def home(request):
         # Filter by active season if one exists
         if active_season:
             score_queryset = score_queryset.filter(
-                awarded_at__date__gte=active_season.start_date,
-                awarded_at__date__lte=active_season.end_date
+                awarded_at__gte=active_season.start_datetime,
+                awarded_at__lte=active_season.end_datetime
             )
         
         recent_scores = list(score_queryset[:5])
@@ -669,10 +673,10 @@ def home(request):
     
     # Build conditional expressions for filtering scores by season
     if active_season:
-        # Only count scores within the active season's date range
+        # Only count scores within the active season's datetime range
         season_filter = Q(
-            usereventscore__awarded_at__date__gte=active_season.start_date,
-            usereventscore__awarded_at__date__lte=active_season.end_date
+            usereventscore__awarded_at__gte=active_season.start_datetime,
+            usereventscore__awarded_at__lte=active_season.end_datetime
         )
         
         # Filter leaderboard to only include enrolled users for the active season
@@ -725,8 +729,8 @@ def home(request):
         points_filter = Q(user=row, awarded_at__gte=three_days_ago)
         if active_season:
             points_filter &= Q(
-                awarded_at__date__gte=active_season.start_date,
-                awarded_at__date__lte=active_season.end_date
+                awarded_at__gte=active_season.start_datetime,
+                awarded_at__lte=active_season.end_datetime
             )
         points_last_3_days = UserEventScore.objects.filter(points_filter).aggregate(
             total=Coalesce(Sum('points_awarded'), 0)

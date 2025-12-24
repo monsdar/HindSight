@@ -781,7 +781,7 @@ class SeasonParticipantInline(admin.TabularInline):
 
 @admin.register(Season)
 class SeasonAdmin(admin.ModelAdmin):
-    list_display = ('name', 'start_date', 'end_date', 'is_active_display', 'participant_count_display', 'created_at')
+    list_display = ('name', 'start_datetime_display', 'end_datetime_display', 'is_active_display', 'participant_count_display', 'created_at')
     list_filter = ('start_date', 'end_date')
     search_fields = ('name', 'description', 'season_end_description')
     date_hierarchy = 'start_date'
@@ -796,8 +796,8 @@ class SeasonAdmin(admin.ModelAdmin):
             'description': 'Regular description is shown during the season. Season end description is shown after the season ends (if provided).'
         }),
         ('Timeframe', {
-            'fields': ('start_date', 'end_date'),
-            'description': 'The season is active when the current date falls within this range. Seasons must not overlap.'
+            'fields': ('start_date', 'start_time', 'end_date', 'end_time'),
+            'description': 'The season is active when the current datetime falls within this range. Seasons must not overlap.'
         }),
         ('Timestamps', {
             'fields': ('created_at', 'updated_at'),
@@ -805,6 +805,20 @@ class SeasonAdmin(admin.ModelAdmin):
         }),
     )
     readonly_fields = ('created_at', 'updated_at')
+    
+    def start_datetime_display(self, obj):
+        """Display start date and time."""
+        if obj is None:
+            return '-'
+        return f"{obj.start_date} {obj.start_time}"
+    start_datetime_display.short_description = 'Start'
+    
+    def end_datetime_display(self, obj):
+        """Display end date and time."""
+        if obj is None:
+            return '-'
+        return f"{obj.end_date} {obj.end_time}"
+    end_datetime_display.short_description = 'End'
     
     def is_active_display(self, obj):
         """Display whether the season is currently active."""
@@ -850,12 +864,12 @@ class SeasonAdmin(admin.ModelAdmin):
             if obj.is_active():
                 messages.success(
                     request,
-                    f'Season "{obj.name}" is now active. Leaderboards will show scores from {obj.start_date} to {obj.end_date}.'
+                    f'Season "{obj.name}" is now active. Leaderboards will show scores from {obj.start_datetime} to {obj.end_datetime}.'
                 )
             else:
                 messages.info(
                     request,
-                    f'Season "{obj.name}" saved. It will be active from {obj.start_date} to {obj.end_date}.'
+                    f'Season "{obj.name}" saved. It will be active from {obj.start_datetime} to {obj.end_datetime}.'
                 )
         except Exception as e:
             messages.error(request, f'Error saving season: {str(e)}')

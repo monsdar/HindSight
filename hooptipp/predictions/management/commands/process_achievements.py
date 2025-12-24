@@ -155,9 +155,9 @@ class Command(BaseCommand):
         """
         result = AchievementProcessorResult(achievement_type='season_achievements')
         
-        # Get all completed seasons (end_date < today)
-        today = timezone.now().date()
-        completed_seasons = Season.objects.filter(end_date__lt=today).order_by('-end_date')
+        # Get all completed seasons (end_date < now)
+        now = timezone.now()
+        completed_seasons = Season.objects.filter(end_date__lt=now).order_by('-end_date')
         
         if not completed_seasons.exists():
             result.skipped = 1
@@ -258,18 +258,9 @@ class Command(BaseCommand):
         User = get_user_model()
         
         # Get all scores within season timeframe
-        # Use datetime objects for proper timezone-aware comparison
-        from datetime import datetime as dt, time as dt_time
-        season_start_datetime = timezone.make_aware(
-            dt.combine(season.start_date, dt.min.time())
-        )
-        # Use end of day (23:59:59) for season end to include all scores on that day
-        season_end_datetime = timezone.make_aware(
-            dt.combine(season.end_date, dt_time(23, 59, 59))
-        )
         season_scores = UserEventScore.objects.filter(
-            awarded_at__gte=season_start_datetime,
-            awarded_at__lte=season_end_datetime
+            awarded_at__gte=season.start_datetime,
+            awarded_at__lte=season.end_datetime
         )
         
         # Calculate total points per user

@@ -1,6 +1,6 @@
 """Tests for Season model and season-based leaderboard filtering."""
 
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, time as time_type, time as time_type
 from django.test import TestCase
 from django.core.exceptions import ValidationError
 from django.utils import timezone
@@ -48,22 +48,32 @@ class SeasonModelTests(TestCase):
 
     def test_season_creation(self):
         """Test creating a season."""
+        start_date = date(2026, 1, 1)
+        start_time = time_type(0, 0, 0)
+        end_date = date(2026, 1, 31)
+        end_time = time_type(23, 59, 59)
         season = Season.objects.create(
             name='Test Season',
-            start_date=date(2026, 1, 1),
-            end_date=date(2026, 1, 31)
+            start_date=start_date,
+            start_time=start_time,
+            end_date=end_date,
+            end_time=end_time
         )
         self.assertEqual(season.name, 'Test Season')
-        self.assertEqual(season.start_date, date(2026, 1, 1))
-        self.assertEqual(season.end_date, date(2026, 1, 31))
+        self.assertEqual(season.start_date, start_date)
+        self.assertEqual(season.start_time, start_time)
+        self.assertEqual(season.end_date, end_date)
+        self.assertEqual(season.end_time, end_time)
         self.assertEqual(str(season), 'Test Season')
 
     def test_season_end_date_before_start_date_validation(self):
-        """Test that end_date cannot be before start_date."""
+        """Test that end_datetime cannot be before start_datetime."""
         season = Season(
             name='Invalid Season',
             start_date=date(2026, 1, 31),
-            end_date=date(2026, 1, 1)
+            start_time=time_type(0, 0, 0),
+            end_date=date(2026, 1, 1),
+            end_time=time_type(0, 0, 0)
         )
         with self.assertRaises(ValidationError) as cm:
             season.full_clean()
@@ -74,14 +84,18 @@ class SeasonModelTests(TestCase):
         Season.objects.create(
             name='Season 1',
             start_date=date(2026, 1, 1),
-            end_date=date(2026, 1, 31)
+            start_time=time_type(0, 0, 0),
+            end_date=date(2026, 1, 31),
+            end_time=time_type(23, 59, 59)
         )
         
         # Overlapping season (same dates)
         season2 = Season(
             name='Season 2',
             start_date=date(2026, 1, 1),
-            end_date=date(2026, 1, 31)
+            start_time=time_type(0, 0, 0),
+            end_date=date(2026, 1, 31),
+            end_time=time_type(23, 59, 59)
         )
         with self.assertRaises(ValidationError) as cm:
             season2.full_clean()
@@ -91,7 +105,9 @@ class SeasonModelTests(TestCase):
         season3 = Season(
             name='Season 3',
             start_date=date(2026, 1, 15),
-            end_date=date(2026, 2, 15)
+            start_time=time_type(0, 0, 0),
+            end_date=date(2026, 2, 15),
+            end_time=time_type(23, 59, 59)
         )
         with self.assertRaises(ValidationError) as cm:
             season3.full_clean()
@@ -101,7 +117,9 @@ class SeasonModelTests(TestCase):
         season4 = Season(
             name='Season 4',
             start_date=date(2026, 1, 10),
-            end_date=date(2026, 1, 20)
+            start_time=time_type(0, 0, 0),
+            end_date=date(2026, 1, 20),
+            end_time=time_type(23, 59, 59)
         )
         with self.assertRaises(ValidationError) as cm:
             season4.full_clean()
@@ -112,14 +130,18 @@ class SeasonModelTests(TestCase):
         Season.objects.create(
             name='Season 1',
             start_date=date(2026, 1, 1),
-            end_date=date(2026, 1, 31)
+            start_time=time_type(0, 0, 0),
+            end_date=date(2026, 1, 31),
+            end_time=time_type(23, 59, 59)
         )
         
         # Non-overlapping season (before)
         season2 = Season.objects.create(
             name='Season 2',
             start_date=date(2025, 12, 1),
-            end_date=date(2025, 12, 31)
+            start_time=time_type(0, 0, 0),
+            end_date=date(2025, 12, 31),
+            end_time=time_type(23, 59, 59)
         )
         self.assertIsNotNone(season2)
         
@@ -127,57 +149,69 @@ class SeasonModelTests(TestCase):
         season3 = Season.objects.create(
             name='Season 3',
             start_date=date(2026, 2, 1),
-            end_date=date(2026, 2, 28)
+            start_time=time_type(0, 0, 0),
+            end_date=date(2026, 2, 28),
+            end_time=time_type(23, 59, 59)
         )
         self.assertIsNotNone(season3)
 
     def test_season_is_active(self):
         """Test is_active() method."""
-        today = timezone.now().date()
+        now = timezone.now()
         
         # Past season (completely in the past)
         past_season = Season.objects.create(
             name='Past Season',
-            start_date=today - timedelta(days=30),
-            end_date=today - timedelta(days=20)
+            start_date=(now - timedelta(days=30)).date(),
+            start_time=time_type(0, 0, 0),
+            end_date=(now - timedelta(days=20)).date(),
+            end_time=time_type(23, 59, 59)
         )
         self.assertFalse(past_season.is_active())
         
         # Future season (completely in the future)
         future_season = Season.objects.create(
             name='Future Season',
-            start_date=today + timedelta(days=20),
-            end_date=today + timedelta(days=30)
+            start_date=(now + timedelta(days=20)).date(),
+            start_time=time_type(0, 0, 0),
+            end_date=(now + timedelta(days=30)).date(),
+            end_time=time_type(23, 59, 59)
         )
         self.assertFalse(future_season.is_active())
         
-        # Active season (spans today)
+        # Active season (spans now)
         season = Season.objects.create(
             name='Active Season',
-            start_date=today - timedelta(days=5),
-            end_date=today + timedelta(days=5)
+            start_date=(now - timedelta(days=5)).date(),
+            start_time=time_type(0, 0, 0),
+            end_date=(now + timedelta(days=5)).date(),
+            end_time=time_type(23, 59, 59)
         )
         self.assertTrue(season.is_active())
         
         # Season active on start date (non-overlapping with previous)
         start_season = Season.objects.create(
             name='Start Season',
-            start_date=today + timedelta(days=6),
-            end_date=today + timedelta(days=15)
+            start_date=(now + timedelta(days=6)).date(),
+            start_time=time_type(0, 0, 0),
+            end_date=(now + timedelta(days=15)).date(),
+            end_time=time_type(23, 59, 59)
         )
         self.assertFalse(start_season.is_active())  # Not active yet
         
         # Season active on end date (non-overlapping with previous)
         end_season = Season.objects.create(
             name='End Season',
-            start_date=today - timedelta(days=35),
-            end_date=today - timedelta(days=31)
+            start_date=(now - timedelta(days=35)).date(),
+            start_time=time_type(0, 0, 0),
+            end_date=(now - timedelta(days=31)).date(),
+            end_time=time_type(23, 59, 59)
         )
         self.assertFalse(end_season.is_active())  # Already ended
 
     def test_get_active_season(self):
         """Test get_active_season() class method."""
-        today = timezone.now().date()
+        now = timezone.now()
         
         # No active season
         active = Season.get_active_season()
@@ -186,8 +220,10 @@ class SeasonModelTests(TestCase):
         # Create active season
         season = Season.objects.create(
             name='Active Season',
-            start_date=today - timedelta(days=5),
-            end_date=today + timedelta(days=5)
+            start_date=(now - timedelta(days=5)).date(),
+            start_time=time_type(0, 0, 0),
+            end_date=(now + timedelta(days=5)).date(),
+            end_time=time_type(23, 59, 59)
         )
         active = Season.get_active_season()
         self.assertEqual(active, season)
@@ -195,30 +231,37 @@ class SeasonModelTests(TestCase):
         # Create another season (should not be returned if not active)
         Season.objects.create(
             name='Future Season',
-            start_date=today + timedelta(days=10),
-            end_date=today + timedelta(days=20)
+            start_date=(now + timedelta(days=10)).date(),
+            start_time=time_type(0, 0, 0),
+            end_date=(now + timedelta(days=20)).date(),
+            end_time=time_type(23, 59, 59)
         )
         active = Season.get_active_season()
         self.assertEqual(active, season)
 
-    def test_get_active_season_with_custom_date(self):
-        """Test get_active_season() with custom date."""
+    def test_get_active_season_with_custom_datetime(self):
+        """Test get_active_season() with custom datetime."""
         season = Season.objects.create(
             name='January Season',
             start_date=date(2026, 1, 1),
-            end_date=date(2026, 1, 31)
+            start_time=time_type(0, 0, 0),
+            end_date=date(2026, 1, 31),
+            end_time=time_type(23, 59, 59)
         )
         
-        # Check with date in season
-        active = Season.get_active_season(date(2026, 1, 15))
+        # Check with datetime in season
+        check_dt = timezone.make_aware(datetime(2026, 1, 15, 12, 0, 0))
+        active = Season.get_active_season(check_dt)
         self.assertEqual(active, season)
         
-        # Check with date before season
-        active = Season.get_active_season(date(2025, 12, 15))
+        # Check with datetime before season
+        check_dt = timezone.make_aware(datetime(2025, 12, 15, 12, 0, 0))
+        active = Season.get_active_season(check_dt)
         self.assertIsNone(active)
         
-        # Check with date after season
-        active = Season.get_active_season(date(2026, 2, 15))
+        # Check with datetime after season
+        check_dt = timezone.make_aware(datetime(2026, 2, 15, 12, 0, 0))
+        active = Season.get_active_season(check_dt)
         self.assertIsNone(active)
 
 
@@ -348,29 +391,31 @@ class SeasonLeaderboardTests(TestCase):
 
     def test_leaderboard_filtered_by_active_season(self):
         """Test that leaderboard shows only season scores when season is active."""
-        today = timezone.now().date()
+        now = timezone.now()
         
         # Create season
         season = Season.objects.create(
             name='Test Season',
-            start_date=today - timedelta(days=7),
-            end_date=today - timedelta(days=1)
+            start_date=(now - timedelta(days=7)).date(),
+            start_time=time_type(0, 0, 0),
+            end_date=(now - timedelta(days=1)).date(),
+            end_time=time_type(23, 59, 59)
         )
         
         # Create scores: one in season, one outside
         score_in_season = self._create_score(
             self.user1, self.event1, 10,
-            timezone.make_aware(datetime.combine(today - timedelta(days=5), datetime.min.time()))
+            now - timedelta(days=5)
         )
         score_outside_season = self._create_score(
             self.user2, self.event2, 5,
-            timezone.make_aware(datetime.combine(today - timedelta(days=10), datetime.min.time()))
+            now - timedelta(days=10)
         )
         
         # Filter scores by season
         season_scores = UserEventScore.objects.filter(
-            awarded_at__date__gte=season.start_date,
-            awarded_at__date__lte=season.end_date
+            awarded_at__gte=season.start_datetime,
+            awarded_at__lte=season.end_datetime
         )
         
         self.assertEqual(season_scores.count(), 1)
@@ -382,30 +427,32 @@ class SeasonLeaderboardTests(TestCase):
 
     def test_scoreboard_summary_respects_active_season(self):
         """Test that scoreboard_summary filters by active season."""
-        today = timezone.now().date()
+        now = timezone.now()
         
         # Create season
         season = Season.objects.create(
             name='Test Season',
-            start_date=today - timedelta(days=7),
-            end_date=today + timedelta(days=7)
+            start_date=(now - timedelta(days=7)).date(),
+            start_time=time_type(0, 0, 0),
+            end_date=(now + timedelta(days=7)).date(),
+            end_time=time_type(23, 59, 59)
         )
         
         # Create scores: one in season, one outside
         score_in_season = self._create_score(
             self.user1, self.event1, 10,
-            timezone.make_aware(datetime.combine(today - timedelta(days=5), datetime.min.time()))
+            now - timedelta(days=5)
         )
         score_outside_season = self._create_score(
             self.user1, self.event2, 5,
-            timezone.make_aware(datetime.combine(today - timedelta(days=15), datetime.min.time()))
+            now - timedelta(days=15)
         )
         
         # Filter by season
         season_scores = UserEventScore.objects.filter(
             user=self.user1,
-            awarded_at__date__gte=season.start_date,
-            awarded_at__date__lte=season.end_date
+            awarded_at__gte=season.start_datetime,
+            awarded_at__lte=season.end_datetime
         )
         
         season_total = sum(s.points_awarded for s in season_scores)
@@ -498,27 +545,20 @@ class SeasonAwareLockRestorationTests(TestCase):
         """Test that locks forfeited before season start are restored immediately."""
         from hooptipp.predictions.lock_service import LockService
         
-        today = timezone.now().date()
-        season_start = today - timedelta(days=3)
+        now = timezone.now()
+        season_start = now - timedelta(days=3)
         
         # Create season
         season = Season.objects.create(
             name='Test Season',
-            start_date=season_start,
-            end_date=today + timedelta(days=30)
+            start_date=season_start.date(),
+            start_time=time_type(0, 0, 0),
+            end_date=(now + timedelta(days=30)).date(),
+            end_time=time_type(23, 59, 59)
         )
         
         # Create tip with forfeited lock (forfeited before season start)
-        forfeited_date = season_start - timedelta(days=5)
-        forfeited_at = timezone.now().replace(
-            year=forfeited_date.year,
-            month=forfeited_date.month,
-            day=forfeited_date.day,
-            hour=0,
-            minute=0,
-            second=0,
-            microsecond=0
-        )
+        forfeited_at = season_start - timedelta(days=5)
         tip = UserTip.objects.create(
             user=self.user,
             tip_type=self.tip_type,
@@ -550,21 +590,20 @@ class SeasonAwareLockRestorationTests(TestCase):
         """Test that locks forfeited during season follow normal 30-day delay."""
         from hooptipp.predictions.lock_service import LockService
         
-        today = timezone.now().date()
-        season_start = today - timedelta(days=10)
+        now = timezone.now()
+        season_start = now - timedelta(days=10)
         
         # Create season
         season = Season.objects.create(
             name='Test Season',
-            start_date=season_start,
-            end_date=today + timedelta(days=30)
+            start_date=season_start.date(),
+            start_time=time_type(0, 0, 0),
+            end_date=(now + timedelta(days=30)).date(),
+            end_time=time_type(23, 59, 59)
         )
         
         # Create tip with forfeited lock (forfeited during season)
-        forfeited_date = season_start + timedelta(days=2)
-        forfeited_at = timezone.make_aware(
-            datetime(forfeited_date.year, forfeited_date.month, forfeited_date.day, 0, 0, 0)
-        )
+        forfeited_at = season_start + timedelta(days=2)
         tip = UserTip.objects.create(
             user=self.user,
             tip_type=self.tip_type,
@@ -630,24 +669,23 @@ class SeasonAwareLockRestorationTests(TestCase):
         self.assertEqual(summary.pending, 1)
 
     def test_lock_forfeited_exactly_on_season_start_not_restored(self):
-        """Test that locks forfeited exactly on season start date are not restored."""
+        """Test that locks forfeited exactly on season start datetime are not restored."""
         from hooptipp.predictions.lock_service import LockService
         
-        today = timezone.now().date()
-        season_start = today - timedelta(days=3)
+        now = timezone.now()
+        season_start = now - timedelta(days=3)
         
         # Create season
         season = Season.objects.create(
             name='Test Season',
-            start_date=season_start,
-            end_date=today + timedelta(days=30)
+            start_date=season_start.date(),
+            start_time=time_type(0, 0, 0),
+            end_date=(now + timedelta(days=30)).date(),
+            end_time=time_type(23, 59, 59)
         )
         
         # Create tip with forfeited lock (forfeited exactly on season start)
-        # Create timezone-aware datetime for season start
-        forfeited_at = timezone.make_aware(
-            datetime(season_start.year, season_start.month, season_start.day, 0, 0, 0)
-        )
+        forfeited_at = season_start
         tip = UserTip.objects.create(
             user=self.user,
             tip_type=self.tip_type,
@@ -679,14 +717,16 @@ class SeasonAwareLockRestorationTests(TestCase):
         """Test that locks without lock_forfeited_at are handled gracefully."""
         from hooptipp.predictions.lock_service import LockService
         
-        today = timezone.now().date()
-        season_start = today - timedelta(days=3)
+        now = timezone.now()
+        season_start = now - timedelta(days=3)
         
         # Create season
         season = Season.objects.create(
             name='Test Season',
-            start_date=season_start,
-            end_date=today + timedelta(days=30)
+            start_date=season_start.date(),
+            start_time=time_type(0, 0, 0),
+            end_date=(now + timedelta(days=30)).date(),
+            end_time=time_type(23, 59, 59)
         )
         
         # Create tip with forfeited lock but no lock_forfeited_at (old data)

@@ -242,13 +242,14 @@ class SeasonAdminTests(TestCase):
     
     def test_changelist_view_loads_without_error(self) -> None:
         """Test that the Season changelist view loads without errors."""
-        from datetime import date
+        from datetime import datetime
+        from django.utils import timezone
         
         # Create a test season
         Season.objects.create(
             name='Test Season',
-            start_date=date(2025, 1, 1),
-            end_date=date(2025, 12, 31)
+            start_date=timezone.make_aware(datetime(2025, 1, 1, 0, 0, 0)),
+            end_date=timezone.make_aware(datetime(2025, 12, 31, 23, 59, 59))
         )
         
         url = reverse('admin:predictions_season_changelist')
@@ -262,13 +263,14 @@ class SeasonAdminTests(TestCase):
     
     def test_changelist_displays_is_active_status(self) -> None:
         """Test that the changelist displays the is_active_display column."""
-        from datetime import date
+        from datetime import datetime
+        from django.utils import timezone
         
         # Create a test season
         season = Season.objects.create(
             name='Active Season',
-            start_date=date(2024, 1, 1),
-            end_date=date(2026, 12, 31)
+            start_date=timezone.make_aware(datetime(2024, 1, 1, 0, 0, 0)),
+            end_date=timezone.make_aware(datetime(2026, 12, 31, 23, 59, 59))
         )
         
         url = reverse('admin:predictions_season_changelist')

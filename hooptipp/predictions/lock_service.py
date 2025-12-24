@@ -69,7 +69,7 @@ class LockService:
                     user=self.user,
                     lock_status=UserTip.LockStatus.FORFEITED,
                     lock_forfeited_at__isnull=False,
-                    lock_forfeited_at__lt=active_season.start_date,
+                    lock_forfeited_at__lt=active_season.start_datetime,
                 ).values_list("id", flat=True)
             )
             if pre_season_forfeited_ids:

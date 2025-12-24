@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, time as time_type
 from django.test import TestCase
 from django.core.management import call_command
 from django.core.management.base import CommandError
@@ -36,7 +36,9 @@ class AchievementModelTests(TestCase):
         self.season = Season.objects.create(
             name='Test Season',
             start_date=date(2026, 1, 1),
-            end_date=date(2026, 1, 31)
+            start_time=time_type(0, 0, 0),
+            end_date=date(2026, 1, 31),
+            end_time=time_type(23, 59, 59)
         )
 
     def test_achievement_creation(self):
@@ -141,11 +143,13 @@ class AchievementCommandTests(TestCase):
         )
         
         # Create a completed season
-        today = timezone.now().date()
+        now = timezone.now()
         self.season = Season.objects.create(
             name='Completed Season',
-            start_date=today - timedelta(days=60),
-            end_date=today - timedelta(days=1)  # Season ended yesterday
+            start_date=(now - timedelta(days=60)).date(),
+            start_time=time_type(0, 0, 0),
+            end_date=(now - timedelta(days=1)).date(),  # Season ended yesterday
+            end_time=time_type(23, 59, 59)
         )
         
         # Create events and outcomes
@@ -178,14 +182,11 @@ class AchievementCommandTests(TestCase):
         )
         
         # Create scores for users (user1 has most points, user2 second, user3 third)
-        # Use a date that's definitely within the season - use 10 days from start
+        # Use a datetime that's definitely within the season - use 10 days from start
         # This ensures we're well within a 60-day season
-        score_date = self.season.start_date + timedelta(days=10)
+        score_time = self.season.start_datetime + timedelta(days=10)
         # Verify it's before season end (should always be true for a 60-day season)
-        assert score_date <= self.season.end_date, f"Score date {score_date} must be <= season end {self.season.end_date}"
-        score_time = timezone.make_aware(
-            datetime.combine(score_date, datetime.min.time())
-        )
+        assert score_time <= self.season.end_datetime, f"Score datetime {score_time} must be <= season end {self.season.end_datetime}"
         
         # Note: awarded_at has auto_now_add=True, so we need to update it after creation
         score1 = UserEventScore.objects.create(
@@ -328,12 +329,15 @@ class AchievementCommandTests(TestCase):
     def test_process_achievements_only_completed_seasons(self):
         """Test that only completed seasons are processed."""
         # Create an active season (non-overlapping with completed season)
-        today = timezone.now().date()
+        now = timezone.now()
         # Use dates that don't overlap with the completed season
+        now = timezone.now()
         active_season = Season.objects.create(
             name='Active Season',
-            start_date=today + timedelta(days=1),  # Starts tomorrow
-            end_date=today + timedelta(days=30)  # Still active
+            start_date=(now + timedelta(days=1)).date(),  # Starts tomorrow
+            start_time=time_type(0, 0, 0),
+            end_date=(now + timedelta(days=30)).date(),  # Still active
+            end_time=time_type(23, 59, 59)
         )
         
         out = StringIO()
@@ -395,7 +399,9 @@ class AchievementViewIntegrationTests(TestCase):
         self.season = Season.objects.create(
             name='Test Season',
             start_date=date(2026, 1, 1),
-            end_date=date(2026, 1, 31)
+            start_time=time_type(0, 0, 0),
+            end_date=date(2026, 1, 31),
+            end_time=time_type(23, 59, 59)
         )
         
         # Create achievements

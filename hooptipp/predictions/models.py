@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, time, datetime
 from django.conf import settings
 from django.db import models
 from django.utils import timezone
@@ -532,13 +532,25 @@ class Season(models.Model):
     """
     Represents a time-bounded scoring period.
     
-    Only one season can be active at a time (determined by current date
-    falling within start_date and end_date). When a season is active,
+    Only one season can be active at a time (determined by current datetime
+    falling within start_datetime and end_datetime). When a season is active,
     leaderboards show only scores from that season's timeframe.
     """
     name = models.CharField(max_length=200)
-    start_date = models.DateField()
-    end_date = models.DateField()
+    start_date = models.DateField(
+        help_text="Date when the season starts"
+    )
+    start_time = models.TimeField(
+        default=time(0, 0, 0),
+        help_text="Time when the season starts (defaults to 00:00:00)"
+    )
+    end_date = models.DateField(
+        help_text="Date when the season ends"
+    )
+    end_time = models.TimeField(
+        default=time(23, 59, 59),
+        help_text="Time when the season ends (defaults to 23:59:59)"
+    )
     description = models.TextField(blank=True)
     season_end_description = models.TextField(
         blank=True,
@@ -548,72 +560,104 @@ class Season(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        ordering = ['-start_date', 'name']
+        ordering = ['-start_date', '-start_time', 'name']
         verbose_name = 'Season'
         verbose_name_plural = 'Seasons'
         indexes = [
-            models.Index(fields=['start_date', 'end_date']),
+            models.Index(fields=['start_date', 'start_time', 'end_date', 'end_time']),
         ]
 
     def __str__(self) -> str:
         return self.name
 
+    @property
+    def start_datetime(self) -> timezone.datetime:
+        """Get the combined start date and time as a timezone-aware datetime."""
+        if self.start_date is None:
+            raise ValueError(
+                f"Season '{self.name}' (id={self.pk}) has no start_date set. "
+                "This is a required field. Please set it in the admin interface."
+            )
+        time_val = self.start_time if self.start_time is not None else time(0, 0, 0)
+        dt = datetime.combine(self.start_date, time_val)
+        if timezone.is_naive(dt):
+            dt = timezone.make_aware(dt)
+        return dt
+
+    @property
+    def end_datetime(self) -> timezone.datetime:
+        """Get the combined end date and time as a timezone-aware datetime."""
+        if self.end_date is None:
+            raise ValueError(
+                f"Season '{self.name}' (id={self.pk}) has no end_date set. "
+                "This is a required field. Please set it in the admin interface."
+            )
+        time_val = self.end_time if self.end_time is not None else time(23, 59, 59)
+        dt = datetime.combine(self.end_date, time_val)
+        if timezone.is_naive(dt):
+            dt = timezone.make_aware(dt)
+        return dt
+
     def clean(self) -> None:
-        """Validate that end_date >= start_date and no overlapping seasons."""
-        from django.utils import timezone as tz
+        """Validate that end_datetime >= start_datetime and no overlapping seasons."""
+        start_dt = self.start_datetime
+        end_dt = self.end_datetime
         
-        if self.end_date < self.start_date:
+        if end_dt < start_dt:
             raise ValidationError({
-                'end_date': 'End date must be on or after start date.'
+                'end_date': 'End date/time must be on or after start date/time.'
             })
         
         # Check for overlapping seasons (excluding self if updating)
-        overlapping = Season.objects.filter(
-            models.Q(start_date__lte=self.end_date) & models.Q(end_date__gte=self.start_date)
-        )
-        if self.pk:
-            overlapping = overlapping.exclude(pk=self.pk)
+        # We need to check all seasons and compare their datetime ranges
+        overlapping = Season.objects.exclude(pk=self.pk) if self.pk else Season.objects.all()
         
-        if overlapping.exists():
-            overlapping_seasons = ', '.join(s.name for s in overlapping)
-            raise ValidationError(
-                f'This season overlaps with existing season(s): {overlapping_seasons}. '
-                f'Seasons must have non-overlapping timeframes.'
-            )
+        for other_season in overlapping:
+            other_start = other_season.start_datetime
+            other_end = other_season.end_datetime
+            
+            # Check if ranges overlap: (start <= other_end) and (end >= other_start)
+            if start_dt <= other_end and end_dt >= other_start:
+                raise ValidationError(
+                    f'This season overlaps with existing season "{other_season.name}". '
+                    f'Seasons must have non-overlapping timeframes.'
+                )
 
     def save(self, *args, **kwargs) -> None:
         """Override save to call clean() for validation."""
         self.full_clean()
         super().save(*args, **kwargs)
 
-    def is_active(self, check_date: date | timezone.datetime | None = None) -> bool:
-        """Check if this season is active on the given date (or today if not provided)."""
-        if check_date is None:
-            check_date = timezone.now()
-        date_only = check_date.date() if isinstance(check_date, timezone.datetime) else check_date
-        return self.start_date <= date_only <= self.end_date
+    def is_active(self, check_datetime: timezone.datetime | None = None) -> bool:
+        """Check if this season is active at the given datetime (or now if not provided)."""
+        # Skip seasons with missing required fields
+        if self.start_date is None or self.end_date is None:
+            return False
+        if check_datetime is None:
+            check_datetime = timezone.now()
+        # Ensure check_datetime is timezone-aware
+        if timezone.is_naive(check_datetime):
+            check_datetime = timezone.make_aware(check_datetime)
+        return self.start_datetime <= check_datetime <= self.end_datetime
 
     @classmethod
-    def get_active_season(cls, check_date: date | timezone.datetime | None = None) -> 'Season | None':
+    def get_active_season(cls, check_datetime: timezone.datetime | None = None) -> 'Season | None':
         """Get the currently active season, if any."""
-        if check_date is None:
-            check_date = timezone.now()
-        date_only = check_date.date() if isinstance(check_date, timezone.datetime) else check_date
+        if check_datetime is None:
+            check_datetime = timezone.now()
+        # Ensure check_datetime is timezone-aware
+        if timezone.is_naive(check_datetime):
+            check_datetime = timezone.make_aware(check_datetime)
         
-        try:
-            return cls.objects.get(
-                start_date__lte=date_only,
-                end_date__gte=date_only
-            )
-        except cls.DoesNotExist:
-            return None
-        except cls.MultipleObjectsReturned:
-            # This shouldn't happen if validation works, but handle it gracefully
-            # Return the first one found
-            return cls.objects.filter(
-                start_date__lte=date_only,
-                end_date__gte=date_only
-            ).first()
+        # Filter out seasons with null dates and check all valid seasons
+        for season in cls.objects.exclude(start_date__isnull=True).exclude(end_date__isnull=True):
+            try:
+                if season.is_active(check_datetime):
+                    return season
+            except (ValueError, AttributeError):
+                # Skip seasons with invalid data
+                continue
+        return None
 
 
 class SeasonParticipant(models.Model):
