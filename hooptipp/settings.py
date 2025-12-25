@@ -258,9 +258,6 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 PRIVACY_GATE_ENABLED = os.environ.get('PRIVACY_GATE_ENABLED', 'True').lower() == 'true'
 PRIVACY_GATE_CORRECT_ANSWER = os.environ.get('PRIVACY_GATE_ANSWER', 'ORL,GSW,BOS,OKC').split(',')
 
-# User Selection Configuration
-ENABLE_USER_SELECTION = os.environ.get('ENABLE_USER_SELECTION', 'True').lower() == 'true'
-
 # Page Customization
 PAGE_TITLE = os.environ.get('PAGE_TITLE', 'HindSight')
 PAGE_SLOGAN = os.environ.get('PAGE_SLOGAN', "Find out who's always right!")
@@ -269,7 +266,6 @@ PAGE_SLOGAN = os.environ.get('PAGE_SLOGAN', "Find out who's always right!")
 TESTING = 'test' in sys.argv or 'pytest' in sys.argv[0] if sys.argv else False
 
 # Authentication Configuration
-# These settings are used when ENABLE_USER_SELECTION=False (authentication mode)
 LOGIN_URL = '/login/'
 LOGIN_REDIRECT_URL = '/'
 LOGOUT_REDIRECT_URL = '/'

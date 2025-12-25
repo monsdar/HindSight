@@ -12,7 +12,7 @@ Predict NBA games, elections, Olympic outcomes, personal goals, or create your o
 - **Any Event Type**: Sports, politics, personal goals, world events
 - **Extensible Sources**: Automatic imports from external APIs
 - **Beautiful UI**: Clean, modern interface with Tailwind CSS
-- **Family-Friendly**: Simple user activation without complex authentication
+- **User Authentication**: Standard email-based authentication with verification
 - **Smart Scoring**: Configurable points, lock bonuses, and leaderboards
 
 ### Built-in NBA Support
@@ -106,8 +106,6 @@ Flexible organization system:
    # Hotness System (optional)
    HOTNESS_DECAY_PER_HOUR=0.5  # Default: 0.5 (1 point per 2 hours)
 
-   # User Selection (defaults to True if not set)
-   ENABLE_USER_SELECTION=True
 
    # Page Customization (optional)
    PAGE_TITLE=HindSight
@@ -142,7 +140,7 @@ Flexible organization system:
 1. **Create Users** (via `/admin`):
    - Go to the admin panel
    - Add users who will make predictions
-   - No complex authentication needed!
+   - Standard authentication with email verification
 
 2. **Sync NBA Data** (optional):
    - In admin, go to "NBA Teams" and click "Sync Teams"
@@ -154,72 +152,12 @@ Flexible organization system:
    - Or manually trigger sync in admin under "Event Sources"
 
 4. **Make Predictions**:
-   - On the homepage, select a user
+   - Log in with your account
    - View upcoming events and make your picks
    - Optionally "lock" picks you're confident in
-   - Save and switch users!
+   - Save your predictions
 
 ---
-
-## Deployment Modes
-
-HindSight supports two deployment modes to fit different use cases:
-
-### Mode 1: User Selection (Private/Family Use)
-**Best for:** Private family deployments, small trusted groups
-
-Set `ENABLE_USER_SELECTION=True` (default)
-
-**Features:**
-- Simple, family-friendly approach
-- No authentication required on main page
-- Users select themselves from a dropdown
-- Optional privacy gate with NBA team challenge
-- Optional per-user PIN protection
-- Perfect for households where everyone is trusted
-
-**Workflow:**
-1. Admin creates users via Django admin panel
-2. Users pass privacy gate (one-time NBA team challenge)
-3. Users select themselves from dropdown
-4. Make predictions
-5. "Finish Round" to clear selection
-6. Next user can then select themselves
-
-### Mode 2: Authentication (Public Use)
-**Best for:** Public-facing deployments, larger communities
-
-Set `ENABLE_USER_SELECTION=False`
-
-**Features:**
-- Standard signup/login system
-- Users create their own accounts
-- Email-based account verification (required before first login)
-- Email-based password reset
-- Each user has private, secure access
-- Traditional web app authentication
-- Suitable for public internet deployment
-
-**Workflow:**
-1. Users sign up with username, email, and password
-2. Verification email is sent to the user's email address
-3. User clicks verification link in email to activate account
-4. Users log in with credentials (only after verification)
-5. Make predictions (automatically tied to logged-in user)
-6. Log out when done
-
-### Switching Between Modes
-
-Simply change the `ENABLE_USER_SELECTION` environment variable:
-```bash
-# For private/family mode
-ENABLE_USER_SELECTION=True
-
-# For public authentication mode
-ENABLE_USER_SELECTION=False
-```
-
-Both modes use the same codebase and database schema - no migrations needed!
 
 ## How Predictions Work
 
@@ -239,9 +177,7 @@ Both modes use the same codebase and database schema - no migrations needed!
 
 ## Production Deployment
 
-HindSight is designed for Railway deployment and supports both deployment modes:
-
-### Private/Family Deployment (User Selection Mode)
+HindSight is designed for Railway deployment:
 
 ```bash
 # Core Settings
@@ -250,11 +186,8 @@ DATABASE_URL=postgresql://...
 DJANGO_ALLOWED_HOSTS=yourdomain.com
 CSRF_TRUSTED_ORIGINS=https://yourdomain.com
 
-# User Selection Mode
-ENABLE_USER_SELECTION=True
-
-# Privacy Gate (recommended for private deployments)
-PRIVACY_GATE_ENABLED=True
+# Privacy Gate (optional - for additional access control)
+PRIVACY_GATE_ENABLED=False
 PRIVACY_GATE_ANSWER=GSW,LAL,BOS,OKC
 
 # NBA API (optional)
@@ -264,30 +197,14 @@ BALLDONTLIE_API_TOKEN=your_token
 HOTNESS_DECAY_PER_HOUR=0.5  # Default: 0.5 (1 point per 2 hours)
 
 # Customization
-PAGE_TITLE=Family Predictions
+PAGE_TITLE=Your Predictions
 PAGE_SLOGAN=Who knows sports best?
 
 # Admin Setup
 HOOPTIPP_ADMIN_USER=admin
 HOOPTIPP_ADMIN_PASSWORD=secure_password_here
-```
 
-### Public Deployment (Authentication Mode)
-
-```bash
-# Core Settings
-SECRET_KEY=your_secret_key_here
-DATABASE_URL=postgresql://...
-DJANGO_ALLOWED_HOSTS=yourdomain.com
-CSRF_TRUSTED_ORIGINS=https://yourdomain.com
-
-# Authentication Mode
-ENABLE_USER_SELECTION=False
-
-# Privacy Gate (disable for public sites)
-PRIVACY_GATE_ENABLED=False
-
-# Email Configuration (for account verification and password reset)
+# Email Configuration (required for account verification and password reset)
 # Option 1: AWS SES API (Recommended)
 EMAIL_BACKEND=django_ses.SESBackend
 AWS_SES_REGION_NAME=us-east-1
@@ -332,7 +249,7 @@ HOOPTIPP_ADMIN_PASSWORD=secure_password_here
 
 ### Email Verification
 
-When using Authentication Mode, new users must verify their email address before they can log in:
+New users must verify their email address before they can log in:
 
 - After signup, a verification email is automatically sent
 - Users click the verification link in the email (valid for 3 days)

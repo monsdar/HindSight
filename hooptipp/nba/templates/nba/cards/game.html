@@ -27,10 +27,10 @@ Teams are directly selectable for predictions.
       {# Lock Button #}
       {% if active_user %}
         <button type="button" 
-                class="lock-toggle-btn flex items-center justify-center w-8 h-8 rounded-full border-2 transition-all duration-200 {% if user_tip and user_tip.is_locked %}theme-accent-border theme-accent-bg{% else %}border-slate-600{% endif %}"
+                class="lock-toggle-btn flex items-center justify-center w-8 h-8 rounded-full border-2 transition-all duration-200 {% if user_tip and user_tip.is_locked %}theme-accent-border theme-accent-bg cursor-pointer hover:scale-110{% elif user_tip %}border-slate-600 cursor-pointer hover:scale-110{% else %}border-slate-600 opacity-50 cursor-not-allowed{% endif %} {% if lock_summary and lock_summary.available == 0 and user_tip and not user_tip.is_locked %}opacity-50 cursor-not-allowed{% endif %}"
                 data-event-id="{{ event.id }}"
-                {% if lock_summary and lock_summary.available == 0 and not user_tip.is_locked %}disabled{% endif %}
-                title="{% if user_tip and user_tip.is_locked %}Unlock this pick{% else %}Lock this pick{% endif %}">
+                {% if not user_tip or lock_summary and lock_summary.available == 0 and user_tip and not user_tip.is_locked %}disabled{% endif %}
+                title="{% if not user_tip %}Make a prediction first{% elif user_tip.is_locked %}Unlock this pick{% else %}Lock this pick{% endif %}">
           <span class="text-lg transition-transform duration-200">{% if user_tip and user_tip.is_locked %}🔒{% else %}🔓{% endif %}</span>
         </button>
       {% endif %}
@@ -219,6 +219,9 @@ if (!window.hooptippGameCardInitialized) {
           console.log('Prediction saved successfully:', data.message);
           // Show a subtle success indicator
           showTemporaryMessage('Prediction saved!', 'success');
+          
+          // Enable the lock button for this event now that a prediction exists
+          enableLockButtonForEvent(eventId);
         } else {
           console.error('Failed to save prediction:', data.error);
           showTemporaryMessage('Failed to save prediction: ' + data.error, 'error');
@@ -339,6 +342,36 @@ if (!window.hooptippGameCardInitialized) {
           button.classList.remove('opacity-50', 'cursor-not-allowed');
         }
       });
+    }
+    
+    // Function to enable lock button for a specific event after prediction is saved
+    function enableLockButtonForEvent(eventId) {
+      const lockButton = document.querySelector(`.lock-toggle-btn[data-event-id="${eventId}"]`);
+      if (lockButton && lockButton.disabled) {
+        // Enable the button and make it interactive
+        lockButton.disabled = false;
+        lockButton.classList.remove('opacity-50', 'cursor-not-allowed');
+        lockButton.classList.add('cursor-pointer', 'hover:scale-110');
+        lockButton.title = 'Lock this pick';
+        
+        // Make sure it has an event listener attached
+        if (!lockButton.hasAttribute('data-listener-attached')) {
+          lockButton.setAttribute('data-listener-attached', 'true');
+          lockButton.addEventListener('click', function(e) {
+            console.log('Lock button clicked for event:', this.dataset.eventId);
+            e.preventDefault();
+            e.stopPropagation();
+            
+            const eventId = this.dataset.eventId;
+            const isCurrentlyLocked = this.querySelector('span').textContent === '🔒';
+            
+            console.log('Current lock state:', isCurrentlyLocked);
+            
+            // Toggle lock state immediately via AJAX
+            toggleLockImmediately(eventId, !isCurrentlyLocked, this);
+          });
+        }
+      }
     }
   });
 }

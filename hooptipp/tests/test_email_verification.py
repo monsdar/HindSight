@@ -17,7 +17,7 @@ from hooptipp.email_verification import (
 User = get_user_model()
 
 
-@override_settings(ENABLE_USER_SELECTION=False, PRIVACY_GATE_ENABLED=False)
+@override_settings(PRIVACY_GATE_ENABLED=False)
 class EmailVerificationUtilsTests(TestCase):
     """Tests for email verification utility functions."""
     
@@ -153,7 +153,7 @@ class EmailVerificationUtilsTests(TestCase):
         self.assertFalse(is_verification_token_valid(uidb64, invalid_token))
 
 
-@override_settings(ENABLE_USER_SELECTION=False, PRIVACY_GATE_ENABLED=False)
+@override_settings(PRIVACY_GATE_ENABLED=False)
 class EmailVerificationViewsTests(TestCase):
     """Tests for email verification views."""
     
@@ -307,7 +307,7 @@ class EmailVerificationViewsTests(TestCase):
         self.assertContains(response, 'Verification Email Sent')
 
 
-@override_settings(ENABLE_USER_SELECTION=False, PRIVACY_GATE_ENABLED=False)
+@override_settings(PRIVACY_GATE_ENABLED=False)
 class EmailVerificationIntegrationTests(TestCase):
     """Integration tests for the full email verification flow."""
     

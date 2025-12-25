@@ -62,7 +62,6 @@ class PrivacyGateMiddlewareTests(TestCase):
 
     @patch.object(settings, 'TESTING', False)
     @patch.object(settings, 'PRIVACY_GATE_ENABLED', True)
-    @patch.object(settings, 'ENABLE_USER_SELECTION', True)
     def test_middleware_redirects_without_session(self):
         """Middleware should redirect to privacy gate without session."""
         from django.contrib.auth.models import AnonymousUser
@@ -330,7 +329,6 @@ class PrivacyGateIntegrationTests(TestCase):
 
     @patch.object(settings, 'TESTING', False)
     @patch.object(settings, 'PRIVACY_GATE_ENABLED', True)
-    @patch.object(settings, 'ENABLE_USER_SELECTION', True)
     def test_full_privacy_gate_flow(self):
         """Test complete privacy gate flow from access to success."""
         # First, try to access main page without passing gate

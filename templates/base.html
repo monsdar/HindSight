@@ -242,26 +242,16 @@
         </div>
         <div class="flex items-center gap-4">
           {% block nav %}
-            {# Check if we're in user selection mode or authentication mode #}
-            {% if not enable_user_selection %}
-              {# Authentication Mode - show login/logout #}
-              {% if user.is_authenticated %}
-                <span class="text-slate-300">{{ user.username }}</span>
-                <form method="post" action="{% url 'logout' %}" class="inline">
-                  {% csrf_token %}
-                  <button type="submit" class="text-slate-400 hover:text-slate-200 transition-colors">Logout</button>
-                </form>
-              {% else %}
-                <a href="{% url 'login' %}" class="text-slate-400 hover:text-slate-200 transition-colors">Login</a>
-                <a href="{% url 'signup' %}" class="theme-accent-bg px-4 py-2 rounded-lg font-semibold hover:opacity-90 transition-all">Sign Up</a>
-              {% endif %}
+            {# Authentication Mode - show login/logout #}
+            {% if user.is_authenticated %}
+              <span class="text-slate-300">{{ user.username }}</span>
+              <form method="post" action="{% url 'logout' %}" class="inline">
+                {% csrf_token %}
+                <button type="submit" class="text-slate-400 hover:text-slate-200 transition-colors">Logout</button>
+              </form>
             {% else %}
-              {# User Selection Mode - show active user if any #}
-              {% if active_user %}
-                <span class="text-slate-300 text-sm">
-                  Active: <span class="font-semibold">{{ active_user.username }}</span>
-                </span>
-              {% endif %}
+              <a href="{% url 'login' %}" class="text-slate-400 hover:text-slate-200 transition-colors">Login</a>
+              <a href="{% url 'signup' %}" class="theme-accent-bg px-4 py-2 rounded-lg font-semibold hover:opacity-90 transition-all">Sign Up</a>
             {% endif %}
           {% endblock %}
         </div>

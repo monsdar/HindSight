@@ -3,7 +3,6 @@
 import time
 from typing import Optional
 
-from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import get_user_model, login
 from django.contrib.auth.decorators import login_required
@@ -26,16 +25,7 @@ from hooptipp.predictions.models import UserPreferences
 
 @require_http_methods(["GET", "POST"])
 def signup(request):
-    """
-    User registration view.
-    
-    Only available when ENABLE_USER_SELECTION is False (authentication mode).
-    """
-    # Redirect to home if in user selection mode
-    if settings.ENABLE_USER_SELECTION:
-        messages.info(request, 'User registration is not available in this mode. Please contact an administrator.')
-        return redirect('predictions:home')
-    
+    """User registration view."""
     if request.method == 'POST':
         username = request.POST.get('username', '').strip()
         email = request.POST.get('email', '').strip()
@@ -136,12 +126,7 @@ def profile(request):
     User profile view.
     
     Allows users to update their preferences.
-    Only available in authentication mode.
     """
-    if settings.ENABLE_USER_SELECTION:
-        messages.info(request, 'Profile editing is not available in this mode.')
-        return redirect('predictions:home')
-    
     # Redirect to home page - preferences editing is handled there
     return redirect('predictions:home')
 
@@ -184,9 +169,6 @@ def _check_rate_limit(email: str, action: str, max_attempts: int = 3, window_sec
 
 def verify_email_sent(request):
     """Page shown after signup directing user to check email."""
-    if settings.ENABLE_USER_SELECTION:
-        return redirect('predictions:home')
-    
     return render(request, 'auth/verify_email.html')
 
 
@@ -198,9 +180,6 @@ def verify_email(request, uidb64: str, token: str):
         uidb64: Base64-encoded user ID
         token: Verification token
     """
-    if settings.ENABLE_USER_SELECTION:
-        return redirect('predictions:home')
-    
     success, user, message = verify_email_token(uidb64, token)
     
     if success:
@@ -213,17 +192,11 @@ def verify_email(request, uidb64: str, token: str):
 
 def verify_email_success(request):
     """Success page after email verification."""
-    if settings.ENABLE_USER_SELECTION:
-        return redirect('predictions:home')
-    
     return render(request, 'auth/verify_email_success.html')
 
 
 def verify_email_failed(request):
     """Error page for failed email verification."""
-    if settings.ENABLE_USER_SELECTION:
-        return redirect('predictions:home')
-    
     return render(request, 'auth/verify_email_failed.html')
 
 
@@ -234,9 +207,6 @@ def resend_verification(request):
     
     Rate limited: max 3 requests per email per hour.
     """
-    if settings.ENABLE_USER_SELECTION:
-        return redirect('predictions:home')
-    
     if request.method == 'POST':
         email = request.POST.get('email', '').strip()
         
@@ -301,9 +271,6 @@ def resend_verification(request):
 
 def resend_verification_done(request):
     """Confirmation page after resending verification email."""
-    if settings.ENABLE_USER_SELECTION:
-        return redirect('predictions:home')
-    
     return render(request, 'auth/resend_verification_done.html')
 
 
@@ -370,6 +337,8 @@ class CustomPasswordResetView(FormView):
         Args:
             user: User instance to send password reset email to
         """
+        from django.conf import settings as django_settings
+        
         token = self.token_generator.make_token(user)
         uid = urlsafe_base64_encode(force_bytes(user.pk))
         
@@ -380,12 +349,12 @@ class CustomPasswordResetView(FormView):
             reset_url = f"{protocol}://{domain}{reverse('password_reset_confirm', args=[uid, token])}"
         else:
             # Fallback if no request available
-            host = settings.ALLOWED_HOSTS[0] if settings.ALLOWED_HOSTS else 'localhost'
+            host = django_settings.ALLOWED_HOSTS[0] if django_settings.ALLOWED_HOSTS else 'localhost'
             protocol = 'https' if not host.startswith(('localhost', '127.0.0.1', '0.0.0.0')) else 'http'
             reset_url = f"{protocol}://{host}{reverse('password_reset_confirm', args=[uid, token])}"
         
         # Get site name from settings
-        site_name = getattr(settings, 'PAGE_TITLE', 'HindSight')
+        site_name = getattr(django_settings, 'PAGE_TITLE', 'HindSight')
         
         # Render email subject
         subject = render_to_string(self.subject_template_name, {
@@ -405,7 +374,7 @@ class CustomPasswordResetView(FormView):
         plain_message = render_to_string('emails/password_reset_email.txt', context)
         
         # Send email using the same method as verification emails
-        from_email = settings.DEFAULT_FROM_EMAIL
+        from_email = django_settings.DEFAULT_FROM_EMAIL
         send_mail(
             subject=subject,
             message=plain_message,

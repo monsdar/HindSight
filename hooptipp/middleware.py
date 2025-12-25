@@ -13,8 +13,7 @@ class PrivacyGateMiddleware:
     Users must complete a simple NBA team selection challenge before accessing
     the main application. The challenge completion is stored in the session.
     
-    This is only used in USER_SELECTION mode (ENABLE_USER_SELECTION=True).
-    In AUTHENTICATION mode, users must login instead.
+    This only applies to unauthenticated users. Authenticated users bypass the gate.
     """
     
     def __init__(self, get_response):
@@ -23,10 +22,6 @@ class PrivacyGateMiddleware:
     def __call__(self, request):
         # Skip privacy gate if disabled in settings
         if not getattr(settings, 'PRIVACY_GATE_ENABLED', True):
-            return self.get_response(request)
-        
-        # Skip privacy gate if using authentication mode (users must login instead)
-        if not getattr(settings, 'ENABLE_USER_SELECTION', True):
             return self.get_response(request)
             
         # Skip privacy gate in test mode

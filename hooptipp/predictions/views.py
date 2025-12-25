@@ -114,8 +114,8 @@ def home(request):
         for event in visible_events
     )
 
-    # Always load team choices for PIN modal functionality
-    team_choices = list(NbaTeamManager.all())
+    # Load team choices for prediction events that allow team selection
+    team_choices = list(NbaTeamManager.all()) if requires_team_choices else []
     player_choices = list(NbaPlayerManager.all()) if requires_player_choices else []
 
     user_tips: dict[int, UserTip] = {}
@@ -129,52 +129,6 @@ def home(request):
         }
 
     if request.method == 'POST':
-        if 'set_active_user' in request.POST:
-            user_id = request.POST.get('user_id')
-            action = request.POST.get('active_user_action')
-
-            if (
-                action == 'finish'
-                and active_user is not None
-                and user_id == str(active_user.id)
-            ):
-                clear_active_user(request)
-                messages.success(request, 'Active user cleared successfully.')
-                return redirect('predictions:home')
-
-            if user_id:
-                # Check if PIN validation is required
-                if action == 'activate':
-                    selected_teams = request.POST.getlist('pin_teams')
-                    User = get_user_model()
-                    try:
-                        target_user = User.objects.get(pk=user_id)
-                        user_prefs, _ = UserPreferences.objects.get_or_create(user=target_user)
-                        
-                        # Validate PIN if user has one set
-                        if user_prefs.activation_pin:
-                            if not user_prefs.validate_pin(selected_teams):
-                                messages.error(request, 'Invalid PIN. Please select the correct NBA teams.')
-                                return redirect('predictions:home')
-                        
-                        set_active_user(request, target_user)
-                        messages.success(request, 'Active user selected successfully.')
-                    except User.DoesNotExist:
-                        messages.error(request, 'User not found.')
-                else:
-                    # For other actions, just set the user (this handles the case where PIN was already validated)
-                    User = get_user_model()
-                    try:
-                        target_user = User.objects.get(pk=user_id)
-                        set_active_user(request, target_user)
-                        messages.success(request, 'Active user selected successfully.')
-                    except User.DoesNotExist:
-                        messages.error(request, 'User not found.')
-            else:
-                clear_active_user(request)
-                messages.info(request, 'No active user selected.')
-            return redirect('predictions:home')
-
         if 'update_preferences' in request.POST:
             if not active_user or preferences is None:
                 messages.error(request, 'Please activate a user before updating preferences.')
@@ -329,9 +283,6 @@ def home(request):
                 )
             return redirect('predictions:home')
 
-    User = get_user_model()
-    all_users = list(User.objects.select_related('preferences').order_by('username'))
-    
     # Get active season (if any) - needed for scoreboard filtering
     active_season = Season.get_active_season()
     
@@ -434,6 +385,7 @@ def home(request):
             # Filter to only include enrolled users for the ended season
             enrolled_user_ids = SeasonParticipant.objects.filter(season=ended_season).values_list('user_id', flat=True)
             
+            User = get_user_model()
             top_users = User.objects.filter(id__in=enrolled_user_ids).annotate(
                 total_points=Coalesce(
                     Sum('usereventscore__points_awarded', filter=season_filter),
@@ -653,14 +605,13 @@ def home(request):
 
     active_theme_palette = get_theme_palette(selected_theme_key)
 
-    display_name_ids: list[int] = [user.id for user in all_users]
+    # Build display name map for users in leaderboard and tips
+    display_name_ids: list[int] = []
     if active_user:
         display_name_ids.append(active_user.id)
     display_name_ids.extend(user.id for user in tip_user_objects)
     display_name_map = _build_display_name_map(display_name_ids)
 
-    for user in all_users:
-        _apply_display_metadata(user, display_name_map)
     for user in tip_user_objects:
         _apply_display_metadata(user, display_name_map)
     _apply_display_metadata(active_user, display_name_map)
@@ -698,6 +649,7 @@ def home(request):
         # Filter leaderboard to only include enrolled users for the active season
         enrolled_user_ids = SeasonParticipant.objects.filter(season=active_season).values_list('user_id', flat=True)
         
+        User = get_user_model()
         leaderboard_users = User.objects.filter(id__in=enrolled_user_ids).annotate(
             total_points=Coalesce(
                 Sum('usereventscore__points_awarded', filter=season_filter),
@@ -710,6 +662,7 @@ def home(request):
         ).order_by('-total_points', '-event_count', 'username')
     else:
         # No active season, count all scores
+        User = get_user_model()
         leaderboard_users = User.objects.annotate(
             total_points=Coalesce(Sum('usereventscore__points_awarded'), 0),
             event_count=Coalesce(Count('usereventscore__prediction_event', distinct=True), 0),
@@ -945,7 +898,6 @@ def home(request):
 
     context = {
         'active_user': active_user,
-        'users': all_users,
         'user_tips': user_tips,
         'event_tip_users': event_tip_users,
         'now': now,
@@ -964,7 +916,6 @@ def home(request):
         'leaderboard_rows': leaderboard_rows,
         'resolved_predictions': resolved_predictions_data,
         'open_predictions': open_predictions,
-        'enable_user_selection': settings.ENABLE_USER_SELECTION,
         'active_season': active_season,
         'displayed_season': displayed_season,
         'is_enrolled': is_enrolled,
@@ -1067,11 +1018,46 @@ def save_prediction(request):
             tip.selected_option = selected_option
             tip.save()
         
-        return JsonResponse({
+        # Handle lock if requested
+        should_lock = data.get('should_lock', False)
+        lock_error = None
+        lock_service = None
+        if should_lock:
+            lock_service = LockService(active_user)
+            lock_service.refresh()
+            try:
+                lock_service.ensure_locked(tip)
+            except LockLimitError:
+                lock_error = 'No locks available'
+        
+        response_data = {
             'success': True,
             'message': 'Prediction saved successfully',
-            'created': created
-        })
+            'created': created,
+        }
+        
+        if should_lock:
+            if not lock_service:
+                lock_service = LockService(active_user)
+                lock_service.refresh()
+            
+            if not lock_error:
+                response_data['is_locked'] = True
+                response_data['message'] = 'Prediction saved and locked successfully'
+                response_data['lock_summary'] = {
+                    'available': lock_service.available,
+                    'active': len(lock_service._active_ids),
+                    'total': lock_service.total
+                }
+            else:
+                response_data['lock_error'] = lock_error
+                response_data['lock_summary'] = {
+                    'available': lock_service.available,
+                    'active': len(lock_service._active_ids),
+                    'total': lock_service.total
+                }
+        
+        return JsonResponse(response_data)
         
     except json.JSONDecodeError:
         return JsonResponse({'error': 'Invalid JSON'}, status=400)
@@ -1268,18 +1254,8 @@ def give_kudos_view(request):
     """Handle kudos giving via AJAX."""
     from .hotness_service import give_kudos
     
-    User = get_user_model()
-    
-    # Get active user from session (user selection mode)
-    active_user = None
-    if settings.ENABLE_USER_SELECTION:
-        active_user_id = request.session.get('active_user_id')
-        if active_user_id:
-            active_user = User.objects.filter(id=active_user_id).first()
-    else:
-        # Authentication mode
-        if request.user.is_authenticated:
-            active_user = request.user
+    # Get active user using standard authentication
+    active_user = get_active_user(request)
     
     if not active_user:
         return JsonResponse({
@@ -1297,6 +1273,7 @@ def give_kudos_view(request):
                 'message': 'Missing user_id'
             }, status=400)
         
+        User = get_user_model()
         to_user = User.objects.get(id=to_user_id)
         result = give_kudos(active_user, to_user)
         

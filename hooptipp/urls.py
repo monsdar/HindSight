@@ -36,7 +36,7 @@ urlpatterns = [
     path('health/', health, name='health'),
     path('robots.txt', robots_txt, name='robots_txt'),
     
-    # Authentication URLs (available in both modes, but functional only when ENABLE_USER_SELECTION=False)
+    # Authentication URLs
     path('signup/', signup, name='signup'),
     path('login/', CustomLoginView.as_view(), name='login'),
     path('logout/', auth_views.LogoutView.as_view(next_page='/'), name='logout'),

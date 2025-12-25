@@ -12,7 +12,7 @@ from hooptipp.predictions.models import UserPreferences
 User = get_user_model()
 
 
-@override_settings(ENABLE_USER_SELECTION=False, PRIVACY_GATE_ENABLED=False)
+@override_settings(PRIVACY_GATE_ENABLED=False)
 class SignupViewTests(TestCase):
     """Tests for the signup view in authentication mode."""
     
@@ -139,23 +139,7 @@ class SignupViewTests(TestCase):
         self.assertContains(response, 'Email already exists')
 
 
-@override_settings(ENABLE_USER_SELECTION=True)
-class SignupViewInSelectionModeTests(TestCase):
-    """Tests for signup view when in user selection mode."""
-    
-    def setUp(self):
-        self.client = Client()
-        self.signup_url = reverse('signup')
-    
-    def test_signup_redirects_in_selection_mode(self):
-        """Test that signup redirects when in user selection mode."""
-        response = self.client.get(self.signup_url)
-        
-        # Should redirect to home
-        self.assertEqual(response.status_code, 302)
-
-
-@override_settings(ENABLE_USER_SELECTION=False, PRIVACY_GATE_ENABLED=False)
+@override_settings(PRIVACY_GATE_ENABLED=False)
 class LoginViewTests(TestCase):
     """Tests for login functionality in authentication mode."""
     
@@ -248,7 +232,7 @@ class LoginViewTests(TestCase):
         self.assertTrue(User.objects.filter(username='unverified', is_active=False).exists())
 
 
-@override_settings(ENABLE_USER_SELECTION=False, PRIVACY_GATE_ENABLED=False)
+@override_settings(PRIVACY_GATE_ENABLED=False)
 class PasswordResetViewTests(TestCase):
     """Tests for password reset functionality."""
     
@@ -355,7 +339,7 @@ class PasswordResetViewTests(TestCase):
             self.assertIn('Reset Password', html_body)
 
 
-@override_settings(ENABLE_USER_SELECTION=False, PRIVACY_GATE_ENABLED=False)
+@override_settings(PRIVACY_GATE_ENABLED=False)
 class PasswordResetConfirmViewTests(TestCase):
     """Tests for password reset confirm functionality."""
     

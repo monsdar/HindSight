@@ -485,11 +485,6 @@ class UserPreferences(models.Model):
         choices=THEME_CHOICES,
         default=DEFAULT_THEME_KEY,
     )
-    activation_pin = models.CharField(
-        max_length=50,
-        blank=True,
-        help_text="Comma-separated NBA team abbreviations for user activation (e.g., 'LAL,GSW,BOS')"
-    )
     profile_picture = models.ImageField(
         upload_to='profile_pictures/',
         blank=True,
@@ -509,23 +504,6 @@ class UserPreferences(models.Model):
 
     def theme_palette(self) -> dict[str, str]:
         return get_theme_palette(self.theme)
-    
-    def get_pin_teams(self) -> list[str]:
-        """Get the PIN teams as a list of team abbreviations."""
-        if not self.activation_pin:
-            return []
-        return [team.strip().upper() for team in self.activation_pin.split(',') if team.strip()]
-    
-    def set_pin_teams(self, teams: list[str]) -> None:
-        """Set the PIN teams from a list of team abbreviations."""
-        self.activation_pin = ','.join(team.strip().upper() for team in teams if team.strip())
-    
-    def validate_pin(self, submitted_teams: list[str]) -> bool:
-        """Validate if the submitted teams match the user's PIN."""
-        pin_teams = self.get_pin_teams()
-        if not pin_teams:
-            return False
-        return set(team.strip().upper() for team in submitted_teams) == set(pin_teams)
 
 
 class Season(models.Model):
