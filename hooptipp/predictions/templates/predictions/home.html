@@ -464,10 +464,10 @@
       pointer-events: auto;
     }
 
-    @media (hover: hover) {
-      /* Hide popover on devices that support hover (desktop) */
-      .achievement-popover {
-        display: none;
+    /* Hide native title tooltip on touch devices */
+    @media (hover: none), (pointer: coarse) {
+      .achievement-badge[title] {
+        position: relative;
       }
     }
   </style>
@@ -476,6 +476,51 @@
     // Achievement popover for mobile
     (function() {
       let activePopover = null;
+      let isTouchDevice = null;
+      let lastTouchTime = 0;
+      const TOUCH_CLICK_DELAY = 300; // ms to ignore click after touch
+      
+      // Detect if device is a touch device
+      function detectTouchDevice() {
+        // Always re-check if cache is null (allows reset on resize)
+        if (isTouchDevice !== null) {
+          return isTouchDevice;
+        }
+        
+        const currentWidth = window.innerWidth;
+        
+        // Check for touch support
+        const hasTouch = 'ontouchstart' in window || 
+                        navigator.maxTouchPoints > 0 || 
+                        navigator.msMaxTouchPoints > 0;
+        
+        // Check for pointer events with coarse pointer (touch/stylus)
+        const hasCoarsePointer = window.matchMedia('(pointer: coarse)').matches;
+        
+        // Check for fine pointer (mouse) - if it's fine, it's likely a desktop
+        const hasFinePointer = window.matchMedia('(pointer: fine)').matches;
+        
+        // Check screen size (tablets and mobile devices)
+        // Use a larger threshold to include tablets in portrait/landscape
+        const isSmallScreen = currentWidth <= 1280;
+        
+        // If device has coarse pointer (touch/stylus), treat as touch device
+        // If device has touch capability and is a small/medium screen, treat as touch device
+        // Priority: coarse pointer > touch + screen size > fine pointer only
+        if (hasCoarsePointer) {
+          isTouchDevice = true;
+        } else if (hasTouch && isSmallScreen) {
+          isTouchDevice = true;
+        } else if (hasFinePointer && !hasTouch && !hasCoarsePointer) {
+          // Desktop with mouse only
+          isTouchDevice = false;
+        } else {
+          // Default: if we can't determine, check screen size as fallback
+          isTouchDevice = isSmallScreen;
+        }
+        
+        return isTouchDevice;
+      }
       
       function closePopover() {
         if (activePopover) {
@@ -500,28 +545,76 @@
       
       function initAchievementPopovers() {
         const achievementBadges = document.querySelectorAll('.achievement-badge');
+        const isTouch = detectTouchDevice();
         
         achievementBadges.forEach(badge => {
           // Remove any existing listeners to prevent duplicates
           badge.removeEventListener('click', handleBadgeClick);
+          badge.removeEventListener('touchend', handleBadgeTouchEnd);
+          
+          // Hide native title tooltip on touch devices to prevent double tooltips
+          if (isTouch && badge.hasAttribute('title')) {
+            const originalTitle = badge.getAttribute('title');
+            badge.setAttribute('data-original-title', originalTitle);
+            badge.removeAttribute('title');
+          } else if (!isTouch && badge.hasAttribute('data-original-title')) {
+            // Restore title on non-touch devices
+            badge.setAttribute('title', badge.getAttribute('data-original-title'));
+          }
+          
+          // Use touchend for touch devices (fires after touch, before click)
+          // This ensures we catch touch events even if click doesn't fire
+          if (isTouch) {
+            badge.addEventListener('touchend', handleBadgeTouchEnd, { passive: true });
+          }
           badge.addEventListener('click', handleBadgeClick);
         });
       }
       
-      function handleBadgeClick(e) {
-        // Only show popover on touch devices (mobile)
-        if (!window.matchMedia('(hover: none)').matches) {
+      function handleBadgeTouchEnd(e) {
+        // Handle touch events on touch devices
+        if (!detectTouchDevice()) {
           return;
         }
         
         e.stopPropagation();
-        e.preventDefault();
+        // Don't preventDefault to allow normal touch behavior
         
-        let achievementDescription = this.getAttribute('data-achievement-description');
+        // Record touch time to prevent click from also firing
+        lastTouchTime = Date.now();
         
-        // Fallback to title if description is empty
+        // Use the badge element
+        const badge = e.currentTarget;
+        showPopover(badge, e);
+      }
+      
+      function handleBadgeClick(e) {
+        // Only show popover on touch devices
+        if (!detectTouchDevice()) {
+          return;
+        }
+        
+        // Ignore click if it happened shortly after a touch (to prevent double-trigger)
+        const timeSinceTouch = Date.now() - lastTouchTime;
+        if (timeSinceTouch < TOUCH_CLICK_DELAY) {
+          e.stopPropagation();
+          return;
+        }
+        
+        e.stopPropagation();
+        // Don't preventDefault to allow normal click behavior
+        
+        showPopover(this, e);
+      }
+      
+      function showPopover(badge, e) {
+        
+        let achievementDescription = badge.getAttribute('data-achievement-description');
+        
+        // Fallback to original title if description is empty (we stored it in data-original-title)
         if (!achievementDescription || achievementDescription.trim() === '') {
-          achievementDescription = this.getAttribute('title') || '';
+          achievementDescription = badge.getAttribute('data-original-title') || 
+                                   badge.getAttribute('title') || '';
         }
         
         if (!achievementDescription || achievementDescription.trim() === '') {
@@ -539,7 +632,7 @@
         });
         
         // Close existing popover if clicking the same badge
-        if (activePopover && activePopover.badge === this) {
+        if (activePopover && activePopover.badge === badge) {
           closePopover();
           return;
         }
@@ -555,7 +648,7 @@
         document.body.appendChild(popover);
         
         // Position popover above the badge
-        const rect = this.getBoundingClientRect();
+        const rect = badge.getBoundingClientRect();
         const scrollY = window.scrollY || window.pageYOffset;
         const scrollX = window.scrollX || window.pageXOffset;
         
@@ -622,7 +715,7 @@
           popover.classList.add('show');
         }, 10);
         
-        activePopover = { element: popover, badge: this };
+        activePopover = { element: popover, badge: badge };
         
         // Close on outside click, scroll, or resize
         setTimeout(() => {
@@ -650,6 +743,18 @@
           subtree: true
         });
       }
+      
+      // Re-detect touch device and re-initialize on resize (for orientation changes)
+      let resizeTimeout;
+      window.addEventListener('resize', () => {
+        // Reset touch device detection on resize
+        isTouchDevice = null;
+        // Debounce resize to avoid too many re-initializations
+        clearTimeout(resizeTimeout);
+        resizeTimeout = setTimeout(() => {
+          initAchievementPopovers();
+        }, 250);
+      });
     })();
   </script>
 {% endblock %}
