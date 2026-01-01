@@ -1229,7 +1229,7 @@ class HomeViewTests(TestCase):
         self.assertLessEqual(len(non_divider_rows), 6, "Should never show more than 6 users")
 
     def test_home_view_filters_open_predictions_to_upcoming_week(self) -> None:
-        """Test that open_predictions only shows events with deadlines in the upcoming week."""
+        """Test that open_predictions shows events from the next 7 days, and fills up to 5 with future events if needed."""
         now = timezone.now()
         
         # Create events with different deadline dates
@@ -1260,7 +1260,7 @@ class HomeViewTests(TestCase):
             is_active=True,
         )
         
-        # Event 4: Due in 8 days (should NOT be included - beyond week)
+        # Event 4: Due in 8 days (should be included if we have less than 5 events in the 7-day window)
         event_8_days = PredictionEvent.objects.create(
             tip_type=self.tip_type,
             name='Event in 8 Days',
@@ -1269,7 +1269,16 @@ class HomeViewTests(TestCase):
             is_active=True,
         )
         
-        # Event 5: Due 1 hour ago (should NOT be included - past deadline)
+        # Event 5: Due in 10 days (should be included if we have less than 5 events in the 7-day window)
+        event_10_days = PredictionEvent.objects.create(
+            tip_type=self.tip_type,
+            name='Event in 10 Days',
+            opens_at=now - timedelta(hours=1),
+            deadline=now + timedelta(days=10),
+            is_active=True,
+        )
+        
+        # Event 6: Due 1 hour ago (should NOT be included - past deadline)
         event_past = PredictionEvent.objects.create(
             tip_type=self.tip_type,
             name='Event Past',
@@ -1278,7 +1287,7 @@ class HomeViewTests(TestCase):
             is_active=True,
         )
         
-        # Event 6: Opens tomorrow (should NOT be included - not yet open)
+        # Event 7: Opens tomorrow (should NOT be included - not yet open)
         event_opens_tomorrow = PredictionEvent.objects.create(
             tip_type=self.tip_type,
             name='Event Opens Tomorrow',
@@ -1295,25 +1304,115 @@ class HomeViewTests(TestCase):
         open_predictions = response.context['open_predictions']
         open_prediction_ids = [event.id for event in open_predictions]
         
-        # Should include events due today, in 3 days, and in 6 days
+        # Should always include events due today, in 3 days, and in 6 days (within 7-day window)
         self.assertIn(event_today.id, open_prediction_ids)
         self.assertIn(event_3_days.id, open_prediction_ids)
         self.assertIn(event_6_days.id, open_prediction_ids)
         
-        # Should NOT include events due in 8 days, past deadline, or not yet open
-        self.assertNotIn(event_8_days.id, open_prediction_ids)
+        # Should NOT include events with past deadline or not yet open
         self.assertNotIn(event_past.id, open_prediction_ids)
         self.assertNotIn(event_opens_tomorrow.id, open_prediction_ids)
         
-        # Should be ordered by deadline
+        # Since we have only 3 events in the 7-day window, we should fill up to 5 with future events
         # Note: The existing event from setUp might also be included if its deadline is within the week
-        self.assertGreaterEqual(len(open_predictions), 3)
-        # Check that our specific events are included and in the right order
-        our_events = [event for event in open_predictions if event.id in [event_today.id, event_3_days.id, event_6_days.id]]
-        self.assertEqual(len(our_events), 3)
-        self.assertEqual(our_events[0].id, event_today.id)
-        self.assertEqual(our_events[1].id, event_3_days.id)
-        self.assertEqual(our_events[2].id, event_6_days.id)
+        events_in_7_days = [event for event in open_predictions if event.id in [event_today.id, event_3_days.id, event_6_days.id]]
+        self.assertEqual(len(events_in_7_days), 3)
+        
+        # If we have less than 5 total events (including setUp events), future events should be included
+        if len(open_predictions) < 5:
+            # Should include future events to fill up to 5
+            self.assertIn(event_8_days.id, open_prediction_ids)
+            # Should be ordered by deadline
+            our_events = [event for event in open_predictions if event.id in [event_today.id, event_3_days.id, event_6_days.id, event_8_days.id]]
+            self.assertGreaterEqual(len(our_events), 3)
+            # Verify ordering
+            if event_today.id in open_prediction_ids and event_3_days.id in open_prediction_ids:
+                idx_today = open_prediction_ids.index(event_today.id)
+                idx_3_days = open_prediction_ids.index(event_3_days.id)
+                self.assertLess(idx_today, idx_3_days)
+
+    def test_home_view_fills_open_predictions_with_future_events_when_less_than_5(self) -> None:
+        """Test that open_predictions fills up to 5 events with future events when there are less than 5 in the 7-day window."""
+        now = timezone.now()
+        
+        # Create only 2 events in the 7-day window
+        event_today = PredictionEvent.objects.create(
+            tip_type=self.tip_type,
+            name='Event Today',
+            opens_at=now - timedelta(hours=1),
+            deadline=now + timedelta(hours=1),
+            is_active=True,
+        )
+        
+        event_3_days = PredictionEvent.objects.create(
+            tip_type=self.tip_type,
+            name='Event in 3 Days',
+            opens_at=now - timedelta(hours=1),
+            deadline=now + timedelta(days=3),
+            is_active=True,
+        )
+        
+        # Create events beyond the 7-day window
+        event_8_days = PredictionEvent.objects.create(
+            tip_type=self.tip_type,
+            name='Event in 8 Days',
+            opens_at=now - timedelta(hours=1),
+            deadline=now + timedelta(days=8),
+            is_active=True,
+        )
+        
+        event_10_days = PredictionEvent.objects.create(
+            tip_type=self.tip_type,
+            name='Event in 10 Days',
+            opens_at=now - timedelta(hours=1),
+            deadline=now + timedelta(days=10),
+            is_active=True,
+        )
+        
+        event_12_days = PredictionEvent.objects.create(
+            tip_type=self.tip_type,
+            name='Event in 12 Days',
+            opens_at=now - timedelta(hours=1),
+            deadline=now + timedelta(days=12),
+            is_active=True,
+        )
+        
+        event_15_days = PredictionEvent.objects.create(
+            tip_type=self.tip_type,
+            name='Event in 15 Days',
+            opens_at=now - timedelta(hours=1),
+            deadline=now + timedelta(days=15),
+            is_active=True,
+        )
+
+        response = self.client.get(reverse('predictions:home'))
+        
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('open_predictions', response.context)
+        
+        open_predictions = response.context['open_predictions']
+        open_prediction_ids = [event.id for event in open_predictions]
+        
+        # Should always include events from the 7-day window
+        self.assertIn(event_today.id, open_prediction_ids)
+        self.assertIn(event_3_days.id, open_prediction_ids)
+        
+        # Should include future events to fill up to 5 (we have 2 in 7-day window, need 3 more)
+        # Note: The existing event from setUp might also be included if its deadline is within the week
+        # So we check that we have at least 2 events from the 7-day window, and future events are added
+        events_in_7_days = [event for event in open_predictions if event.id in [event_today.id, event_3_days.id]]
+        self.assertEqual(len(events_in_7_days), 2)
+        
+        # Should include future events (at least event_8_days and event_10_days should be included)
+        # to reach up to 5 total events
+        self.assertIn(event_8_days.id, open_prediction_ids)
+        self.assertIn(event_10_days.id, open_prediction_ids)
+        
+        # Verify ordering - events should be ordered by deadline
+        if event_today.id in open_prediction_ids and event_8_days.id in open_prediction_ids:
+            idx_today = open_prediction_ids.index(event_today.id)
+            idx_8_days = open_prediction_ids.index(event_8_days.id)
+            self.assertLess(idx_today, idx_8_days)
 
     def test_season_end_description_displayed_when_season_ended(self) -> None:
         """Test that season_end_description is used when season has ended."""

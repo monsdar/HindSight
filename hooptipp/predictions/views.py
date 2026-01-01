@@ -882,6 +882,7 @@ def home(request):
     upcoming_range_start = timezone.localdate(now)
     upcoming_range_end = upcoming_range_start + timedelta(days=6)
     
+    # First, get all events from the next 7 days
     open_predictions = list(
         PredictionEvent.objects.filter(
             is_active=True,
@@ -895,6 +896,28 @@ def home(request):
         .prefetch_related('options__option__category')
         .order_by('deadline', 'sort_order', 'name')
     )
+    
+    # If we have less than 5 events, fill up with upcoming events from future dates
+    if len(open_predictions) < 5:
+        needed_count = 5 - len(open_predictions)
+        existing_ids = {event.id for event in open_predictions}
+        
+        # Get additional events from future dates (beyond the 7-day window)
+        additional_events = list(
+            PredictionEvent.objects.filter(
+                is_active=True,
+                opens_at__lte=now,
+                deadline__gte=now,
+                deadline__date__gt=upcoming_range_end,
+            )
+            .exclude(outcome__isnull=False)  # Exclude events that have outcomes
+            .exclude(id__in=existing_ids)  # Exclude events we already have
+            .select_related('scheduled_game', 'tip_type')
+            .prefetch_related('options__option__category')
+            .order_by('deadline', 'sort_order', 'name')[:needed_count]
+        )
+        
+        open_predictions.extend(additional_events)
 
     context = {
         'active_user': active_user,
