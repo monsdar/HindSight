@@ -492,6 +492,10 @@ class UserPreferences(models.Model):
         help_text="User profile picture (must be square, will be resized to 256x256px)",
         validators=[validate_square_image]
     )
+    reminder_emails_enabled = models.BooleanField(
+        default=True,
+        help_text="Receive reminder emails for unpredicted events with upcoming deadlines",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

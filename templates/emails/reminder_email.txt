@@ -1,0 +1,19 @@
+Erinnerung: Offene Tipps - {{ site_name }}
+
+Hallo {{ user.username }},
+
+Du hast noch {{ events|length }} Ereignisse ohne Tipp, deren Deadline in den nächsten 24 Stunden liegt:
+
+{% for event in events %}
+- {{ event.name }}
+  Deadline: {{ event.deadline|date:"d.m.Y H:i" }} Uhr
+{% endfor %}
+
+Jetzt tippen:
+{{ predictions_url }}
+
+Du möchtest keine Erinnerungs-E-Mails mehr erhalten?
+{{ disable_url }}
+
+© {{ site_name }}. All rights reserved.
+

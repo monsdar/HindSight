@@ -726,7 +726,7 @@ class UserFavoriteAdmin(admin.ModelAdmin):
 
 @admin.register(UserPreferences)
 class UserPreferencesAdmin(admin.ModelAdmin):
-    list_display = ('user', 'nickname', 'theme', 'updated_at')
+    list_display = ('user', 'nickname', 'theme', 'reminder_emails_enabled', 'updated_at')
     search_fields = ('user__username', 'nickname')
     autocomplete_fields = ('user',)
     
@@ -734,6 +734,9 @@ class UserPreferencesAdmin(admin.ModelAdmin):
         (None, {
             'fields': ('user', 'nickname', 'theme', 'profile_picture'),
             'description': 'Profile picture must be square (1:1 ratio) and will be automatically resized to 256x256 pixels.',
+        }),
+        ('Email Preferences', {
+            'fields': ('reminder_emails_enabled',),
         }),
         ('Timestamps', {
             'fields': ('created_at', 'updated_at'),

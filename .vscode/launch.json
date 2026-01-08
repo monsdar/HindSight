@@ -26,6 +26,18 @@
             ]
         },
         {
+            "name": "Python Debugger: send_reminder_emails",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/manage.py",
+            "console": "integratedTerminal",
+            "args": [
+                "send_reminder_emails",
+                "--dry-run"
+                //"--force-send-user=hoop"
+            ]
+        },
+        {
             "name": "Python Debugger: update_dbb_matches",
             "type": "debugpy",
             "request": "launch",

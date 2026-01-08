@@ -7,10 +7,13 @@ import markdown2
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import get_user_model
+from django.contrib.auth.tokens import default_token_generator
 from django.db.models import Case, Count, F, IntegerField, Q, Sum, When
 from django.db.models.functions import Coalesce
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils.encoding import force_str
+from django.utils.http import urlsafe_base64_decode
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
@@ -1317,5 +1320,50 @@ def give_kudos_view(request):
             'success': False,
             'message': str(e)
         }, status=500)
+
+
+@require_http_methods(["GET"])
+def disable_reminder_emails(request, uidb64: str, token: str):
+    """
+    Disable reminder emails for a user using token from email link.
+    
+    Args:
+        request: HttpRequest object
+        uidb64: Base64-encoded user ID
+        token: Verification token
+    """
+    User = get_user_model()
+    
+    try:
+        uid = force_str(urlsafe_base64_decode(uidb64))
+        user = User.objects.get(pk=uid)
+    except (TypeError, ValueError, OverflowError, User.DoesNotExist):
+        user = None
+    
+    if user is None:
+        messages.error(request, 'Ungültiger Link. Bitte verwende den Link aus der E-Mail.')
+        return render(request, 'predictions/disable_reminders_done.html', {
+            'success': False,
+            'message': 'Ungültiger Link. Bitte verwende den Link aus der E-Mail.',
+        })
+    
+    # Verify token
+    if not default_token_generator.check_token(user, token):
+        messages.error(request, 'Ungültiger oder abgelaufener Link. Bitte verwende den aktuellen Link aus der E-Mail.')
+        return render(request, 'predictions/disable_reminders_done.html', {
+            'success': False,
+            'message': 'Ungültiger oder abgelaufener Link. Bitte verwende den aktuellen Link aus der E-Mail.',
+        })
+    
+    # Update preferences
+    preferences, _ = UserPreferences.objects.get_or_create(user=user)
+    preferences.reminder_emails_enabled = False
+    preferences.save(update_fields=['reminder_emails_enabled'])
+    
+    messages.success(request, 'Erinnerungs-E-Mails wurden deaktiviert.')
+    return render(request, 'predictions/disable_reminders_done.html', {
+        'success': True,
+        'message': 'Erinnerungs-E-Mails wurden erfolgreich deaktiviert. Du wirst keine weiteren Erinnerungs-E-Mails mehr erhalten.',
+    })
 
 
