@@ -4,29 +4,29 @@ overview: Add a management command that sends reminder emails to active users wi
 todos:
   - id: "1"
     content: Add reminder_emails_enabled field to UserPreferences model and create migration
-    status: pending
+    status: completed
   - id: "2"
     content: Create German email templates (HTML and plain text) for reminder emails
-    status: pending
+    status: completed
   - id: "3"
     content: Create send_reminder_email utility function
-    status: pending
+    status: completed
     dependencies:
       - "2"
   - id: "4"
     content: Implement management command send_reminder_emails with filtering logic
-    status: pending
+    status: completed
     dependencies:
       - "1"
       - "3"
   - id: "5"
     content: Create disable_reminder_emails view and confirmation template
-    status: pending
+    status: completed
     dependencies:
       - "1"
   - id: "6"
     content: Add URL pattern for disable reminders endpoint
-    status: pending
+    status: completed
     dependencies:
       - "5"
   - id: "7"

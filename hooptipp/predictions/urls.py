@@ -15,4 +15,5 @@ urlpatterns = [
     path('api/give-kudos/', views.give_kudos_view, name='give_kudos'),
     path('api/enroll-in-season/', views.enroll_in_season, name='enroll_in_season'),
     path('disable-reminders/<str:uidb64>/<str:token>/', views.disable_reminder_emails, name='disable_reminders'),
+    path('enroll-season/<str:uidb64>/<int:season_id>/<str:token>/', views.enroll_in_season_via_token, name='enroll_season_via_token'),
 ]

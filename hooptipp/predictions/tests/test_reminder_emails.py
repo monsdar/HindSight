@@ -762,3 +762,130 @@ class SeasonEnrollmentReminderEmailTests(TestCase):
         season_reminders = [email for email in mail.outbox if 'Season' in email.subject and 'Nicht verpassen' in email.subject]
         self.assertEqual(len(season_reminders), 0, "Should not send season enrollment reminder when user has no email")
 
+
+class EnrollSeasonViaTokenViewTests(TestCase):
+    """Tests for enroll_in_season_via_token view."""
+
+    def setUp(self) -> None:
+        self.user = User.objects.create_user(
+            username='testuser',
+            email='test@example.com',
+            password='password123',
+        )
+        now = timezone.now()
+        self.season = Season.objects.create(
+            name='Test Season',
+            start_date=(now - timedelta(days=1)).date(),
+            start_time=(now - timedelta(days=1)).time(),
+            end_date=(now + timedelta(days=30)).date(),
+            end_time=(now + timedelta(days=30)).time(),
+        )
+        self.token = default_token_generator.make_token(self.user)
+        self.uid = urlsafe_base64_encode(force_bytes(self.user.pk))
+
+    def test_enroll_season_via_token_success(self) -> None:
+        """Test successful enrollment via token."""
+        # Verify user is not enrolled
+        self.assertFalse(SeasonParticipant.objects.filter(user=self.user, season=self.season).exists())
+        
+        response = self.client.get(
+            f'/enroll-season/{self.uid}/{self.season.id}/{self.token}/'
+        )
+        
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'erfolgreich für die Season')
+        self.assertTemplateUsed(response, 'predictions/enroll_season_done.html')
+        
+        # Verify user is now enrolled
+        self.assertTrue(SeasonParticipant.objects.filter(user=self.user, season=self.season).exists())
+
+    def test_enroll_season_via_token_already_enrolled(self) -> None:
+        """Test enrollment when user is already enrolled."""
+        # Enroll user first
+        SeasonParticipant.objects.create(user=self.user, season=self.season)
+        
+        response = self.client.get(
+            f'/enroll-season/{self.uid}/{self.season.id}/{self.token}/'
+        )
+        
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'bereits für die Season')
+        self.assertTemplateUsed(response, 'predictions/enroll_season_done.html')
+        
+        # Verify only one enrollment exists
+        self.assertEqual(SeasonParticipant.objects.filter(user=self.user, season=self.season).count(), 1)
+
+    def test_enroll_season_via_token_invalid_token(self) -> None:
+        """Test enrollment with invalid token."""
+        invalid_token = 'invalid-token'
+        
+        response = self.client.get(
+            f'/enroll-season/{self.uid}/{self.season.id}/{invalid_token}/'
+        )
+        
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Ungültiger oder abgelaufener Link')
+        self.assertTemplateUsed(response, 'predictions/enroll_season_done.html')
+        
+        # Verify user is not enrolled
+        self.assertFalse(SeasonParticipant.objects.filter(user=self.user, season=self.season).exists())
+
+    def test_enroll_season_via_token_invalid_user(self) -> None:
+        """Test enrollment with invalid user ID."""
+        invalid_uid = urlsafe_base64_encode(force_bytes(99999))  # Non-existent user ID
+        
+        response = self.client.get(
+            f'/enroll-season/{invalid_uid}/{self.season.id}/{self.token}/'
+        )
+        
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Ungültiger Link')
+        self.assertTemplateUsed(response, 'predictions/enroll_season_done.html')
+        
+        # Verify user is not enrolled
+        self.assertFalse(SeasonParticipant.objects.filter(user=self.user, season=self.season).exists())
+
+    def test_enroll_season_via_token_invalid_season(self) -> None:
+        """Test enrollment with invalid season ID."""
+        invalid_season_id = 99999
+        
+        response = self.client.get(
+            f'/enroll-season/{self.uid}/{invalid_season_id}/{self.token}/'
+        )
+        
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Season nicht gefunden')
+        self.assertTemplateUsed(response, 'predictions/enroll_season_done.html')
+        
+        # Verify user is not enrolled
+        self.assertFalse(SeasonParticipant.objects.filter(user=self.user, season=self.season).exists())
+
+    def test_enroll_season_email_contains_token_url(self) -> None:
+        """Test that season enrollment email contains token-based enrollment URL."""
+        now = timezone.now()
+        event = PredictionEvent.objects.create(
+            tip_type=TipType.objects.create(
+                name='Test Type',
+                slug='test-type',
+                deadline=now + timedelta(days=7),
+            ),
+            name='Upcoming Event',
+            opens_at=now - timedelta(hours=1),
+            deadline=now + timedelta(hours=12),
+        )
+        
+        # Send season enrollment reminder
+        send_season_enrollment_reminder(self.user, self.season, [event])
+        
+        self.assertEqual(len(mail.outbox), 1)
+        email = mail.outbox[0]
+        
+        # Check that email contains the enrollment URL with token
+        self.assertIn('/enroll-season/', email.body)
+        self.assertIn(str(self.season.id), email.body)
+        # HTML email should also contain the URL
+        if hasattr(email, 'alternatives') and email.alternatives:
+            html_content = email.alternatives[0][0]
+            self.assertIn('/enroll-season/', html_content)
+            self.assertIn(str(self.season.id), html_content)
+

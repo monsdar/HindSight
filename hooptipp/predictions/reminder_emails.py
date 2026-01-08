@@ -92,29 +92,32 @@ def send_season_enrollment_reminder(user, season: Season, events: List[Predictio
         events: List of PredictionEvent instances in the upcoming 24 hours
         request: Optional HttpRequest object for building absolute URLs
     """
-    # Build enroll URL (home page where they can join the season)
+    # Build enroll URL with token (automatically enrolls user when clicked)
+    enroll_token = default_token_generator.make_token(user)
+    enroll_uid = urlsafe_base64_encode(force_bytes(user.pk))
+    
     if request:
         protocol = 'https' if request.is_secure() else 'http'
         domain = request.get_host()
-        enroll_url = f"{protocol}://{domain}{reverse('predictions:home')}"
+        enroll_url = f"{protocol}://{domain}{reverse('predictions:enroll_season_via_token', args=[enroll_uid, season.id, enroll_token])}"
     else:
         # Fallback if no request available (e.g., in management commands)
         host = settings.ALLOWED_HOSTS[0] if settings.ALLOWED_HOSTS else 'localhost'
         protocol = 'https' if not host.startswith(('localhost', '127.0.0.1', '0.0.0.0')) else 'http'
-        enroll_url = f"{protocol}://{host}{reverse('predictions:home')}"
+        enroll_url = f"{protocol}://{host}{reverse('predictions:enroll_season_via_token', args=[enroll_uid, season.id, enroll_token])}"
     
     # Build disable reminders URL
-    token = default_token_generator.make_token(user)
-    uid = urlsafe_base64_encode(force_bytes(user.pk))
+    disable_token = default_token_generator.make_token(user)
+    disable_uid = urlsafe_base64_encode(force_bytes(user.pk))
     
     if request:
         protocol = 'https' if request.is_secure() else 'http'
         domain = request.get_host()
-        disable_url = f"{protocol}://{domain}{reverse('predictions:disable_reminders', args=[uid, token])}"
+        disable_url = f"{protocol}://{domain}{reverse('predictions:disable_reminders', args=[disable_uid, disable_token])}"
     else:
         host = settings.ALLOWED_HOSTS[0] if settings.ALLOWED_HOSTS else 'localhost'
         protocol = 'https' if not host.startswith(('localhost', '127.0.0.1', '0.0.0.0')) else 'http'
-        disable_url = f"{protocol}://{host}{reverse('predictions:disable_reminders', args=[uid, token])}"
+        disable_url = f"{protocol}://{host}{reverse('predictions:disable_reminders', args=[disable_uid, disable_token])}"
     
     # Get site name from settings
     site_name = getattr(settings, 'PAGE_TITLE', 'HindSight')

@@ -1367,3 +1367,68 @@ def disable_reminder_emails(request, uidb64: str, token: str):
     })
 
 
+@require_http_methods(["GET"])
+def enroll_in_season_via_token(request, uidb64: str, season_id: int, token: str):
+    """
+    Enroll a user in a season using token from email link.
+    
+    Args:
+        request: HttpRequest object
+        uidb64: Base64-encoded user ID
+        season_id: Season ID to enroll in
+        token: Verification token
+    """
+    User = get_user_model()
+    
+    try:
+        uid = force_str(urlsafe_base64_decode(uidb64))
+        user = User.objects.get(pk=uid)
+    except (TypeError, ValueError, OverflowError, User.DoesNotExist):
+        user = None
+    
+    if user is None:
+        messages.error(request, 'Ungültiger Link. Bitte verwende den Link aus der E-Mail.')
+        return render(request, 'predictions/enroll_season_done.html', {
+            'success': False,
+            'message': 'Ungültiger Link. Bitte verwende den Link aus der E-Mail.',
+        })
+    
+    # Verify token
+    if not default_token_generator.check_token(user, token):
+        messages.error(request, 'Ungültiger oder abgelaufener Link. Bitte verwende den aktuellen Link aus der E-Mail.')
+        return render(request, 'predictions/enroll_season_done.html', {
+            'success': False,
+            'message': 'Ungültiger oder abgelaufener Link. Bitte verwende den aktuellen Link aus der E-Mail.',
+        })
+    
+    # Get season
+    try:
+        season = Season.objects.get(pk=season_id)
+    except Season.DoesNotExist:
+        messages.error(request, 'Season nicht gefunden.')
+        return render(request, 'predictions/enroll_season_done.html', {
+            'success': False,
+            'message': 'Season nicht gefunden.',
+            'season': None,
+        })
+    
+    # Check if already enrolled
+    if SeasonParticipant.objects.filter(user=user, season=season).exists():
+        messages.info(request, f'Du bist bereits für die Season "{season.name}" angemeldet.')
+        return render(request, 'predictions/enroll_season_done.html', {
+            'success': True,
+            'message': f'Du bist bereits für die Season "{season.name}" angemeldet.',
+            'season': season,
+        })
+    
+    # Enroll user in season
+    SeasonParticipant.objects.create(user=user, season=season)
+    
+    messages.success(request, f'Du wurdest erfolgreich für die Season "{season.name}" angemeldet.')
+    return render(request, 'predictions/enroll_season_done.html', {
+        'success': True,
+        'message': f'Du wurdest erfolgreich für die Season "{season.name}" angemeldet. Du kannst jetzt Tipps abgeben!',
+        'season': season,
+    })
+
+

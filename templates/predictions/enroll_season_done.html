@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+
+{% block title %}Season-Anmeldung{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8 max-w-2xl">
+    <div class="bg-white rounded-lg shadow-md p-6">
+        {% if success %}
+        <div class="mb-4">
+            <div class="flex items-center justify-center w-12 h-12 mx-auto bg-green-100 rounded-full mb-4">
+                <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                </svg>
+            </div>
+            <h1 class="text-2xl font-bold text-center text-gray-900 mb-4">
+                {% if season %}
+                    Erfolgreich angemeldet
+                {% else %}
+                    Erfolgreich
+                {% endif %}
+            </h1>
+            <p class="text-gray-700 text-center mb-6">
+                {{ message|default:"Du wurdest erfolgreich für die Season angemeldet." }}
+            </p>
+            {% if season %}
+            <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
+                <h2 class="text-lg font-semibold text-gray-900 mb-2">Season: {{ season.name }}</h2>
+                {% if season.description %}
+                <div class="text-gray-700 prose prose-sm max-w-none">
+                    {{ season.description|safe }}
+                </div>
+                {% endif %}
+            </div>
+            {% endif %}
+        </div>
+        {% else %}
+        <div class="mb-4">
+            <div class="flex items-center justify-center w-12 h-12 mx-auto bg-red-100 rounded-full mb-4">
+                <svg class="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+            </div>
+            <h1 class="text-2xl font-bold text-center text-gray-900 mb-4">
+                Fehler
+            </h1>
+            <p class="text-gray-700 text-center mb-6">
+                {{ message|default:"Es ist ein Fehler aufgetreten." }}
+            </p>
+        </div>
+        {% endif %}
+        
+        <div class="text-center">
+            <a href="{% url 'predictions:home' %}" class="inline-block bg-yellow-400 text-gray-900 font-semibold px-6 py-3 rounded-lg hover:bg-yellow-500 transition-colors">
+                Zur Startseite
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
