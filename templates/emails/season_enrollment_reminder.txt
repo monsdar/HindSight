@@ -1,0 +1,23 @@
+Nicht verpassen! - {{ site_name }}
+
+Hallo {{ user.username }},
+
+Die Season {{ season.name }} startet bald und du bist noch nicht dabei. Mach mit um deine Tipps abzugeben.
+
+{% if events %}
+Bevorstehende Ereignisse:
+
+{% for event in events %}
+- {{ event.name }}
+  Deadline: {{ event.deadline|date:"d.m.Y H:i" }} Uhr
+{% endfor %}
+{% endif %}
+
+Season beitreten:
+{{ enroll_url }}
+
+Du möchtest keine Erinnerungs-E-Mails mehr erhalten?
+{{ disable_url }}
+
+© {{ site_name }}. All rights reserved.
+

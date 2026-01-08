@@ -33,7 +33,7 @@
             "console": "integratedTerminal",
             "args": [
                 "send_reminder_emails",
-                "--dry-run"
+                //"--dry-run"
                 //"--force-send-user=hoop"
             ]
         },

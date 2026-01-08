@@ -22,7 +22,7 @@ from hooptipp.predictions.models import (
     UserPreferences,
     UserTip,
 )
-from hooptipp.predictions.reminder_emails import send_reminder_email
+from hooptipp.predictions.reminder_emails import send_reminder_email, send_season_enrollment_reminder
 
 User = get_user_model()
 
@@ -334,8 +334,11 @@ class ReminderEmailManagementCommandTests(TestCase):
 
         call_command('send_reminder_emails')
 
-        # Should not send email because user1 is not enrolled in the season
-        self.assertEqual(len(mail.outbox), 0)
+        # Should not send regular reminder because user1 is not enrolled in the season
+        # (The event should be filtered out)
+        # Regular reminders have "Erinnerung" in subject, season enrollment reminders have "Nicht verpassen"
+        regular_reminders = [email for email in mail.outbox if 'Erinnerung' in email.subject]
+        self.assertEqual(len(regular_reminders), 0, "Should not send regular reminder when user is not enrolled in season")
 
     def test_command_includes_events_without_season(self) -> None:
         """Test that command includes events that don't belong to any season."""
@@ -408,6 +411,62 @@ class ReminderEmailManagementCommandTests(TestCase):
         call_command('send_reminder_emails', '--dry-run')
 
         # Should not send any emails in dry-run mode
+        self.assertEqual(len(mail.outbox), 0)
+
+    def test_command_skips_users_without_email(self) -> None:
+        """Test that command skips users without email addresses."""
+        now = timezone.now()
+        
+        # Create a user without email
+        user_no_email = User.objects.create_user(
+            username='noemailuser',
+            email='',  # Empty email
+            password='password123',
+        )
+        UserPreferences.objects.create(user=user_no_email, reminder_emails_enabled=True)
+        
+        # Create a passed event with a prediction
+        passed_event = PredictionEvent.objects.create(
+            tip_type=self.tip_type,
+            name='Passed Event',
+            opens_at=now - timedelta(days=2),
+            deadline=now - timedelta(hours=1),
+        )
+        UserTip.objects.create(
+            user=user_no_email,
+            tip_type=self.tip_type,
+            prediction_event=passed_event,
+            prediction='Test',
+        )
+        
+        # Create an upcoming event
+        upcoming_event = PredictionEvent.objects.create(
+            tip_type=self.tip_type,
+            name='Upcoming Event',
+            opens_at=now - timedelta(hours=1),
+            deadline=now + timedelta(hours=12),
+        )
+
+        call_command('send_reminder_emails')
+
+        # Should not send email because user has no email address
+        self.assertEqual(len(mail.outbox), 0)
+
+    def test_command_force_send_skips_user_without_email(self) -> None:
+        """Test that force send mode skips users without email addresses."""
+        now = timezone.now()
+        
+        # Create a user without email
+        user_no_email = User.objects.create_user(
+            username='noemailuser',
+            email='',  # Empty email
+            password='password123',
+        )
+        
+        # Try to force send to user without email
+        call_command('send_reminder_emails', '--force-send-user', 'noemailuser')
+
+        # Should not send email because user has no email address
         self.assertEqual(len(mail.outbox), 0)
 
 
@@ -492,4 +551,214 @@ class UserPreferencesReminderEmailTests(TestCase):
         preferences.save()
         preferences.refresh_from_db()
         self.assertFalse(preferences.reminder_emails_enabled)
+
+
+class SeasonEnrollmentReminderEmailTests(TestCase):
+    """Tests for season enrollment reminder email functionality."""
+
+    def setUp(self) -> None:
+        self.user = User.objects.create_user(
+            username='testuser',
+            email='test@example.com',
+            password='password123',
+        )
+        self.tip_type = TipType.objects.create(
+            name='Test Type',
+            slug='test-type',
+            deadline=timezone.now() + timedelta(days=7),
+        )
+
+    def test_send_season_enrollment_reminder_sends_email(self) -> None:
+        """Test that send_season_enrollment_reminder actually sends an email."""
+        now = timezone.now()
+        season = Season.objects.create(
+            name='Test Season',
+            start_date=(now - timedelta(days=1)).date(),
+            start_time=(now - timedelta(days=1)).time(),
+            end_date=(now + timedelta(days=30)).date(),
+            end_time=(now + timedelta(days=30)).time(),
+        )
+        event = PredictionEvent.objects.create(
+            tip_type=self.tip_type,
+            name='Test Event',
+            opens_at=now - timedelta(hours=1),
+            deadline=now + timedelta(hours=12),
+        )
+
+        send_season_enrollment_reminder(self.user, season, [event])
+
+        self.assertEqual(len(mail.outbox), 1)
+        email = mail.outbox[0]
+        self.assertEqual(email.to, [self.user.email])
+        self.assertIn('Nicht verpassen!', email.subject)
+        self.assertIn(season.name, email.body)
+        self.assertIn(event.name, email.body)
+
+    def test_season_enrollment_reminder_contains_enroll_url(self) -> None:
+        """Test that email contains link to enroll in season."""
+        now = timezone.now()
+        season = Season.objects.create(
+            name='Test Season',
+            start_date=(now - timedelta(days=1)).date(),
+            start_time=(now - timedelta(days=1)).time(),
+            end_date=(now + timedelta(days=30)).date(),
+            end_time=(now + timedelta(days=30)).time(),
+        )
+        event = PredictionEvent.objects.create(
+            tip_type=self.tip_type,
+            name='Test Event',
+            opens_at=now - timedelta(hours=1),
+            deadline=now + timedelta(hours=12),
+        )
+
+        send_season_enrollment_reminder(self.user, season, [event])
+
+        self.assertEqual(len(mail.outbox), 1)
+        email = mail.outbox[0]
+        # Check that home URL pattern is in the email (where they can enroll)
+        self.assertIn('/', email.body)  # Should contain URL
+
+    def test_command_sends_season_enrollment_reminders(self) -> None:
+        """Test that command sends season enrollment reminders to unenrolled users."""
+        now = timezone.now()
+        
+        # Create a season that is active
+        season = Season.objects.create(
+            name='Active Season',
+            start_date=(now - timedelta(days=1)).date(),
+            start_time=(now - timedelta(days=1)).time(),
+            end_date=(now + timedelta(days=30)).date(),
+            end_time=(now + timedelta(days=30)).time(),
+        )
+        
+        # Create preferences for user
+        UserPreferences.objects.create(user=self.user, reminder_emails_enabled=True)
+        
+        # Don't enroll user in the season
+        
+        # Create an event in the season with deadline in next 24 hours
+        event = PredictionEvent.objects.create(
+            tip_type=self.tip_type,
+            name='Upcoming Event',
+            opens_at=now - timedelta(hours=1),
+            deadline=now + timedelta(hours=12),
+        )
+
+        call_command('send_reminder_emails')
+
+        # Should send season enrollment reminder because:
+        # - Season is active
+        # - Event is in the next 24 hours and belongs to the season
+        # - User is not enrolled
+        self.assertEqual(len(mail.outbox), 1)
+        email = mail.outbox[0]
+        self.assertIn('Season', email.subject)
+
+    def test_command_skips_season_reminders_when_no_upcoming_events(self) -> None:
+        """Test that command skips season enrollment reminders when no events in next 24 hours."""
+        now = timezone.now()
+        
+        # Create a season that is active
+        season = Season.objects.create(
+            name='Active Season',
+            start_date=(now - timedelta(days=1)).date(),
+            start_time=(now - timedelta(days=1)).time(),
+            end_date=(now + timedelta(days=30)).date(),
+            end_time=(now + timedelta(days=30)).time(),
+        )
+        
+        # Create preferences for user
+        UserPreferences.objects.create(user=self.user, reminder_emails_enabled=True)
+        
+        # Don't enroll user in the season
+        
+        # Don't create any events in the next 24 hours
+
+        call_command('send_reminder_emails')
+
+        # Should not send season enrollment reminder because no events in next 24 hours
+        self.assertEqual(len(mail.outbox), 0)
+
+    def test_command_skips_season_reminders_when_user_enrolled(self) -> None:
+        """Test that command skips season enrollment reminders when user is enrolled."""
+        now = timezone.now()
+        
+        # Create a season that is active
+        season = Season.objects.create(
+            name='Active Season',
+            start_date=(now - timedelta(days=1)).date(),
+            start_time=(now - timedelta(days=1)).time(),
+            end_date=(now + timedelta(days=30)).date(),
+            end_time=(now + timedelta(days=30)).time(),
+        )
+        
+        # Create preferences for user
+        UserPreferences.objects.create(user=self.user, reminder_emails_enabled=True)
+        
+        # Enroll user in the season
+        SeasonParticipant.objects.create(user=self.user, season=season)
+        
+        # Create a passed event with a prediction (required for regular reminders)
+        passed_event = PredictionEvent.objects.create(
+            tip_type=self.tip_type,
+            name='Passed Event',
+            opens_at=now - timedelta(days=2),
+            deadline=now - timedelta(hours=1),
+        )
+        UserTip.objects.create(
+            user=self.user,
+            tip_type=self.tip_type,
+            prediction_event=passed_event,
+            prediction='Test',
+        )
+        
+        # Create an event in the season with deadline in next 24 hours (but don't predict it)
+        event = PredictionEvent.objects.create(
+            tip_type=self.tip_type,
+            name='Upcoming Event',
+            opens_at=now - timedelta(hours=1),
+            deadline=now + timedelta(hours=12),
+        )
+
+        call_command('send_reminder_emails')
+
+        # Check that no season enrollment reminder was sent (user is enrolled)
+        # But a regular reminder might be sent for the unpredicted event
+        season_reminders = [email for email in mail.outbox if 'Season' in email.subject and 'Nicht verpassen' in email.subject]
+        self.assertEqual(len(season_reminders), 0, "Should not send season enrollment reminder when user is enrolled")
+
+    def test_command_skips_season_reminders_when_user_has_no_email(self) -> None:
+        """Test that command skips season enrollment reminders for users without email."""
+        now = timezone.now()
+        
+        # Create a user without email
+        user_no_email = User.objects.create_user(
+            username='noemailuser',
+            email='',  # Empty email
+            password='password123',
+        )
+        UserPreferences.objects.create(user=user_no_email, reminder_emails_enabled=True)
+        
+        # Create a season that is active
+        season = Season.objects.create(
+            name='Active Season',
+            start_date=(now - timedelta(days=1)).date(),
+            start_time=(now - timedelta(days=1)).time(),
+            end_date=(now + timedelta(days=30)).date(),
+            end_time=(now + timedelta(days=30)).time(),
+        )
+        
+        # Create an event in the season with deadline in next 24 hours
+        event = PredictionEvent.objects.create(
+            tip_type=self.tip_type,
+            name='Upcoming Event',
+            opens_at=now - timedelta(hours=1),
+            deadline=now + timedelta(hours=12),
+        )
+
+        call_command('send_reminder_emails')
+
+        # Should not send season enrollment reminder because user has no email
+        season_reminders = [email for email in mail.outbox if 'Season' in email.subject and 'Nicht verpassen' in email.subject]
+        self.assertEqual(len(season_reminders), 0, "Should not send season enrollment reminder when user has no email")
 

@@ -16,7 +16,7 @@ from django.urls import reverse
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
 
-from .models import PredictionEvent
+from .models import PredictionEvent, Season
 
 
 def send_reminder_email(user, events: List[PredictionEvent], request=None) -> None:
@@ -69,6 +69,71 @@ def send_reminder_email(user, events: List[PredictionEvent], request=None) -> No
     
     html_message = render_to_string('emails/reminder_email.html', context)
     plain_message = render_to_string('emails/reminder_email.txt', context)
+    
+    # Send email
+    from_email = settings.DEFAULT_FROM_EMAIL
+    send_mail(
+        subject=subject,
+        message=plain_message,
+        from_email=from_email,
+        recipient_list=[user.email],
+        html_message=html_message,
+        fail_silently=False,
+    )
+
+
+def send_season_enrollment_reminder(user, season: Season, events: List[PredictionEvent], request=None) -> None:
+    """
+    Send season enrollment reminder email to user.
+    
+    Args:
+        user: User instance to send reminder email to
+        season: Season instance to remind about
+        events: List of PredictionEvent instances in the upcoming 24 hours
+        request: Optional HttpRequest object for building absolute URLs
+    """
+    # Build enroll URL (home page where they can join the season)
+    if request:
+        protocol = 'https' if request.is_secure() else 'http'
+        domain = request.get_host()
+        enroll_url = f"{protocol}://{domain}{reverse('predictions:home')}"
+    else:
+        # Fallback if no request available (e.g., in management commands)
+        host = settings.ALLOWED_HOSTS[0] if settings.ALLOWED_HOSTS else 'localhost'
+        protocol = 'https' if not host.startswith(('localhost', '127.0.0.1', '0.0.0.0')) else 'http'
+        enroll_url = f"{protocol}://{host}{reverse('predictions:home')}"
+    
+    # Build disable reminders URL
+    token = default_token_generator.make_token(user)
+    uid = urlsafe_base64_encode(force_bytes(user.pk))
+    
+    if request:
+        protocol = 'https' if request.is_secure() else 'http'
+        domain = request.get_host()
+        disable_url = f"{protocol}://{domain}{reverse('predictions:disable_reminders', args=[uid, token])}"
+    else:
+        host = settings.ALLOWED_HOSTS[0] if settings.ALLOWED_HOSTS else 'localhost'
+        protocol = 'https' if not host.startswith(('localhost', '127.0.0.1', '0.0.0.0')) else 'http'
+        disable_url = f"{protocol}://{host}{reverse('predictions:disable_reminders', args=[uid, token])}"
+    
+    # Get site name from settings
+    site_name = getattr(settings, 'PAGE_TITLE', 'HindSight')
+    
+    # Email subject
+    subject = f'Nicht verpassen! Season {season.name} - {site_name}'
+    
+    # Render email templates
+    context = {
+        'user': user,
+        'season': season,
+        'events': events,
+        'enroll_url': enroll_url,
+        'disable_url': disable_url,
+        'site_name': site_name,
+    }
+    
+    html_message = render_to_string('emails/season_enrollment_reminder.html', context)
+    plain_message = render_to_string('emails/season_enrollment_reminder.txt', context)
     
     # Send email
     from_email = settings.DEFAULT_FROM_EMAIL

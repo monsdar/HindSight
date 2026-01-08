@@ -23,7 +23,7 @@ from hooptipp.predictions.models import (
     UserPreferences,
     UserTip,
 )
-from hooptipp.predictions.reminder_emails import send_reminder_email
+from hooptipp.predictions.reminder_emails import send_reminder_email, send_season_enrollment_reminder
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +64,13 @@ class Command(BaseCommand):
         if force_send_username:
             try:
                 forced_user = User.objects.get(username=force_send_username)
+                
+                # Skip if user has no email
+                if not forced_user.email:
+                    error_msg = f'User "{force_send_username}" has no email address - skipping'
+                    self.stdout.write(self.style.WARNING(f'[WARNING] {error_msg}'))
+                    return
+                
                 self.stdout.write(
                     self.style.WARNING(
                         f'FORCE SEND MODE: Sending reminder to {forced_user.username} ({forced_user.email}) '
@@ -127,10 +134,17 @@ class Command(BaseCommand):
                     self.stdout.write(f'  [WARNING] {error}')
             return
         
-        # Normal processing: Filter users: is_active=True, reminder_emails_enabled=True
+        # Check for active seasons with upcoming events where users are not enrolled
+        season_emails_sent = self._check_season_enrollments(now, dry_run, errors)
+        
+        # Normal processing: Filter users: is_active=True, reminder_emails_enabled=True, has email
         users_to_check = User.objects.filter(
             is_active=True,
             preferences__reminder_emails_enabled=True
+        ).exclude(
+            email__isnull=True
+        ).exclude(
+            email=''
         ).select_related('preferences')
         
         total_users = users_to_check.count()
@@ -200,6 +214,11 @@ class Command(BaseCommand):
             self.stdout.write(f'  Sent: {emails_sent} email(s)')
         self.stdout.write(f'  Skipped (no recent prediction): {users_skipped_no_recent_prediction}')
         self.stdout.write(f'  Skipped (no unpredicted events): {users_skipped_no_unpredicted_events}')
+        if season_emails_sent > 0:
+            if dry_run:
+                self.stdout.write(f'  Would send season enrollment reminders: {season_emails_sent} email(s)')
+            else:
+                self.stdout.write(f'  Sent season enrollment reminders: {season_emails_sent} email(s)')
         
         if errors:
             self.stdout.write('')
@@ -275,4 +294,99 @@ class Command(BaseCommand):
             # If event belongs to a different season (shouldn't happen if only one active), skip it
         
         return eligible_events
+
+    def _check_season_enrollments(self, now, dry_run: bool, errors: list) -> int:
+        """Check for active seasons with upcoming events where users are not enrolled."""
+        active_season = Season.get_active_season(check_datetime=now)
+        
+        if not active_season:
+            # No active season - nothing to check
+            return 0
+        
+        season_emails_sent = 0
+        
+        # Find prediction events in this season with deadlines in the next 24 hours
+        next_24_hours = now + timedelta(hours=24)
+        
+        # Get all seasons to check event membership
+        all_seasons = Season.objects.exclude(
+            start_date__isnull=True
+        ).exclude(
+            end_date__isnull=True
+        )
+        
+        # Find events in the active season with deadlines in the next 24 hours
+        upcoming_events = []
+        for event in PredictionEvent.objects.filter(
+            is_active=True,
+            opens_at__lte=now,
+            deadline__gte=now,
+            deadline__lte=next_24_hours
+        ).order_by('deadline'):
+            # Check if event belongs to the active season
+            event_season = None
+            for season in all_seasons:
+                try:
+                    if season.start_datetime <= event.deadline <= season.end_datetime:
+                        event_season = season
+                        break
+                except (ValueError, AttributeError):
+                    continue
+            
+            if event_season == active_season:
+                upcoming_events.append(event)
+        
+        if not upcoming_events:
+            # No upcoming events in the active season - nothing to remind about
+            return 0
+        
+        # Find users who are not enrolled in the active season
+        # Filter: is_active=True, reminder_emails_enabled=True, not enrolled in active season
+        enrolled_user_ids = SeasonParticipant.objects.filter(
+            season=active_season
+        ).values_list('user_id', flat=True)
+        
+        unenrolled_users = User.objects.filter(
+            is_active=True,
+            preferences__reminder_emails_enabled=True
+        ).exclude(
+            id__in=enrolled_user_ids
+        ).exclude(
+            email__isnull=True
+        ).exclude(
+            email=''
+        ).select_related('preferences')
+        
+        if not unenrolled_users.exists():
+            return 0
+        
+        # Send season enrollment reminders
+        self.stdout.write('')
+        self.stdout.write(f'Checking season enrollment for "{active_season.name}"...')
+        self.stdout.write('')
+        
+        for user in unenrolled_users:
+            try:
+                if dry_run:
+                    self.stdout.write(
+                        f'Would send season enrollment reminder to {user.username} ({user.email}) '
+                        f'for {len(upcoming_events)} upcoming event(s)'
+                    )
+                else:
+                    # Send season enrollment reminder email
+                    send_season_enrollment_reminder(user, active_season, upcoming_events)
+                    season_emails_sent += 1
+                    self.stdout.write(
+                        self.style.SUCCESS(
+                            f'Sent season enrollment reminder to {user.username} ({user.email}) '
+                            f'for {len(upcoming_events)} upcoming event(s)'
+                        )
+                    )
+            except Exception as e:
+                error_msg = f'Error sending season enrollment reminder to {user.username}: {str(e)}'
+                errors.append(error_msg)
+                logger.exception(error_msg)
+                self.stdout.write(self.style.ERROR(f'[ERROR] {error_msg}'))
+        
+        return season_emails_sent
 
