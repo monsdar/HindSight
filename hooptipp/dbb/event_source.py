@@ -231,6 +231,9 @@ class DbbEventSource(EventSource):
                                 existing_event.is_active = False
                                 existing_event.save(update_fields=['is_active'])
                                 logger.info(f"Deactivated cancelled match event: {match_id}")
+                                
+                                # Return locks for users who had active locks on this cancelled match
+                                self._handle_cancelled_match(existing_event)
                             
                             continue
 
@@ -799,4 +802,33 @@ class DbbEventSource(EventSource):
                 logger.info(f'Returned lock to {tip.user.username} for forfeited match {event.name}')
             except Exception as e:
                 logger.warning(f'Failed to return lock for forfeited match {event.name}: {e}')
+    
+    def _handle_cancelled_match(self, event: PredictionEvent) -> None:
+        """
+        Handle a cancelled match by returning locks to users without creating an outcome.
+        
+        Cancelled matches should not count as correct or incorrect predictions.
+        Locks are returned immediately without any penalty.
+        
+        Args:
+            event: The prediction event for the cancelled match
+        """
+        from hooptipp.predictions.models import UserTip
+        from hooptipp.predictions.lock_service import LockService
+        
+        # Get all tips with active locks for this event
+        tips_with_locks = UserTip.objects.filter(
+            prediction_event=event,
+            lock_status=UserTip.LockStatus.ACTIVE
+        ).select_related('user')
+        
+        for tip in tips_with_locks:
+            try:
+                lock_service = LockService(tip.user)
+                # Return the lock to the user
+                lock_service.return_lock_for_forfeited_event(tip)
+                logger.info(f'Returned lock to {tip.user.username} for cancelled match {event.name}')
+            except Exception as e:
+                logger.warning(f'Failed to return lock for cancelled match {event.name}: {e}')
+
 

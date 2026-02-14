@@ -446,6 +446,95 @@ class DbbEventSourceTest(TestCase):
         self.assertFalse(event.is_active)
 
     @patch('hooptipp.dbb.event_source.build_slapi_client')
+    def test_sync_events_returns_locks_for_cancelled_matches(self, mock_build_client):
+        """Test that locks are returned when a match is cancelled."""
+        from hooptipp.predictions.models import UserTip
+        from hooptipp.predictions.lock_service import LockService
+        from django.contrib.auth import get_user_model
+        
+        User = get_user_model()
+        mock_client = MagicMock()
+        mock_build_client.return_value = mock_client
+        
+        # Create a test user
+        user = User.objects.create_user(username='testuser', password='testpass')
+        
+        # Sync options first
+        self.event_source.sync_options()
+
+        # First sync: create an active match
+        future_date = (timezone.now() + timedelta(days=7)).isoformat()
+        mock_client.get_league_matches.return_value = [
+            {
+                'match_id': 1,
+                'home_team': {'id': 't1', 'name': 'BG Test Team 1'},
+                'away_team': {'id': 't2', 'name': 'BG Test Team 2'},
+                'datetime': future_date,
+                'location': 'Test Arena',
+                'is_cancelled': False
+            }
+        ]
+
+        result = self.event_source.sync_events()
+        self.assertEqual(result.events_created, 1)
+        
+        event = PredictionEvent.objects.get(source_id='dbb-slapi', source_event_id='1')
+        self.assertTrue(event.is_active)
+        
+        # Create a tip with a lock for this event
+        from hooptipp.predictions.models import PredictionOption
+        option = PredictionOption.objects.filter(event=event).first()
+        
+        tip = UserTip.objects.create(
+            user=user,
+            tip_type=event.tip_type,
+            prediction_event=event,
+            prediction_option=option,
+            selected_option=option.option,
+            prediction=option.label,
+            is_locked=True,
+            lock_status=UserTip.LockStatus.ACTIVE,
+            lock_committed_at=timezone.now()
+        )
+        
+        # Verify user has 2 available locks (3 total - 1 active)
+        lock_service = LockService(user)
+        lock_summary = lock_service.refresh()
+        self.assertEqual(lock_summary.available, 2)
+        self.assertEqual(lock_summary.active, 1)
+
+        # Second sync: same match is now cancelled
+        mock_client.get_league_matches.return_value = [
+            {
+                'match_id': 1,
+                'home_team': {'id': 't1', 'name': 'BG Test Team 1'},
+                'away_team': {'id': 't2', 'name': 'BG Test Team 2'},
+                'datetime': future_date,
+                'location': 'Test Arena',
+                'is_cancelled': True
+            }
+        ]
+
+        result = self.event_source.sync_events()
+        
+        # Event should now be deactivated
+        event.refresh_from_db()
+        self.assertFalse(event.is_active)
+        
+        # Lock should be returned (not forfeited)
+        tip.refresh_from_db()
+        self.assertFalse(tip.is_locked)
+        self.assertEqual(tip.lock_status, UserTip.LockStatus.NONE)
+        self.assertIsNotNone(tip.lock_released_at)
+        self.assertIsNone(tip.lock_releases_at)
+        
+        # Verify user now has all 3 locks available
+        lock_summary = lock_service.refresh()
+        self.assertEqual(lock_summary.available, 3)
+        self.assertEqual(lock_summary.active, 0)
+
+
+    @patch('hooptipp.dbb.event_source.build_slapi_client')
     def test_sync_events_creates_outcome_for_past_match_with_result(self, mock_build_client):
         """Test that outcomes are created for past matches with results."""
         mock_client = MagicMock()
