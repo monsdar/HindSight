@@ -71,6 +71,7 @@
       </button>
     </form>
     
+    {% if not privacy_gate_enabled %}
     <div class="mt-6 text-center">
       <p class="text-slate-400 text-sm">
         Don't have an account?
@@ -79,6 +80,7 @@
         </a>
       </p>
     </div>
+    {% endif %}
   </div>
 </div>
 {% endblock %}

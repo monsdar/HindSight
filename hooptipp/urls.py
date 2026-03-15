@@ -5,7 +5,7 @@ from django.urls import include, path
 from django.conf import settings
 from django.conf.urls.static import static
 
-from .views import health, privacy_gate
+from .views import health
 from .auth_views import (
     signup,
     profile,
@@ -65,9 +65,6 @@ urlpatterns = [
     path('password-reset-complete/', 
          auth_views.PasswordResetCompleteView.as_view(template_name='auth/password_reset_complete.html'),
          name='password_reset_complete'),
-    
-    # Privacy gate (only used in USER_SELECTION mode)
-    path('privacy-gate/', privacy_gate, name='privacy_gate'),
     
     # Main app URLs
     path('', include('hooptipp.predictions.urls', namespace='predictions')),

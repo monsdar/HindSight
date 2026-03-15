@@ -1,59 +1,50 @@
 """Custom middleware for HindSight application."""
 
-import logging
 from django.conf import settings
 from django.shortcuts import redirect
-from django.urls import reverse
 
 
 class PrivacyGateMiddleware:
     """
-    Middleware that enforces a privacy gate for accessing the application.
-    
-    Users must complete a simple NBA team selection challenge before accessing
-    the main application. The challenge completion is stored in the session.
-    
-    This only applies to unauthenticated users. Authenticated users bypass the gate.
+    Middleware that optionally enforces a simple privacy gate based on
+    authentication status.
+
+    - If PRIVACY_GATE_ENABLED is True and the user is not authenticated,
+      only the login view is accessible.
+    - If the user is authenticated or PRIVACY_GATE_ENABLED is not True,
+      the request is passed through unchanged.
     """
-    
+
     def __init__(self, get_response):
         self.get_response = get_response
 
     def __call__(self, request):
-        # Skip privacy gate if disabled in settings
-        if not getattr(settings, 'PRIVACY_GATE_ENABLED', True):
-            return self.get_response(request)
-            
         # Skip privacy gate in test mode
         if getattr(settings, 'TESTING', False):
             return self.get_response(request)
-        
-        # Skip privacy gate for authenticated users even in selection mode
-        # This allows admins to bypass the gate
-        if hasattr(request, 'user') and request.user.is_authenticated:
+
+        # Skip privacy gate entirely when disabled
+        if not getattr(settings, 'PRIVACY_GATE_ENABLED', False):
             return self.get_response(request)
-            
-        # Skip privacy gate check for these paths
-        skip_paths = [
+
+        # Allow authenticated users to access the site normally
+        # AuthenticationMiddleware (which runs before this middleware) guarantees
+        # that request.user is present.
+        if request.user.is_authenticated:
+            return self.get_response(request)
+
+        # Paths that should remain accessible even when the gate is enabled
+        allowed_paths = [
             '/admin/',
             '/health/',
             '/robots.txt',
-            '/privacy-gate/',
             '/static/',
             '/media/',
-            '/login/',
-            '/logout/',
-            '/signup/',
-            '/password-reset/',
+            settings.LOGIN_URL,
         ]
-        
-        # Check if current path should skip privacy gate
-        if any(request.path.startswith(path) for path in skip_paths):
-            logging.info(f"Skipping privacy gate for path {request.path}")
+
+        if any(request.path.startswith(path) for path in allowed_paths):
             return self.get_response(request)
-            
-        # Check if user has passed the privacy gate
-        if not request.session.get('privacy_gate_passed', False):
-            return redirect('privacy_gate')
-            
-        return self.get_response(request)
+
+        # Redirect anonymous users to the login page
+        return redirect(settings.LOGIN_URL)

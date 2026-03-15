@@ -3,6 +3,7 @@
 import time
 from typing import Optional
 
+from django.conf import settings as django_settings
 from django.contrib import messages
 from django.contrib.auth import get_user_model, login
 from django.contrib.auth.decorators import login_required
@@ -278,6 +279,11 @@ class CustomLoginView(LoginView):
     """Custom login view that blocks unverified users."""
     template_name = 'auth/login.html'
     
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['privacy_gate_enabled'] = getattr(django_settings, 'PRIVACY_GATE_ENABLED', False)
+        return context
+
     def form_valid(self, form):
         """Check if user is active before allowing login."""
         user = form.get_user()
