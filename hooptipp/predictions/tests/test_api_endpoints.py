@@ -111,10 +111,8 @@ class SavePredictionAPITests(TestCase):
 
     def test_save_prediction_no_active_user(self):
         """Test saving prediction without active user."""
-        # Clear active user
-        session = self.client.session
-        session.pop('active_user_id', None)
-        session.save()
+        # Logout to ensure no authenticated user
+        self.client.logout()
         
         response = self.client.post(
             '/api/save-prediction/',
@@ -125,6 +123,7 @@ class SavePredictionAPITests(TestCase):
             content_type='application/json'
         )
         
+        # Should return 400 with 'No active user' error
         self.assertEqual(response.status_code, 400)
         data = response.json()
         self.assertEqual(data['error'], 'No active user')
