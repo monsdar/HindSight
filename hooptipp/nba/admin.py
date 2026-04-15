@@ -139,7 +139,6 @@ def add_upcoming_nba_games_view(request: HttpRequest):
             start_date=start_date.isoformat(),
             end_date=end_date.isoformat(),
             per_page=100,
-            postseason='false',
         )
     except BallDontLieException as e:
         messages.error(request, f'Unable to fetch games from BallDontLie API: {str(e)}')
