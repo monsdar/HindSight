@@ -204,13 +204,36 @@
       color: #e2e8f0;
     }
   }
+
+  .orphan-heading {
+    margin-top: 28px;
+  }
+
+  .orphan-banner {
+    font-size: 13px;
+    color: #6c757d;
+    margin: 10px 0 12px;
+  }
+
+  .orphan-banner strong {
+    color: #856404;
+  }
+
+  table.games-table tbody tr.row-orphan {
+    background-color: #fff8f8;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    table.games-table tbody tr.row-orphan {
+      background-color: #3b1c1c;
+    }
+  }
 </style>
 <script>
-  function toggleAll(source) {
-    const checkboxes = document.querySelectorAll('input[name="selected_games"]:not(:disabled)');
-    for (const checkbox of checkboxes) {
-      checkbox.checked = source.checked;
-    }
+  function toggleSelectedGames(source) {
+    document.querySelectorAll('input[data-selected-game="true"]').forEach(cb => {
+      cb.checked = source.checked;
+    });
   }
 </script>
 {% endblock %}
@@ -229,13 +252,17 @@
   
   <div class="info-box">
     <p><strong>{% trans 'Instructions:' %}</strong></p>
-    <p>{% trans 'Select the games you want to turn into prediction events. The admin has control over which games to include.' %}</p>
-    <p>{% trans 'Each selected game will become a PredictionEvent with:' %}</p>
+    <p>{% trans 'Select games below to create or refresh prediction events from BallDontLie. Rows already imported can be updated (times, arena, matchup metadata) when you select them.' %}</p>
+    <p>{% trans 'Unused playoff slots (series ends early or schedule changes) may appear below as orphaned events—you can remove them and return locks to users.' %}</p>
+    <p>{% trans 'Each new or refreshed event uses:' %}</p>
     <ul>
       <li>{% trans 'Active period starting 1 week before the game (or now, whichever is later)' %}</li>
       <li>{% trans 'Deadline at the exact game start time' %}</li>
     </ul>
     <p><strong>{% trans 'Found' %} {{ games_count }} {% trans 'upcoming games' %}</strong></p>
+    {% if orphans_count %}
+      <p><strong>{{ orphans_count }} {% trans 'orphaned prediction event(s) (not returned as upcoming in this sync window)' %}</strong></p>
+    {% endif %}
   </div>
   
   <form method="post" action="{% url 'admin:nba_create_events' %}">
@@ -245,7 +272,9 @@
       <thead>
         <tr>
           <th class="checkbox-cell">
-            <input type="checkbox" id="select-all" onchange="toggleAll(this)" />
+            {% if games %}
+              <input type="checkbox" id="select-all" onchange="toggleSelectedGames(this)" />
+            {% endif %}
           </th>
           <th>{% trans 'Game' %}</th>
           <th>{% trans 'Date & Time' %}</th>
@@ -254,6 +283,7 @@
         </tr>
       </thead>
       <tbody>
+        {% if games %}
         <tr class="select-all-row">
           <td class="checkbox-cell">
             <label for="select-all" style="cursor: pointer; display: block;">
@@ -261,18 +291,15 @@
             </label>
           </td>
           <td colspan="4">
-            {% trans 'Select/deselect all games' %}
+            {% trans 'Select/deselect all games from the BallDontLie feed' %}
           </td>
         </tr>
+        {% endif %}
         {% for game in games %}
         <tr class="date-group-{{ game.date_group }}{% if game.already_exists %} existing-event{% endif %}">
           <td class="checkbox-cell">
-            {% if game.already_exists %}
-              <input type="checkbox" disabled title="{% trans 'This game already exists as a prediction event' %}" />
-            {% else %}
-              <input type="checkbox" name="selected_games" value="{{ game.game_id }}" />
-              <input type="hidden" name="game_data_{{ game.game_id }}" value="{{ game.json_data }}" />
-            {% endif %}
+            <input type="checkbox" data-selected-game="true" name="selected_games" value="{{ game.game_id }}" />
+            <input type="hidden" name="game_data_{{ game.game_id }}" value="{{ game.json_data|escape }}" />
           </td>
           <td>
             <div class="game-teams">
@@ -305,13 +332,52 @@
             {% endif %}
           </td>
         </tr>
+        {% empty %}
+        <tr><td colspan="5">{% trans 'No upcoming games returned in this BallDontLie window.' %}</td></tr>
         {% endfor %}
       </tbody>
     </table>
-    
+
+    {% if orphans_count %}
+      <h2 class="orphan-heading">{% trans 'Orphaned BallDontLie events' %}</h2>
+      <p class="orphan-banner">
+        {% trans 'These prediction events match the BallDontLie source but were not returned as upcoming for the same date range.' %}
+        <strong>{% trans 'Selecting and submitting removes them and returns locks for active picks.' %}</strong>
+      </p>
+      {% if not can_remove_orphans %}
+        <p class="orphan-banner">{% trans 'You need delete_predictionevent permission to remove orphans.' %}</p>
+      {% endif %}
+      <table class="games-table">
+        <thead>
+          <tr>
+            <th class="checkbox-cell">{% trans 'Remove' %}</th>
+            <th>{% trans 'Event' %}</th>
+            <th>{% trans 'BallDontLie game id' %}</th>
+            <th>{% trans 'Deadline' %}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for o in orphan_events %}
+          <tr class="row-orphan">
+            <td class="checkbox-cell">
+              {% if can_remove_orphans %}
+                <input type="checkbox" name="remove_event_ids" value="{{ o.event_id }}" />
+              {% else %}
+                <input type="checkbox" disabled />
+              {% endif %}
+            </td>
+            <td>{{ o.name }}</td>
+            <td><code>{{ o.source_event_id|default:'—' }}</code></td>
+            <td>{{ o.deadline|date:"N j, Y" }} {{ o.deadline|date:"g:i A T" }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% endif %}
+
     <div class="action-buttons">
       <button type="submit" class="submit-button">
-        {% trans 'Create Selected Events' %}
+        {% trans 'Update Selected Events' %}
       </button>
       <a href="{% url 'admin:index' %}" class="cancel-button">
         {% trans 'Cancel' %}

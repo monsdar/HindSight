@@ -9,9 +9,10 @@ from django.utils import timezone
 
 from hooptipp.nba.models import ScheduledGame
 from hooptipp.predictions.models import (
+    EventOutcome,
+    Option,
     OptionCategory,
     PredictionEvent,
-    PredictionOption,
     TipType,
 )
 
@@ -103,13 +104,12 @@ class AddNbaGamesAdminViewTest(TestCase):
         self.assertIn(b'BOS @ LAL', response.content)
         self.assertContains(response, 'Boston Celtics at Los Angeles Lakers')
 
+    @patch('hooptipp.nba.admin._fetch_balldontlie_upcoming')
     @patch('hooptipp.nba.admin._build_bdl_client')
-    def test_create_nba_events_view(self, mock_build_client):
+    def test_create_nba_events_view(self, mock_build_client, mock_fetch_upcoming):
         """Test creating prediction events from selected games."""
-        from hooptipp.predictions.models import Option
-        
-        mock_client = MagicMock()
-        mock_build_client.return_value = mock_client
+        mock_build_client.return_value = MagicMock()
+        mock_fetch_upcoming.return_value = ([], {'12345'})
         
         # Create tip type
         tip_type = TipType.objects.create(
@@ -193,9 +193,7 @@ class AddNbaGamesAdminViewTest(TestCase):
     @patch('hooptipp.nba.admin._build_bdl_client')
     def test_create_nba_events_no_games_selected(self, mock_build_client):
         """Test creating events with no games selected."""
-        mock_client = MagicMock()
-        mock_build_client.return_value = mock_client
-        
+        mock_build_client.return_value = MagicMock()
         url = reverse('admin:nba_create_events')
         response = self.client.post(url, {
             'selected_games': [],
@@ -205,12 +203,12 @@ class AddNbaGamesAdminViewTest(TestCase):
         # Should redirect back to the add games page
         self.assertIn('add-upcoming', response.url)
 
+    @patch('hooptipp.nba.admin._fetch_balldontlie_upcoming')
     @patch('hooptipp.nba.admin._build_bdl_client')
-    def test_create_nba_events_skip_existing(self, mock_build_client):
-        """Test that existing events are skipped."""
-        from hooptipp.predictions.models import Option
-        mock_client = MagicMock()
-        mock_build_client.return_value = mock_client
+    def test_create_nba_events_updates_existing(self, mock_build_client, mock_fetch_upcoming):
+        """Selecting an existing BDL-linked event updates deadlines and ScheduledGame."""
+        mock_build_client.return_value = MagicMock()
+        mock_fetch_upcoming.return_value = ([], {'12345'})
         
         # Create team options
         Option.objects.create(
@@ -229,8 +227,9 @@ class AddNbaGamesAdminViewTest(TestCase):
             external_id='2',
             metadata={'city': 'Boston', 'conference': 'East', 'division': 'Atlantic'}
         )
-        
-        # Create an existing event
+
+        game_time = timezone.now() + timedelta(days=2)
+
         tip_type = TipType.objects.create(
             slug='weekly-games',
             name='Weekly games',
@@ -238,24 +237,41 @@ class AddNbaGamesAdminViewTest(TestCase):
             deadline=timezone.now() + timedelta(days=7),
             is_active=True,
         )
-        
-        game_time = timezone.now() + timedelta(days=2)
-        # Use naive datetime for the mock to avoid timezone issues
+
+        opens_at_existing = timezone.now()
         naive_game_time = game_time.replace(tzinfo=None)
-        
+        scheduled_game = ScheduledGame.objects.create(
+            tip_type=tip_type,
+            nba_game_id='12345',
+            game_date=timezone.make_aware(naive_game_time),
+            home_team='Los Angeles Lakers',
+            home_team_tricode='LAL',
+            away_team='Boston Celtics',
+            away_team_tricode='BOS',
+            venue='Old Arena',
+        )
+
         existing_event = PredictionEvent.objects.create(
             tip_type=tip_type,
+            scheduled_game=scheduled_game,
             name='BOS @ LAL',
+            description='Boston Celtics at Los Angeles Lakers',
+            target_kind=PredictionEvent.TargetKind.TEAM,
+            selection_mode=PredictionEvent.SelectionMode.CURATED,
             source_id='nba-balldontlie',
             source_event_id='12345',
-            opens_at=timezone.now(),
+            opens_at=opens_at_existing,
             deadline=game_time,
+            reveal_at=opens_at_existing,
+            points=1,
         )
         
-        # Try to create the same event again
+        naive_new_time = (game_time + timedelta(days=3)).replace(tzinfo=None)
+
+        # Try syncing the event with rescheduled kickoff
         game_data = {
             'game_id': '12345',
-            'game_time': naive_game_time.isoformat() + 'Z',
+            'game_time': naive_new_time.isoformat() + 'Z',
             'home_team': {
                 'id': 1,
                 'full_name': 'Los Angeles Lakers',
@@ -277,11 +293,161 @@ class AddNbaGamesAdminViewTest(TestCase):
         })
         
         self.assertEqual(response.status_code, 302)
-        
-        # Verify only one event exists
+
         events = PredictionEvent.objects.filter(source_event_id='12345')
         self.assertEqual(events.count(), 1)
-        self.assertEqual(events.first().id, existing_event.id)
+        updated = events.first()
+        self.assertEqual(updated.id, existing_event.id)
+        self.assertNotEqual(updated.deadline, game_time)
+        self.assertEqual(updated.metadata.get('arena'), 'Crypto.com Arena')
+        sg = ScheduledGame.objects.get(nba_game_id='12345')
+        self.assertEqual(sg.venue, 'Crypto.com Arena')
+        self.assertNotEqual(sg.game_date, game_time)
+
+    @patch('hooptipp.nba.admin._build_bdl_client')
+    def test_orphan_events_listed_when_missing_from_feed(self, mock_build_client):
+        """Shows orphan section when prediction events lack a BallDontLie feed row."""
+        mock_client = MagicMock()
+        mock_build_client.return_value = mock_client
+        mock_response = MagicMock()
+        mock_response.data = []
+        mock_client.nba.games.list.return_value = mock_response
+
+        tip_type = TipType.objects.create(
+            slug='weekly-games',
+            name='Weekly games',
+            category=TipType.TipCategory.GAME,
+            deadline=timezone.now() + timedelta(days=7),
+            is_active=True,
+        )
+
+        deadline_dt = timezone.now().replace(second=0, microsecond=0) + timedelta(days=5)
+
+        scheduled_game = ScheduledGame.objects.create(
+            tip_type=tip_type,
+            nba_game_id='99999',
+            game_date=deadline_dt,
+            home_team='Phoenix Suns',
+            home_team_tricode='PHX',
+            away_team='Dallas Mavericks',
+            away_team_tricode='DAL',
+            venue='Away',
+        )
+        PredictionEvent.objects.create(
+            tip_type=tip_type,
+            scheduled_game=scheduled_game,
+            name='DAL @ PHX',
+            description='DAL at PHX',
+            target_kind=PredictionEvent.TargetKind.TEAM,
+            selection_mode=PredictionEvent.SelectionMode.CURATED,
+            source_id='nba-balldontlie',
+            source_event_id='99999',
+            opens_at=timezone.now(),
+            deadline=deadline_dt,
+            reveal_at=timezone.now(),
+            points=1,
+        )
+
+        url = reverse('admin:nba_add_upcoming_games')
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'orphaned prediction event')
+
+    @patch('hooptipp.nba.admin._fetch_balldontlie_upcoming')
+    @patch('hooptipp.nba.admin._build_bdl_client')
+    def test_remove_orphan_prediction_event_via_post(self, mock_build_client, mock_fetch_upcoming):
+        mock_build_client.return_value = MagicMock()
+        mock_fetch_upcoming.return_value = ([], set())
+
+        tip_type = TipType.objects.create(
+            slug='weekly-games',
+            name='Weekly games',
+            category=TipType.TipCategory.GAME,
+            deadline=timezone.now() + timedelta(days=7),
+            is_active=True,
+        )
+
+        deadline_dt = timezone.now().replace(second=0, microsecond=0) + timedelta(days=10)
+
+        scheduled_game = ScheduledGame.objects.create(
+            tip_type=tip_type,
+            nba_game_id='88888',
+            game_date=deadline_dt,
+            home_team='Houston Rockets',
+            home_team_tricode='HOU',
+            away_team='Utah Jazz',
+            away_team_tricode='UTA',
+            venue='Away',
+        )
+        orphan = PredictionEvent.objects.create(
+            tip_type=tip_type,
+            scheduled_game=scheduled_game,
+            name='UTA @ HOU',
+            description='UTA at HOU',
+            target_kind=PredictionEvent.TargetKind.TEAM,
+            selection_mode=PredictionEvent.SelectionMode.CURATED,
+            source_id='nba-balldontlie',
+            source_event_id='88888',
+            opens_at=timezone.now(),
+            deadline=deadline_dt,
+            reveal_at=timezone.now(),
+            points=1,
+        )
+
+        url = reverse('admin:nba_create_events')
+        response = self.client.post(url, {'remove_event_ids': [str(orphan.id)]})
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(PredictionEvent.objects.filter(pk=orphan.id).count(), 0)
+        self.assertEqual(ScheduledGame.objects.filter(pk=scheduled_game.pk).count(), 0)
+
+    @patch('hooptipp.nba.admin._fetch_balldontlie_upcoming')
+    @patch('hooptipp.nba.admin._build_bdl_client')
+    def test_remove_skips_when_outcome_already_scored(self, mock_build_client, mock_fetch_upcoming):
+        mock_build_client.return_value = MagicMock()
+        mock_fetch_upcoming.return_value = ([], set())
+
+        tip_type = TipType.objects.create(
+            slug='weekly-games',
+            name='Weekly games',
+            category=TipType.TipCategory.GAME,
+            deadline=timezone.now() + timedelta(days=7),
+            is_active=True,
+        )
+
+        deadline_dt = timezone.now().replace(second=0, microsecond=0) + timedelta(days=15)
+
+        scheduled_game = ScheduledGame.objects.create(
+            tip_type=tip_type,
+            nba_game_id='77777',
+            game_date=deadline_dt,
+            home_team='Memphis Grizzlies',
+            home_team_tricode='MEM',
+            away_team='Oklahoma City Thunder',
+            away_team_tricode='OKC',
+            venue='Away',
+        )
+        scored_event = PredictionEvent.objects.create(
+            tip_type=tip_type,
+            scheduled_game=scheduled_game,
+            name='OKC @ MEM',
+            description='OKC at MEM',
+            target_kind=PredictionEvent.TargetKind.TEAM,
+            selection_mode=PredictionEvent.SelectionMode.CURATED,
+            source_id='nba-balldontlie',
+            source_event_id='77777',
+            opens_at=timezone.now(),
+            deadline=deadline_dt,
+            reveal_at=timezone.now(),
+            points=1,
+        )
+        EventOutcome.objects.create(prediction_event=scored_event, scored_at=timezone.now())
+
+        url = reverse('admin:nba_create_events')
+        response = self.client.post(url, {'remove_event_ids': [str(scored_event.id)]})
+
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(PredictionEvent.objects.filter(pk=scored_event.id).exists())
 
     def test_admin_permissions(self):
         """Test that non-admin users cannot access the views."""
