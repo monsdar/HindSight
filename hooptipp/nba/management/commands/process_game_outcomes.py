@@ -70,7 +70,9 @@ class Command(BaseCommand):
             self.stdout.write('No events found that need processing')
             return
         
-        self.stdout.write(f'Found {events_to_process.count()} events to process')
+        self.stdout.write(f'Found {events_to_process.count()} events to process:')
+        for event in events_to_process:
+            self.stdout.write(f'  {event.name} (game: {event.scheduled_game.nba_game_id})')
         
         # Batch fetch all game data in a single API call
         game_data_map = self.batch_fetch_game_data(events_to_process)
@@ -80,48 +82,34 @@ class Command(BaseCommand):
         skipped_count = 0
         
         for event in events_to_process:
+            self.stdout.write(f'Processing {event.name} (game: {event.scheduled_game.nba_game_id})')
             try:
                 game_id = event.scheduled_game.nba_game_id
                 game_data = game_data_map.get(game_id)
                 
                 if game_data is None:
-                    logger.warning(f'No game data found for game {game_id} (event: {event.name})')
                     skipped_count += 1
-                    self.stdout.write(
-                        self.style.WARNING(f'[SKIP] Skipped: {event.name} (no game data available)')
-                    )
+                    self.stdout.write(f'No game data found for game {game_id} (event: {event.name})')
                     continue
                 
                 result = self.process_single_game(event, game_data, dry_run)
                 if result == 'processed':
                     processed_count += 1
-                    self.stdout.write(
-                        self.style.SUCCESS(f'[OK] Processed: {event.name}')
-                    )
+                    self.stdout.write(f'[OK] Processed: {event.name}')
                 elif result == 'skipped':
                     skipped_count += 1
-                    self.stdout.write(
-                        self.style.WARNING(f'[SKIP] Skipped: {event.name} (game not final)')
-                    )
+                    self.stdout.write(f'[SKIP] Skipped: {event.name} (game not final)')
                 else:
-                    self.stdout.write(
-                        self.style.WARNING(f'[SKIP] Skipped: {event.name} (no valid outcome)')
-                    )
+                    self.stdout.write(f'[SKIP] Skipped: {event.name} (no valid outcome)')
                     skipped_count += 1
             except Exception as e:
                 error_count += 1
-                logger.exception(f'Error processing {event.name}: {e}')
-                self.stdout.write(
-                    self.style.ERROR(f'[ERROR] Error processing {event.name}: {e}')
-                )
+                self.stdout.write(f'Error processing {event.name}: {e}')
+                self.stdout.write(f'[ERROR] Error processing {event.name}: {e}')
         
         # Summary
         self.stdout.write('')
-        self.stdout.write(
-            self.style.SUCCESS(
-                f'Completed: {processed_count} processed, {skipped_count} skipped, {error_count} errors'
-            )
-        )
+        self.stdout.write(f'Completed: {processed_count} processed, {skipped_count} skipped, {error_count} errors')
 
     def _is_automation_enabled(self) -> bool:
         """Check if automation is enabled via environment variable."""
@@ -185,7 +173,7 @@ class Command(BaseCommand):
                 next_date_str = next_date.strftime('%Y-%m-%d')
                 extended_dates.add(next_date_str)
             except (ValueError, TypeError) as e:
-                logger.warning(f'Failed to add next day for date {date_str}: {e}')
+                self.stdout.write(f'Failed to add next day for date {date_str}: {e}')
                 continue
         
         dates = extended_dates
@@ -203,7 +191,7 @@ class Command(BaseCommand):
                         if team_id not in team_ids:
                             team_ids.append(team_id)
                     except (ValueError, TypeError):
-                        logger.warning(f'Invalid external_id for team {tricode}: {team_option.external_id}')
+                        self.stdout.write(f'Invalid external_id for team {tricode}: {team_option.external_id}')
                         continue
         
         try:
@@ -276,11 +264,11 @@ class Command(BaseCommand):
                             meta = getattr(response, "meta", None)
                             next_cursor = getattr(meta, "next_cursor", None) if meta else None
                         except Exception as e:
-                            logger.warning(f'Failed to fetch next page with cursor {next_cursor}: {e}')
+                            self.stdout.write(f'Failed to fetch next page with cursor {next_cursor}: {e}')
                             break
                         
                 except Exception as e:
-                    logger.warning(f'Failed to batch fetch games for dates {date_list}: {e}')
+                    self.stdout.write(f'Failed to batch fetch games for dates {date_list}: {e}')
                     self.stdout.write(self.style.WARNING(f'Batch fetch failed: {e}'))
             
             # Fallback: if we still don't have all games, fetch missing ones individually
@@ -294,11 +282,11 @@ class Command(BaseCommand):
                         if game:
                             game_data_map[game_id] = self._extract_game_data_from_response(game)
                     except Exception as e:
-                        logger.warning(f'Failed to fetch data for game {game_id}: {e}')
+                        self.stdout.write(f'Failed to fetch data for game {game_id}: {e}')
                         continue
                         
         except Exception as e:
-            logger.exception(f'Failed to batch fetch game data: {e}')
+            self.stdout.write(f'Failed to batch fetch game data: {e}')
             self.stdout.write(self.style.ERROR(f'Failed to fetch game data: {e}'))
         
         return game_data_map
@@ -361,7 +349,7 @@ class Command(BaseCommand):
         away_score = game_data.get('away_score')
         
         if home_score is None or away_score is None:
-            logger.warning(f'Game {game.nba_game_id} is final but missing scores')
+            self.stdout.write(f'Game {game.nba_game_id} is final but missing scores')
             return 'skipped'
         
         # Determine winner
@@ -370,7 +358,7 @@ class Command(BaseCommand):
         elif away_score > home_score:
             winning_team_abbr = game.away_team_tricode
         else:
-            logger.warning(f'Game {game.nba_game_id} ended in a tie')
+            self.stdout.write(f'Game {game.nba_game_id} ended in a tie')
             return 'skipped'
         
         # Find the winning prediction option
@@ -380,7 +368,7 @@ class Command(BaseCommand):
         ).first()
         
         if not winning_option:
-            logger.warning(f'Could not find prediction option for {winning_team_abbr} in event {event.name}')
+            self.stdout.write(f'Could not find prediction option for {winning_team_abbr} in event {event.name}')
             return 'skipped'
         
         if dry_run:
@@ -426,7 +414,7 @@ class Command(BaseCommand):
                     self.stdout.write('  Auto-scored: No new scores (already scored)')
                     
             except Exception as e:
-                logger.warning(f'Failed to auto-score {event.name}: {e}')
+                self.stdout.write(f'Failed to auto-score {event.name}: {e}')
                 self.stdout.write(f'  Warning: Failed to auto-score: {e}')
         
         return 'processed'
